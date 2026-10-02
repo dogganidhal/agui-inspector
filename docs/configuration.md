@@ -221,6 +221,34 @@ even when handed an object with more. The token reaches the guarded transport an
 Keep secrets out of `forwardedProps`, `context` and tool schemas too: those values are saved in the
 browser and written to exported profiles as you typed them.
 
+## Hosting file
+
+`hosting-config.json` sits beside the page and is not part of the agent configuration. It is read
+before anything else, it is strict, and nothing the page loads later can change it. The full
+description of the deployment is in [hosted deployment](hosted.md#hosting-configjson); the fields are:
+
+| Field | Rule |
+| --- | --- |
+| `version` | Optional. Only `0`. |
+| `mode` | Required. `hosted` or `embedded`. |
+| `allowedOrigins` | Optional list of absolute `http(s)` origins, hosted only. No path, no credentials, no wildcard. |
+| `config` | Optional. Where the agent configuration is read from instead of `config.json`. It must be on the page's origin or an allowed one, and when it is named a missing file is an error. |
+| `allowVisitorTargets` | Optional boolean, `false` when absent. Hosted only; an embedded file that mentions it, even as `false`, is refused. A value that is not `true` or `false` is refused. |
+
+`allowVisitorTargets: true` lets a visitor choose any `https` origin and plain `http` to `localhost` or
+`127.0.0.1` on any port, with no deployer allowlist. Nothing else changes: requests still carry no cookies, redirects are
+still refused, and no other `http` host or IPv6 literal is reachable. When it is on, every entry in `allowedOrigins` must already be inside that
+boundary, and a file that lists one that is not fails to start with the entry named. When it is off or
+absent, `allowedOrigins` keeps its earlier meaning. An agent file, a profile or a typed endpoint cannot
+set it: `allowVisitorTargets` in `config.json` is an unknown field and an error like any other.
+
+A page that mounts the application itself, instead of loading `index.html` as shipped, can pass
+`configFile` in the startup environment to read the initial agent configuration from another file. The
+name is relative to the page like `config`. It is read after the policy is in place, from the page's own
+origin or an allowed origin only (the option above does not widen that), and it changes no mode, origin
+or policy. A missing file is the usual empty start, with the endpoint field and import still usable,
+unless `hosting-config.json` itself names a `config`, which makes a configuration required.
+
 ## Wiring
 
 The settings view takes its data and callbacks as props (`SettingsViewProps`) and holds no state that
@@ -239,6 +267,9 @@ the app assembly decides how to ship it.
 
 ## Migrations
 
+- 0.1.0 adds the optional `allowVisitorTargets` field to `hosting-config.json`, version 0. A file
+  without it behaves as before, so there is nothing to migrate. Before this change the field was an
+  unknown key and the file was refused.
 - 0.1.0 adds the optional `theme` field to the version-0 configuration. A file without it reads as
   before, so there is nothing to migrate. Before this change, `theme` was an unknown field and an
   error.

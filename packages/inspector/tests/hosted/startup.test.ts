@@ -431,3 +431,169 @@ test('a theme of the wrong shape is one warning and the start is otherwise uncha
   assert.equal(result.agents.length, 1);
   assert.equal(result.error, undefined);
 });
+
+// ---------------------------------------------------------------------------------------------
+// P01 T003 (US1, FR-005, FR-007, FR-016): the opt-in policy at startup, and the config-file override
+// ---------------------------------------------------------------------------------------------
+
+const UNLISTED = 'https://unlisted.example';
+const optIn = (extra: object = {}) => hostedFile({ allowedOrigins: [], allowVisitorTargets: true, ...extra });
+
+test('an opted-in file becomes the policy and a connect-src with the same boundary before anything else is requested', async () => {
+  const { env, log, policies } = page({ [`${PAGE}/hosting-config.json`]: optIn(), [`${PAGE}/config.json`]: agentsFile({ id: 'any', url: `${UNLISTED}/run` }) });
+  const result = started(await startPage(env));
+  assert.deepEqual(log, [`fetch ${PAGE}/hosting-config.json`, 'policy', `fetch ${PAGE}/config.json`]);
+  assert.deepEqual(result.policy, { mode: 'hosted', pageOrigin: PAGE, allowedOrigins: [], allowVisitorTargets: true });
+  assert.match(policies[0] ?? '', /connect-src 'self' https: http:\/\/localhost:\* http:\/\/127\.0\.0\.1:\*(;|$)/);
+  assert.equal(result.error, undefined, 'a configured agent at an unlisted HTTPS origin is not refused');
+  assert.equal(result.runtime.getState().error, undefined);
+});
+
+test('an opted-in page runs against an unlisted HTTPS endpoint and a local one, with no cookies and no prompt of its own', async () => {
+  const { env, seen } = page({
+    [`${PAGE}/hosting-config.json`]: optIn(),
+    [`${PAGE}/config.json`]: agentsFile({ id: 'any', url: `${UNLISTED}/run`, capabilities: `${UNLISTED}/capabilities` }),
+    [`${UNLISTED}/capabilities`]: '{}',
+    [`${UNLISTED}/run`]: runStream(),
+    'http://localhost:8787/run': runStream(),
+  });
+  const { runtime } = started(await startPage(env));
+  await loadCapabilities({ id: 'any', url: `${UNLISTED}/run`, capabilities: `${UNLISTED}/capabilities` }, guardedFetchText(runtime.transport));
+  await runtime.send('hello');
+  runtime.setTarget('http://localhost:8787/run');
+  await runtime.send('hello');
+  const sent = seen.filter((request) => request.url !== `${PAGE}/hosting-config.json` && request.url !== `${PAGE}/config.json`);
+  assert.deepEqual(sent.map((request) => request.url), [`${UNLISTED}/capabilities`, `${UNLISTED}/run`, 'http://localhost:8787/run']);
+  for (const request of sent) {
+    assert.equal(request.init.credentials, 'omit', request.url);
+    assert.equal(request.init.redirect, 'manual', request.url);
+    assert.equal(new Headers(request.init.headers).has('cookie'), false, request.url);
+  }
+  assert.equal(runtime.getState().error, undefined);
+});
+
+test('a file that opts in wrongly stops the start: no policy is guessed and nothing else is requested', async () => {
+  for (const text of [
+    '{"version":0,"mode":"embedded","allowVisitorTargets":true}',
+    '{"version":0,"mode":"embedded","allowVisitorTargets":false}',
+    '{"version":0,"mode":"hosted","allowVisitorTargets":"true"}',
+    '{"version":0,"mode":"hosted","allowVisitorTarget":true}',
+    '{"version":0,"mode":"hosted","allowVisitorTargets":true,"allowedOrigins":["http://192.168.1.20:8787"]}',
+    '{"version":0,"mode":"hosted","allowVisitorTargets":true,"allowedOrigins":["http://[::1]:8787"]}',
+  ]) {
+    const { env, log, policies } = page({ [`${PAGE}/hosting-config.json`]: text });
+    const result = await startPage(env);
+    assert.ok(!result.ok, text);
+    assert.match(result.error, /^hosting-config\.json: /);
+    assert.deepEqual(log, [`fetch ${PAGE}/hosting-config.json`], text);
+    assert.deepEqual(policies, [], text);
+  }
+});
+
+test('nothing in the configuration or a profile can opt in: the policy is the file\'s alone', async () => {
+  const files = {
+    [`${PAGE}/hosting-config.json`]: hostedFile(),
+    [`${PAGE}/config.json`]: '{"version":0,"allowVisitorTargets":true,"agents":[{"id":"a","url":"https://agent.example/run","allowVisitorTargets":true}]}',
+  };
+  const { env } = page(files);
+  const result = started(await startPage(env));
+  assert.match(result.error ?? '', /unknown field "allowVisitorTargets"/);
+  assert.deepEqual(result.policy, { mode: 'hosted', pageOrigin: PAGE, allowedOrigins: [AGENT] });
+
+  const absent = started(await startPage(page({ [`${PAGE}/hosting-config.json`]: hostedFile() }).env));
+  absent.runtime.setTarget(`${UNLISTED}/run`);
+  assert.match(absent.runtime.getState().error ?? '', /not an allowed destination/, 'a typed endpoint cannot add one');
+});
+
+// The override: the demo page chooses which file the initial agent configuration comes from.
+
+const startedLog = (site: ReturnType<typeof page>) => site.log.map((entry) => entry.replace(PAGE, ''));
+
+test('without an override the configuration is hosting-config\'s `config` or config.json, exactly as before', async () => {
+  const plain = page({ [`${PAGE}/hosting-config.json`]: optIn(), [`${PAGE}/config.json`]: agentsFile({ id: 'a', url: `${UNLISTED}/run` }), [`${PAGE}/examples.json`]: agentsFile({ id: 'e', url: `${UNLISTED}/e` }) });
+  assert.equal(started(await startPage(plain.env)).selectedAgentId, 'a');
+  const named = page({ [`${PAGE}/hosting-config.json`]: optIn({ config: 'agents.json' }), [`${PAGE}/agents.json`]: agentsFile({ id: 'n', url: `${UNLISTED}/run` }) });
+  assert.equal(started(await startPage(named.env)).selectedAgentId, 'n');
+});
+
+test('an override is read instead of config.json, after the policy, and changes no mode, origin or policy', async () => {
+  const files = { [`${PAGE}/hosting-config.json`]: optIn(), [`${PAGE}/config.json`]: agentsFile({ id: 'a', url: `${UNLISTED}/run` }), [`${PAGE}/examples.json`]: agentsFile({ id: 'e', url: `${UNLISTED}/e` }) };
+  const plain = page(files);
+  const plainResult = started(await startPage(plain.env));
+  const overridden = page(files);
+  const result = started(await startPage({ ...overridden.env, configFile: 'examples.json' }));
+  assert.equal(result.selectedAgentId, 'e');
+  assert.deepEqual(startedLog(overridden), ['fetch /hosting-config.json', 'policy', 'fetch /examples.json'], 'config.json is not requested');
+  assert.deepEqual(result.policy, plainResult.policy);
+  assert.deepEqual(overridden.policies, plain.policies);
+  assert.equal(overridden.seen.at(-1)?.init.credentials, 'omit', 'a hosted resource carries no cookies, whatever chose it');
+});
+
+test('an override is relative to the page like config; an origin-relative one is read from the origin', async () => {
+  const mount = `${PAGE}/agui-inspector/`;
+  const beside = page({ [`${mount}examples.json`]: agentsFile({ id: 'b', url: `${UNLISTED}/run` }) }, undefined, mount);
+  assert.equal(started(await startPage({ ...beside.env, configFile: 'examples.json' })).selectedAgentId, 'b');
+  assert.deepEqual(startedLog(beside).slice(-1), ['fetch /agui-inspector/examples.json']);
+  const root = page({ [`${PAGE}/examples.json`]: agentsFile({ id: 'r', url: `${UNLISTED}/run` }) }, undefined, mount);
+  assert.equal(started(await startPage({ ...root.env, configFile: '/examples.json' })).selectedAgentId, 'r');
+});
+
+test('an override beats the file\'s own `config`, and a missing one is quiet only when the deployment did not require a config', async () => {
+  const both = page({ [`${PAGE}/hosting-config.json`]: optIn({ config: 'agents.json' }), [`${PAGE}/agents.json`]: agentsFile({ id: 'h', url: `${UNLISTED}/h` }), [`${PAGE}/examples.json`]: agentsFile({ id: 'e', url: `${UNLISTED}/e` }) });
+  assert.equal(started(await startPage({ ...both.env, configFile: 'examples.json' })).selectedAgentId, 'e');
+  assert.ok(!both.seen.some((request) => request.url.endsWith('/agents.json')));
+
+  // The demo file names no config: its override 404s into the usual empty start, own server and import still usable.
+  const optional = page({ [`${PAGE}/hosting-config.json`]: optIn() });
+  const quiet = started(await startPage({ ...optional.env, configFile: 'examples.json' }));
+  assert.deepEqual(quiet.agents, []);
+  assert.equal(quiet.error, undefined);
+  assert.equal(quiet.selectedAgentId, undefined);
+  quiet.runtime.setTarget(`${UNLISTED}/run`);
+  assert.equal(quiet.runtime.getState().error, undefined, 'a typed endpoint still works');
+  quiet.runtime.setTarget('http://localhost:8787/run');
+  assert.equal(quiet.runtime.getState().error, undefined);
+
+  // A deployment that requires a config does not get a quiet override.
+  const required = page({ [`${PAGE}/hosting-config.json`]: optIn({ config: 'agents.json' }), [`${PAGE}/agents.json`]: agentsFile({ id: 'h', url: `${UNLISTED}/h` }) });
+  assert.match(started(await startPage({ ...required.env, configFile: 'examples.json' })).error ?? '', /examples\.json: 404/);
+});
+
+test('an override that fails, is redirected or is not a configuration is shown, never repaired', async () => {
+  const broken = page({ [`${PAGE}/hosting-config.json`]: optIn(), [`${PAGE}/examples.json`]: '{"agents":[{"id":"a"}]}' });
+  assert.match(started(await startPage({ ...broken.env, configFile: 'examples.json' })).error ?? '', /Configuration examples\.json/);
+  const failing = page({ [`${PAGE}/hosting-config.json`]: optIn(), [`${PAGE}/examples.json`]: new Response('boom', { status: 500, statusText: 'Server Error' }) });
+  assert.match(started(await startPage({ ...failing.env, configFile: 'examples.json' })).error ?? '', /500/);
+  const redirected = page({ [`${PAGE}/hosting-config.json`]: optIn(), [`${PAGE}/examples.json`]: new Response(null, { status: 302 }) });
+  const moved = started(await startPage({ ...redirected.env, configFile: 'examples.json' }));
+  assert.match(moved.error ?? '', /redirect/);
+  assert.equal(redirected.seen.filter((request) => request.url.endsWith('examples.json')).length, 1);
+});
+
+test('the override and the file\'s `config` come from the page or a fixed origin only: opting in does not make a startup resource a visitor target', async () => {
+  const away = [`${UNLISTED}/examples.json`, 'http://localhost:9/examples.json', 'http://127.0.0.1:9/examples.json', `${OTHER}/config.json`, '//other.example/examples.json'];
+  for (const target of away) {
+    for (const [name, build] of [
+      ['override', (site: ReturnType<typeof page>) => ({ ...site.env, configFile: target })],
+      ['hosting config', (site: ReturnType<typeof page>) => site.env],
+    ] as const) {
+      const hosting = name === 'override' ? optIn() : optIn({ config: target });
+      const site = page({ [`${PAGE}/hosting-config.json`]: hosting, [new URL(target, `${PAGE}/`).href]: agentsFile({ id: 'x', url: `${UNLISTED}/run` }) });
+      const result = started(await startPage(build(site)));
+      assert.match(result.error ?? '', /is not an allowed destination/, `${name} ${target}`);
+      assert.deepEqual(result.agents, [], `${name} ${target}`);
+      assert.deepEqual(site.seen.map((request) => request.url), [`${PAGE}/hosting-config.json`], `${name} ${target}: never requested`);
+    }
+  }
+  // A fixed origin the deployer named, inside the boundary, is a fine place to read it from.
+  const fixed = page({ [`${PAGE}/hosting-config.json`]: optIn({ allowedOrigins: [AGENT] }), [`${AGENT}/examples.json`]: agentsFile({ id: 'f', url: `${AGENT}/run` }) });
+  assert.equal(started(await startPage({ ...fixed.env, configFile: `${AGENT}/examples.json` })).selectedAgentId, 'f');
+  assert.equal(fixed.seen.at(-1)?.init.credentials, 'omit');
+});
+
+test('without the opt-in the override meets the fixed allowlist, so it cannot widen it either', async () => {
+  const site = page({ [`${PAGE}/hosting-config.json`]: hostedFile(), [`${OTHER}/examples.json`]: agentsFile({ id: 'x', url: `${AGENT}/run` }) });
+  const result = started(await startPage({ ...site.env, configFile: `${OTHER}/examples.json` }));
+  assert.match(result.error ?? '', /https:\/\/other\.example is not an allowed destination/);
+  assert.ok(!site.seen.some((request) => request.url.startsWith(OTHER)));
+});

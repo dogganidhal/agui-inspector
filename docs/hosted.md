@@ -37,12 +37,13 @@ user saves.
 | `mode` | `hosted` or `embedded`. Required. |
 | `allowedOrigins` | Hosted only. Each entry is one absolute `http` or `https` origin: no path, no credentials, no wildcard. |
 | `config` | Optional. Where the agent configuration comes from. Without it the page reads `config.json` beside itself. A relative value is read beside the page too, so under a mount path such as `/tools/inspector/` it means `/tools/inspector/agents.json`; start it with `/` to read from the origin root. A URL here must be this page's origin or an allowed one. |
+| `allowVisitorTargets` | Optional boolean, `false` when absent. Hosted only: an embedded file that mentions it, even as `false`, is refused. `true` lets a visitor choose their own target; see [Visitor-chosen targets](#visitor-chosen-targets). |
 
 The file in the build says `embedded` with no allowed origins, so a page deployed as shipped can reach
 its own origin and nothing else. If the file is missing the page behaves the same way. A file that
 exists but is wrong (bad JSON, an unknown field, a wildcard) stops the page from starting and shows
 the reason; the page never guesses a wider policy. Unknown fields are errors so that a misspelled
-`allowedOrigin` cannot silently mean "no restriction".
+`allowedOrigin` or `allowVisitorTarget` cannot silently mean "no restriction".
 
 ## What happens at startup
 
@@ -85,6 +86,100 @@ validation libraries (zod) calls `new Function('')` inside a `try` to learn whet
 validators, and the browser reports the refusal. The library then takes its interpreted path. Nothing
 is evaluated, and no other report appears in normal use.
 
+## Visitor-chosen targets
+
+A deployment such as a public demo cannot list the endpoints its visitors will try. Setting
+`allowVisitorTargets` to `true` in `hosting-config.json` lets the visitor type any endpoint inside one
+fixed boundary, without a deployer allowlist and without an approval prompt from the inspector:
+
+```json
+{
+  "version": 0,
+  "mode": "hosted",
+  "allowedOrigins": [],
+  "allowVisitorTargets": true
+}
+```
+
+The boundary is the same everywhere it is enforced:
+
+- any `https` origin, on any port;
+- plain `http` to exactly `localhost` or `127.0.0.1`, on any port;
+- the page's own origin, as always.
+
+Everything else stays refused before a request is made: `http` to any other host, other schemes,
+`user:password@` in a URL, hostnames that only contain or end with `localhost` or `127.0.0.1`
+(`localhost.example`, `foo.localhost`), other loopback addresses such as `127.0.0.2`, and IPv6
+literals such as `http://[::1]:8787`. A numeric spelling of the IPv4 address (`127.1`, `2130706433`) is
+the same host once the browser parses the URL, and the guard reads the parsed URL, so those are
+accepted exactly as `127.0.0.1` is. Redirects are still never followed, requests still carry no cookies,
+and the token is still sent only as the one header the visitor chose.
+
+The option does not change where the page reads its own configuration from. The agent configuration
+comes from the page's own origin or from an origin you named in `allowedOrigins`, as before. Turning
+the option on does not let the configuration be read from an address a visitor could type. What the
+configuration declares is a target like any other: a capabilities URL is read when its agent is
+selected (the first agent is selected at start), and a preparation request runs when the visitor sends a
+message. Both meet the same boundary as the run, so a deployer who lists agents should list only
+targets they are content for the page to contact. An A2UI surface still loads no remote image, video,
+audio or catalog and opens no link; the policy below leaves `img-src` and `default-src` as they were.
+
+With the option on, the added content security policy changes in one directive:
+
+```
+connect-src 'self' https: http://localhost:* http://127.0.0.1:*
+```
+
+The guard and this directive are built from the same host list in `packages/inspector/src/core/runtime/transport.ts`,
+so a destination the guard accepts is one the browser lets through, and the reverse. There is no bare
+`http:`, no wildcard host and no IPv6 entry. Entries in `allowedOrigins` must already be inside the
+boundary (an `https` origin, or `http` to one of those two hosts) because a fixed origin cannot widen
+it. A file that lists anything else fails to start, with the entry named, and the transport refuses
+every request for a policy object built that way. Without the option, `allowedOrigins` keeps its
+earlier meaning and may hold any `http` or `https` origin.
+
+The footer says what applies. With the option on it reads
+`2 exchanges · 14 frames · requests to this origin, HTTPS targets and supported local servers (use localhost; browser CORS and local-network rules apply) · no telemetry · headers never recorded`.
+It names the kind of target, never an address, a query or a token.
+
+Embedded pages reject the option, and nothing the page reads later (a configuration, an agent, a
+profile, a typed endpoint) can turn it on. Changing it means changing the deployment's file.
+
+### Local servers: use localhost
+
+Type `http://localhost:<port>` for a server on the visitor's own machine. It is the form the policy
+can match exactly in every browser. `http://127.0.0.1:<port>` is also accepted and is matched exactly
+in Chromium and Safari (below). IPv6 loopback is not supported: browsers do not agree on how a content
+security policy source names `[::1]`, so the inspector refuses it with a message that points here
+instead of claiming it works.
+
+The browser still decides whether the request goes out. The local server has to answer CORS for the
+page's origin, and a browser may show its own permission prompt before a public page reaches a
+local address. The inspector shows no prompt of its own and does not get around the browser's.
+
+### Browser check
+
+The Chromium rows are automated in `tests/e2e/visitor-policy/policy.spec.ts`, which sends the same
+requests from the page and compares the browser's decision with the guard's for each destination. The
+manual rows come from one probe page served from a loopback port with the connect-src above: for each
+address it ran `fetch` against a loopback server that answers CORS and recorded whether the request
+reached the server and whether the browser reported a connect-src violation.
+
+| Destination | Chromium 153.0.8010.12 (Playwright 1.63.0) | Safari 27.0 (macOS 26.7.1) | Firefox |
+| --- | --- | --- | --- |
+| `http://127.0.0.1:<port>` | reached | reached | not run |
+| `http://localhost:<port>` | reached | reached | not run |
+| `http://127.1:<port>`, `http://2130706433:<port>` | reached as `127.0.0.1` | reached as `127.0.0.1` | not run |
+| `http://127.0.0.2:<port>` | blocked by connect-src | blocked by connect-src | not run |
+| `http://foo.localhost:<port>` | blocked by connect-src | blocked by connect-src | not run |
+| `http://[::1]:<port>` | blocked by connect-src | blocked by connect-src | not run |
+| non-loopback `http` host | blocked by connect-src | not tried | not run |
+
+The Safari column was recorded by hand on 2026-10-02. Firefox was not installed where this was
+written, so its column is open: to fill it, serve a page with the policy above, run the same seven
+fetches against a CORS-permitting loopback server, and note which ones the browser blocks. Treat any
+form other than `localhost` and `127.0.0.1` as unsupported until a row says otherwise.
+
 ## Direct browser requests
 
 A hosted run is a request from the user's browser to the agent. There is no proxy and no bypass, so the
@@ -107,6 +202,7 @@ cleared on reload or when the target changes. Redirects are never followed.
 
 The footer of the inspection pane states the facts for the running mode: for example
 `7 exchanges · 54 frames · requests only to this origin and https://agent.example · no telemetry · headers never recorded`.
+With visitor-chosen targets it names that scope instead, as described above.
 
 ## An imported recording
 
@@ -146,4 +242,14 @@ npm run typecheck
 npm run test:unit -- packages/inspector/tests/hosted
 npm run test:e2e -- tests/e2e/hosted
 npm run build && npm run check:bundle
+```
+
+The visitor-target option has its own checks. `packages/inspector/tests/hosted/visitor-policy.test.ts`
+and `packages/inspector/tests/runtime/transport.test.ts` cover the parser, the policy, the content
+security policy and each caller (configuration, capabilities, preparation, run and raw request).
+`tests/e2e/visitor-policy` covers the browser:
+
+```sh
+npm run test:unit -- packages/inspector/tests/hosted packages/inspector/tests/runtime
+npm run test:e2e -- tests/e2e/visitor-policy
 ```

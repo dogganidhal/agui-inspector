@@ -39,6 +39,8 @@ export interface AppExtras {
   readonly mode?: DeploymentMode;
   /** The deployment's allowed target origins, named in the footer. */
   readonly allowedOrigins?: readonly string[];
+  /** The hosted deployment opted in to visitor-chosen targets: the footer states that scope instead. */
+  readonly allowVisitorTargets?: boolean;
   readonly capabilities?: CapabilitiesState;
   /** Why the composer is disabled while something is owed or an imported recording is open. */
   readonly notice?: string;
@@ -54,19 +56,22 @@ type Tab = 'inspection' | 'state' | 'settings';
 
 const plural = (count: number, word: string) => `${count.toLocaleString('en-US')} ${word}${count === 1 ? '' : 's'}`;
 
-function requestScope(mode: DeploymentMode | undefined, allowedOrigins: readonly string[]): string {
-  return mode === 'hosted' && allowedOrigins.length > 0 ? `this origin and ${allowedOrigins.join(', ')}` : 'this origin';
+/** What the footer says requests may reach, from the same policy the guard and the browser enforce. */
+function requestScope(mode: DeploymentMode | undefined, allowedOrigins: readonly string[], allowVisitorTargets: boolean): string {
+  // Fixed origins are inside the visitor boundary, so they are not repeated. Named by kind, never by address.
+  if (mode === 'hosted' && allowVisitorTargets) return 'requests to this origin, HTTPS targets and supported local servers (use localhost; browser CORS and local-network rules apply)';
+  return `requests only to ${mode === 'hosted' && allowedOrigins.length > 0 ? `this origin and ${allowedOrigins.join(', ')}` : 'this origin'}`;
 }
 
 /** The inspection pane's closing line: counts for the session on screen, then the privacy facts for this mode. */
-function Footer({ store, mode, allowedOrigins, recording }: { store: SessionStore; mode?: DeploymentMode; allowedOrigins: readonly string[]; recording?: boolean }): ReactElement {
+function Footer({ store, mode, allowedOrigins, allowVisitorTargets, recording }: { store: SessionStore; mode?: DeploymentMode; allowedOrigins: readonly string[]; allowVisitorTargets: boolean; recording?: boolean }): ReactElement {
   const session: InspectionSession = useSyncExternalStore(store.subscribe, store.snapshot, store.snapshot);
   const frames = session.frames.reduce((count, frame) => count + (frame.classification === 'data' ? 1 : 0), 0);
   return (
     <footer className="agui-app-footer" data-view="footer">
       <Icon name="lock" size={13} />
       <span>
-        {plural(session.exchanges.length, 'exchange')} · {plural(frames, 'frame')} · requests only to {requestScope(mode, allowedOrigins)} · no telemetry · headers never recorded
+        {plural(session.exchanges.length, 'exchange')} · {plural(frames, 'frame')} · {requestScope(mode, allowedOrigins, allowVisitorTargets)} · no telemetry · headers never recorded
         {recording ? ' · imported recording, inspection only' : ''}
       </span>
     </footer>
@@ -93,7 +98,7 @@ function ThemeSwitch(): ReactElement {
  * The app shell: a fixed top bar above two panes that scroll on their own, conversation left and
  * inspection right. Under 960 px one pane shows and a segmented control switches between them.
  */
-export function App({ settings, connection, conversation, inspection, mode, allowedOrigins = [], capabilities, notice, recording, renderActivity, warnings = [] }: AppProps & AppExtras): ReactElement {
+export function App({ settings, connection, conversation, inspection, mode, allowedOrigins = [], allowVisitorTargets = false, capabilities, notice, recording, renderActivity, warnings = [] }: AppProps & AppExtras): ReactElement {
   const [pane, setPane] = useState<Pane>('conversation');
   const [tab, setTab] = useState<Tab>('inspection');
 
@@ -184,7 +189,7 @@ export function App({ settings, connection, conversation, inspection, mode, allo
           <div className="agui-app-body" hidden={tab !== 'settings'}>
             <SettingsView {...settings} {...(capabilities !== undefined && { capabilities })} />
           </div>
-          <Footer store={inspection.store} allowedOrigins={allowedOrigins} {...(mode !== undefined && { mode })} {...(recording !== undefined && { recording })} />
+          <Footer store={inspection.store} allowedOrigins={allowedOrigins} allowVisitorTargets={allowVisitorTargets} {...(mode !== undefined && { mode })} {...(recording !== undefined && { recording })} />
         </div>
       </div>
     </div>
@@ -275,6 +280,7 @@ function Root({ started, storage }: { started: Started; storage?: StorageLike })
   const props: AppProps & AppExtras = {
     mode: policy.mode,
     allowedOrigins: policy.allowedOrigins,
+    allowVisitorTargets: policy.allowVisitorTargets === true,
     recording,
     capabilities,
     warnings: started.warnings,
