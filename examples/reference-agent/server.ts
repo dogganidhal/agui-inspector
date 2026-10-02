@@ -7,6 +7,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { credentialEchoBody, credentialOf } from './credential-echo.ts';
+import { referenceRunResponse } from './scenarios.ts';
 
 function option(name: string, fallback: string): string {
   const at = process.argv.indexOf(name);
@@ -65,15 +66,9 @@ const server = createServer(async (request, response) => {
     response.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store' });
     return void response.end(credentialEchoBody(threadId, runId, credentialOf(request.headers)));
   }
-  const events = [
-    { type: 'RUN_STARTED', threadId, runId },
-    { type: 'TEXT_MESSAGE_START', messageId: 'msg-1', role: 'assistant' },
-    { type: 'TEXT_MESSAGE_CONTENT', messageId: 'msg-1', delta: 'Hello from the reference agent.' },
-    { type: 'TEXT_MESSAGE_END', messageId: 'msg-1' },
-    { type: 'RUN_FINISHED', threadId, runId, outcome: { type: 'success' } },
-  ];
-  response.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store' });
-  for (const event of events) response.write(`data: ${JSON.stringify(event)}\n\n`);
+  const reply = referenceRunResponse({ threadId, runId });
+  response.writeHead(reply.status, { 'content-type': reply.contentType, 'cache-control': 'no-store' });
+  for (const chunk of reply.chunks) response.write(chunk);
   response.end();
 });
 

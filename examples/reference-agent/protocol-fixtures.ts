@@ -12,6 +12,14 @@ const json = JSON.stringify;
 
 const THREAD = 't-proto';
 const RUN = 'r-proto';
+
+/** The identifiers of the run envelope. Producers take them as input; the defaults are the fixed fixture ones. */
+export interface RunIds {
+  readonly threadId: string;
+  readonly runId: string;
+}
+
+const DEFAULT_IDS: RunIds = { threadId: THREAD, runId: RUN };
 // Multibyte on purpose: a one-byte chunk can end inside a code point.
 const TEXT = 'héllo wörld, 你好 🙂';
 
@@ -94,18 +102,21 @@ export function dataFrames(delimiters: readonly string[], ...data: readonly stri
   return data.map((text, index) => `data: ${text}${delimiters[index % delimiters.length]}`).join('');
 }
 
-const event = (type: keyof typeof EventType): string => json(eventFixtures[type]);
+/** One event as JSON. Only the run envelope carries identifiers, so only it changes with `ids`. */
+const event = (type: keyof typeof EventType, ids: RunIds = DEFAULT_IDS): string =>
+  json(type === 'RUN_STARTED' || type === 'RUN_FINISHED' ? { ...eventFixtures[type], ...ids } : eventFixtures[type]);
 
-const conversation = {
-  kind: 'conversation',
-  method: 'POST',
-  path: '/agent',
-  body: json({ threadId: THREAD, runId: RUN, messages: [], state: {}, tools: [], context: [], forwardedProps: {} }),
-  responseKind: 'sse',
-} as const;
+const conversation = (ids: RunIds) =>
+  ({
+    kind: 'conversation',
+    method: 'POST',
+    path: '/agent',
+    body: json({ ...ids, messages: [], state: {}, tools: [], context: [], forwardedProps: {} }),
+    responseKind: 'sse',
+  }) as const;
 
-function stream(name: string, text: string, sizes: readonly number[] = [64]): RecorderScenario {
-  return { name, request: conversation, status: 200, announcedContentType: 'text/event-stream', chunks: fragment(encoder.encode(text), sizes), ending: 'close' };
+function stream(name: string, text: string, sizes: readonly number[] = [64], ids: RunIds = DEFAULT_IDS): RecorderScenario {
+  return { name, request: conversation(ids), status: 200, announcedContentType: 'text/event-stream', chunks: fragment(encoder.encode(text), sizes), ending: 'close' };
 }
 
 /** The event families of the baseline in one coherent run (everything but RUN_ERROR; see runError). */
@@ -122,11 +133,17 @@ const baselineOrder = [
 
 export const baselineRunTypes: readonly string[] = baselineOrder;
 
+/** Thirty of the 31 types in a plausible run, with LF, CRLF and CR delimiters, cut into uneven chunks. */
+export const baselineRun = (ids: RunIds = DEFAULT_IDS): RecorderScenario =>
+  stream('baseline-run', dataFrames(MIXED, ...baselineOrder.map((type) => event(type, ids))), [1, 7, 64, 4096], ids);
+
+/** The one baseline type the run above leaves out: a run that fails. */
+export const runError = (ids: RunIds = DEFAULT_IDS): RecorderScenario =>
+  stream('run-error', dataFrames(['\n\n'], event('RUN_STARTED', ids), event('RUN_ERROR')), [64], ids);
+
 export const protocolScenarios = {
-  /** Thirty of the 31 types in a plausible run, with LF, CRLF and CR delimiters, cut into uneven chunks. */
-  baselineRun: stream('baseline-run', dataFrames(MIXED, ...baselineOrder.map(event)), [1, 7, 64, 4096]),
-  /** The one baseline type the run above leaves out: a run that fails. */
-  runError: stream('run-error', dataFrames(['\n\n'], event('RUN_STARTED'), event('RUN_ERROR'))),
+  baselineRun: baselineRun(),
+  runError: runError(),
   /** Valid frames around every invalid class: the stream keeps going and ends correctly. */
   invalidFrames: stream(
     'invalid-frames',
