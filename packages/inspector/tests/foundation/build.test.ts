@@ -15,10 +15,10 @@ before(() => {
 });
 after(() => rmSync(outdir, { recursive: true, force: true }));
 
-test('the build emits index.html and one script, plus app.css once a view imports the theme, nothing else', () => {
+test('the build emits index.html and one script, plus app.css once a view imports the theme and the files in public/, nothing else', () => {
   const emitted = readdirSync(outdir).sort();
   assert.ok(
-    ['app.js,index.html', 'app.css,app.js,index.html'].includes(emitted.join(',')),
+    ['app.js,index.html', 'app.css,app.js,index.html', 'app.js,hosting-config.json,index.html', 'app.css,app.js,hosting-config.json,index.html'].includes(emitted.join(',')),
     `unexpected build output: ${emitted.join(', ')}`,
   );
 });

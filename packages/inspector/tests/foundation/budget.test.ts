@@ -203,7 +203,7 @@ test('the real scaffold build is counted completely: every emitted file, nothing
   const paths = result.files.map((file) => file.path);
   assert.deepEqual(paths, readdirSync(dir).sort(), 'the budget counts exactly what the build emitted');
   assert.ok(
-    ['app.js,index.html', 'app.css,app.js,index.html'].includes(paths.join(',')),
+    ['app.js,index.html', 'app.css,app.js,index.html', 'app.js,hosting-config.json,index.html', 'app.css,app.js,hosting-config.json,index.html'].includes(paths.join(',')),
     `unexpected build output: ${paths.join(', ')}`,
   );
   assert.equal(evaluate(result).ok, true);
@@ -223,9 +223,12 @@ test('the representative build includes the pinned v0.9 renderer and reports hea
   const representative = measure(path.join(root, '.build', 'representative'));
   assert.ok(representative.files.some((file) => file.path === 'index.html'));
   assert.ok(representative.files.some((file) => file.path.endsWith('.js')));
+  // The real app now bundles the renderer, client and schemas itself, so the estimate converges on the
+  // real build and must simply not undercut it. The slack covers the deployment files in public/,
+  // which the representative build does not copy.
   assert.ok(
-    representative.bytes > scaffold.bytes + 100_000,
-    `the renderer, client and schemas add real weight (${representative.bytes} vs ${scaffold.bytes})`,
+    representative.bytes >= scaffold.bytes - 1_000,
+    `the representative build is no smaller than the real one (${representative.bytes} vs ${scaffold.bytes})`,
   );
   assert.equal(evaluate(representative).ok, true);
 });
