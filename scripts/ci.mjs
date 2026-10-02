@@ -51,11 +51,39 @@ export function planSteps(/** @type {string} */ root = repoRoot) {
       : { name: 'python tests', status: 'fail', detail: 'packages/python exists but has no tests', commands: [] };
   }
 
+  // The public demo (feature 002) is introduced once its worker exists. From then on the gate requires
+  // all of it: a demo with a missing project, build script or test is a failure, never a skipped step.
+  /** @type {(name: string, needs: string[], commands: string[][]) => Step} */
+  const demoStep = (name, needs, commands) => {
+    const missing = needs.filter((file) => !existsSync(at(...file.split('/'))));
+    return missing.length > 0
+      ? { name, status: 'fail', detail: `the demo exists but ${missing.join(', ')} is missing`, commands: [] }
+      : { name, status: 'run', detail: '', commands };
+  };
+  const demo = existsSync(at('demo', 'service-worker.ts'));
+  const demoTypecheck = demoStep('demo typecheck', ['demo/tsconfig.json', 'demo/tsconfig.worker.json'], [
+    ['npm', 'exec', '--', 'tsc', '-p', 'demo/tsconfig.json'],
+    ['npm', 'exec', '--', 'tsc', '-p', 'demo/tsconfig.worker.json'],
+  ]);
+  // The ordinary unit run already includes tests/demo; this only refuses a demo with none.
+  /** @type {Step[]} */
+  const demoUnit = listFiles(at('tests', 'demo'), /\.test\.tsx?$/).length > 0
+    ? []
+    : [{ name: 'demo unit tests', status: 'fail', detail: 'the demo exists but tests/demo has no *.test.ts', commands: [] }];
+  // The base path is the one the Pages workflow deploys under.
+  const demoBuild = demoStep('demo build and budget', ['scripts/build-demo.mjs', 'scripts/bundle-budget.mjs'], [
+    ['node', 'scripts/build-demo.mjs', '--outdir', '.build/public-demo', '--base-path', '/agui-inspector/'],
+    ['node', 'scripts/bundle-budget.mjs', '--dir', '.build/public-demo'],
+  ]);
+
   return [
     always('typecheck', ['npm', 'run', 'typecheck']),
+    ...(demo ? [demoTypecheck] : []),
     always('unit tests', ['npm', 'run', 'test:unit']),
+    ...(demo ? demoUnit : []),
     always('build', ['npm', 'run', 'build']),
     budget,
+    ...(demo ? [demoBuild] : []),
     e2e,
     python,
   ];

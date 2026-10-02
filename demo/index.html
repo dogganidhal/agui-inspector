@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- The shared page's policy plus worker-src for the demo's own worker. The app adds its connect-src policy at startup. -->
+    <meta http-equiv="Content-Security-Policy" content="script-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'" />
+    <title>agui-inspector demo</title>
+    <link rel="stylesheet" href="./app.css" />
+    <link rel="stylesheet" href="./demo.css" />
+  </head>
+  <body>
+    <div class="demo-strip">
+      <p id="demo-status" role="status">Preparing the browser-local examples…</p>
+      <p>
+        The examples are scripted agents that run inside this page. They are not a real model or server. To inspect your
+        own server, type its URL in the connection bar.
+        <a href="https://github.com/dogganidhal/agui-inspector/blob/main/docs/embedding.md" rel="noopener noreferrer">Embedding guide</a>
+      </p>
+    </div>
+    <!-- Not #root: the shared app mounts itself there when it finds one, and the demo mounts it once, after the examples are ready or known to be unavailable. -->
+    <div id="demo-mount"></div>
+    <script type="module" src="./bootstrap.js"></script>
+  </body>
+</html>
