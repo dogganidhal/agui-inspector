@@ -1,0 +1,24 @@
+{
+  "name": "agui-inspector",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Working-name AG-UI inspector client and static assets. Not published.",
+  "type": "module",
+  "exports": {
+    ".": "./src/static-path.js"
+  },
+  "files": [
+    "dist",
+    "src/static-path.js"
+  ],
+  "dependencies": {
+    "@a2ui/react": "0.12.0",
+    "@a2ui/web_core": "0.12.0",
+    "@ag-ui/a2ui-middleware": "0.0.11",
+    "@ag-ui/client": "1.0.1",
+    "@ag-ui/core": "1.0.1",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "zod": "3.25.76"
+  }
+}
