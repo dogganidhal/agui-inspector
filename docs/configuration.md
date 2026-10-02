@@ -40,12 +40,17 @@ reads as version 0. Any other version is rejected with an error that names it.
         "quickMessages": ["/help"]
       }
     }
-  ]
+  ],
+  "theme": {
+    "light": { "--agui-accent": "#2563eb", "--agui-radius": "6px" },
+    "dark": { "--agui-accent": "#93c5fd" }
+  }
 }
 ```
 
 | Field | Rule |
 | --- | --- |
+| `theme` | Optional. `light` and `dark` maps from the ten public `--agui-*` names to string values. See [Theme](#theme). |
 | `agents[].id` | Required, nonempty, unique in the file. |
 | `agents[].url` | Required. Relative to the page origin when embedded, absolute `http(s)` when hosted. No `user:password@`. |
 | `agents[].name` | Optional string. |
@@ -61,6 +66,37 @@ The loader does not fetch anything itself. `loadConfig` and `loadCapabilities` t
 callback, which the guarded transport supplies, so every request follows the startup allowlist. A
 configuration never adds an allowed origin and the inspector never requests a route the file did not
 name.
+
+### Theme
+
+`theme` restyles the inspector without a rebuild or a separate stylesheet. Both maps are optional,
+and so is every property in them. A property you leave out keeps its default, and a mode with no map
+uses the defaults for that mode. The page applies the map for the mode in use: the explicit light or
+dark choice from the top-bar switch if there is one, otherwise the system's color-scheme preference.
+Names, defaults and what each property controls are in [theming](theming.md#public-properties).
+
+The same field works in hosted mode, embedded mode, behind the Python helper and from any server that
+serves the assets beside a `config.json`. It carries no credentials, like the rest of the file.
+
+A theme problem is a warning, never a startup failure. The page shows it in a "Configuration"
+warning under the top bar, on every tab, and leaves the rejected override unapplied. The agents,
+presets and every valid override in the same file keep working. The rules:
+
+| Input | Result |
+| --- | --- |
+| `theme` is not an object | One warning; the whole field is ignored. |
+| A key other than `light` or `dark` | One warning; that key is ignored. |
+| A map that is not an object | One warning; that map is ignored. |
+| A name that is not one of the ten public ones, including private or generic names such as `--bg`, `--r` or `--agui-private` | One warning; that entry is ignored. Names are case-sensitive. |
+| A value that is not a string, or is empty | One warning; that entry is ignored. |
+| A value containing `url(`, `image-set(`, `src(`, `image(` or `cross-fade(` in any case, with any whitespace before the `(` | One warning; that entry is ignored. |
+| A value containing `@`, `;`, `{`, `}` or a backslash | One warning; that entry is ignored. |
+
+Values go into custom properties through the CSS object model, so they cannot start a request or
+leave their declaration, and the page's content security policy is the same with or without a theme.
+The warning names the map and the property but never repeats the rejected value. `parseConfig`
+returns the accepted maps as `theme` and the messages as `warnings`; only an unusable `agents` list
+is an error.
 
 ### Declared capabilities
 
@@ -202,6 +238,10 @@ the app assembly decides how to ship it.
 
 ## Migrations
 
-No format has changed since version 0 was introduced, so there is nothing to migrate. A later change
-that breaks an existing file will be listed here with the steps to update it. Until 1.0.0 such a
-change may keep the version number; the entry is the record.
+- 0.1.0 adds the optional `theme` field to the version-0 configuration. A file without it reads as
+  before, so there is nothing to migrate. Before this change, `theme` was an unknown field and an
+  error.
+
+No other format has changed since version 0 was introduced. A later change that breaks an existing
+file will be listed here with the steps to update it. Until 1.0.0 such a change may keep the version
+number; the entry is the record.

@@ -7,7 +7,7 @@
 // Every request after step 2 goes through the runtime's guarded transport, so it obeys the allowlist
 // fixed in step 1. A bad hosting-config.json stops the start with a message; it never falls back to a
 // wider policy.
-import type { AgentConfig, ClientProfileSettings, JsonValue, SessionStore, TransportPolicy } from '../contracts.ts';
+import type { AgentConfig, ClientProfileSettings, JsonValue, SessionStore, ThemeConfig, TransportPolicy } from '../contracts.ts';
 import { loadConfig, type ParsedConfig, type Result } from '../core/config/index.ts';
 import { defaultProfile, loadProfile, type StorageLike } from '../core/profiles/index.ts';
 import { createRuntime, guardedFetchText, type Runtime } from '../core/runtime/index.ts';
@@ -39,6 +39,10 @@ export interface Started {
   readonly agents: readonly AgentConfig[];
   /** The agent selected at the start, which is the first configured one. */
   readonly selectedAgentId?: string;
+  /** The validated theme maps from `config.json`; the page applies them. */
+  readonly theme?: ThemeConfig;
+  /** Theme overrides that were rejected. The page shows them; none of them stops the start. */
+  readonly warnings: readonly string[];
   /** Why the configuration or the saved profile could not be used. */
   readonly error?: string;
 }
@@ -85,7 +89,9 @@ export async function startPage(env: StartupEnvironment): Promise<StartResult> {
   // wrong, or that the policy refuses, is an error to show.
   const loaded: Result<ParsedConfig> = await loadConfig(configName, () => readText(new URL(configName, env.baseUrl).href));
   let agents: readonly AgentConfig[] = [];
-  if (loaded.ok) agents = loaded.value.agents;
+  let theme: ThemeConfig | undefined;
+  let warnings: readonly string[] = [];
+  if (loaded.ok) ({ agents, theme, warnings } = loaded.value);
   else if (hosting.value.config !== undefined || !NOT_FOUND.test(loaded.error)) problems.push(loaded.error);
 
   if (env.storage !== undefined) {
@@ -103,6 +109,8 @@ export async function startPage(env: StartupEnvironment): Promise<StartResult> {
     runtime,
     settings,
     agents,
+    warnings,
+    ...(theme !== undefined && { theme }),
     ...(first !== undefined && { selectedAgentId: first.id }),
     ...(problems.length > 0 && { error: problems.join(' ') }),
   };

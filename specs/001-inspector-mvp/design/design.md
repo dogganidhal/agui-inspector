@@ -92,6 +92,9 @@ rename across every view stylesheet. Host generic tokens must not leak into or b
 inspector derivations. Public `--agui-*` properties keep their existing documented names.
 Move the application shell's background, foreground and font declarations from `body` to `#root`
 along with the derived tokens, so the surrounding host does not consume inspector-private values.
+The namespaced public `--agui-*` defaults and their two dark rules stay on `:root`: an override
+stylesheet or a theme map must sit on the same element as the defaults that derive from them (the
+background from the tint, the accent from the text color), and a name with a prefix cannot collide.
 
 | Token | Value | Use |
 | --- | --- | --- |
@@ -130,8 +133,11 @@ G-09 is closed: every MVP mode loads `config.json`, which accepts an optional `t
 ```
 
 Either map and any public property may be omitted; omitted values retain defaults. The Python
-helper accepts the same `theme` field. Apply the selected map under the existing automatic
-`prefers-color-scheme` and explicit light/dark switch, without a rebuild or a separate CSS file.
+helper accepts the same `theme` field. The page applies the selected map under the existing automatic
+`prefers-color-scheme` and explicit light/dark switch, without a rebuild or a separate CSS file: it
+sets the entries as custom properties on the root element through the CSS object model (the policy's
+`style-src 'self'` does not restrict that) and swaps them when the mode changes. Rejections appear as
+"Configuration" warnings under the top bar on every tab.
 Accept only the ten documented public names and string values; unknown/private names and unsafe
 values show visible configuration warnings, not fatal errors. Reject affected overrides and keep
 valid configuration usable. Values cannot start requests or escape declarations: at minimum deny

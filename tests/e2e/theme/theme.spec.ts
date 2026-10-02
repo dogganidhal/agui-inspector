@@ -1,6 +1,7 @@
-// F06 T054 (FR-037, FR-041, SC-010): the theme and primitives in a real browser. The fixture page
-// renders every primitive and state; overrides are a stylesheet loaded after the inspector's own,
-// which is how every candidate delivery mechanism (G-09, undecided) reduces.
+// F06 T054, D02 T061 (FR-037, FR-041, SC-010): the theme and primitives in a real browser. The fixture
+// page renders every primitive and state; overrides are a stylesheet loaded after the inspector's own.
+// The delivery from config.json (G-09) is in config.spec.ts; the derived tokens' scope is checked here
+// against a host page that defines the same generic names.
 import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -15,6 +16,15 @@ const overridesDir = path.join(import.meta.dirname, 'overrides');
 interface Site {
   origin: string;
 }
+
+/** A host page that already defines the inspector's generic derived names, with values that would be obvious if they leaked. */
+const HOSTILE_HOST = `
+:root, body {
+  --bg: rgb(255, 0, 0); --fg: rgb(0, 255, 0); --muted: rgb(0, 0, 255); --acc: rgb(255, 0, 255); --r: 77px;
+  --sunk: rgb(255, 255, 0); --hover: rgb(0, 255, 255); --line: rgb(255, 128, 0); --line-2: rgb(128, 0, 255);
+  --u: 33px; --pop: 0 0 0 9px rgb(255, 0, 0); --scrim: rgb(255, 0, 0); --l-fam: 0.1; --l-sem: 0.1; --ease: steps(1);
+}
+`;
 
 /** Bundles the fixture the way the app is bundled and serves it, with the override files, from 127.0.0.1. */
 const test = base.extend<object, { site: Site }>({
@@ -45,6 +55,7 @@ const test = base.extend<object, { site: Site }>({
       for (const name of ['cobalt', 'sage-surface', 'bg-only']) {
         files[`/overrides/${name}.css`] = ['text/css', readFileSync(path.join(overridesDir, `${name}.css`), 'utf8')];
       }
+      files['/overrides/hostile-host.css'] = ['text/css', HOSTILE_HOST];
       const server: Server = createServer((request, response) => {
         const hit = files[new URL(request.url ?? '/', 'http://x').pathname];
         response.writeHead(hit ? 200 : 404, { 'content-type': hit?.[0] ?? 'text/plain' });
@@ -82,7 +93,8 @@ const expression = (page: Page, property: string, value: string) =>
   page.evaluate(
     ([prop, expr]) => {
       const probe = document.createElement('div');
-      document.body.append(probe);
+      // On the mount: the generic tokens are declared there and nowhere else.
+      (document.getElementById('root') as HTMLElement).append(probe);
       probe.style.setProperty(prop as string, expr as string);
       const result = getComputedStyle(probe).getPropertyValue(prop as string);
       probe.remove();
@@ -386,4 +398,78 @@ test('long code wraps and tall code scrolls inside its own capped box, at phone 
   expect(box?.height ?? 0).toBeLessThanOrEqual(342);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(400);
   expect(await code.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
+});
+
+const GENERIC = ['--bg', '--fg', '--muted', '--acc', '--r', '--sunk', '--hover', '--line', '--line-2', '--u', '--pop', '--scrim', '--l-fam', '--l-sem', '--ease'];
+const hostValue = (page: Page, property: string) => page.evaluate((name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim(), property);
+
+for (const scheme of ['light', 'dark'] as const) {
+  test(`host generic tokens do not reach the inspector's derived tokens, and the inspector does not overwrite them: ${scheme}`, async ({ page, site }) => {
+    await open(page, site, scheme);
+    const derived = () => page.evaluate((names) => Object.fromEntries(names.map((name) => [name, getComputedStyle(document.getElementById('root') as HTMLElement).getPropertyValue(name).trim()])), GENERIC);
+    const looks = () =>
+      page.evaluate(() =>
+        [...document.querySelectorAll('#root [class*="agui-"]')]
+          .map((element) => ['color', 'background-color', 'border-top-color', 'border-top-left-radius', 'height', 'padding-left', 'box-shadow'].map((prop) => getComputedStyle(element).getPropertyValue(prop)).join('|'))
+          .join('\n'),
+      );
+    const before = { derived: await derived(), looks: await looks(), root: await hostValue(page, '--bg') };
+    expect(before.root, 'the inspector declares no generic token on :root').toBe('');
+
+    await page.addStyleTag({ url: `${site.origin}/overrides/hostile-host.css` });
+    await settle(page);
+    expect(await hostValue(page, '--bg'), 'the host keeps its own --bg').toBe('rgb(255, 0, 0)');
+    for (const [name, value] of Object.entries({ '--fg': 'rgb(0, 255, 0)', '--muted': 'rgb(0, 0, 255)', '--acc': 'rgb(255, 0, 255)', '--r': '77px', '--u': '33px', '--line': 'rgb(255, 128, 0)' })) {
+      expect(await hostValue(page, name), `the host keeps its own ${name}`).toBe(value);
+    }
+    expect(await derived(), 'the derived tokens on the mount are unchanged').toEqual(before.derived);
+    expect(await looks(), 'no inspector element looks different').toBe(before.looks);
+    expect(await computed(page, 'main', 'background-color')).not.toBe('rgb(255, 0, 0)');
+  });
+
+  test(`popover, dialog and toast stay inside the mount and keep the inspector's styling beside a hostile host: ${scheme}`, async ({ page, site }) => {
+    const layers = async () => {
+      // The toast first: clicking elsewhere light-dismisses an open popover.
+      await page.getByRole('button', { name: 'Show toast' }).click();
+      await page.getByRole('button', { name: 'Open popover' }).click();
+      const popover = await page.locator('#fixture-pop').evaluate((element) => ({ open: element.matches(':popover-open'), inRoot: element.closest('#root') !== null }));
+      const toast = await page.locator('.agui-toast').first().evaluate((element) => ({ inRoot: element.closest('#root') !== null }));
+      const look = (selector: string) =>
+        page.evaluate((sel) => {
+          const style = getComputedStyle(document.querySelector(sel) as Element);
+          return ['background-color', 'color', 'border-top-left-radius', 'box-shadow', 'font-family', 'font-size'].map((prop) => style.getPropertyValue(prop)).join('|');
+        }, selector);
+      const popoverLook = await look('#fixture-pop');
+      const toastLook = await look('.agui-toast');
+      await page.keyboard.press('Escape');
+      await page.getByRole('button', { name: 'Open dialog' }).click();
+      const dialog = await page.getByRole('dialog', { name: 'Export this session?' }).evaluate((element) => ({ modal: element.matches(':modal'), inRoot: element.closest('#root') !== null }));
+      const dialogLook = await look('.agui-dialog');
+      const backdrop = await page.locator('.agui-dialog').evaluate((element) => getComputedStyle(element, '::backdrop').backgroundColor);
+      await page.keyboard.press('Escape');
+      return { popover, toast, dialog, popoverLook, toastLook, dialogLook, backdrop };
+    };
+    await open(page, site, scheme);
+    const plain = await layers();
+    expect([plain.popover, plain.toast, plain.dialog].map((layer) => layer.inRoot), 'every floating layer is a descendant of the mount').toEqual([true, true, true]);
+    expect(plain.popover.open && plain.dialog.modal, 'the popover and the dialog were in the top layer').toBe(true);
+
+    await open(page, site, scheme, 'hostile-host');
+    expect(await hostValue(page, '--bg')).toBe('rgb(255, 0, 0)');
+    const hostile = await layers();
+    expect(hostile.popoverLook).toBe(plain.popoverLook);
+    expect(hostile.toastLook).toBe(plain.toastLook);
+    expect(hostile.dialogLook).toBe(plain.dialogLook);
+    expect(hostile.backdrop).toBe(plain.backdrop);
+    expect(hostile.backdrop).not.toBe('rgb(255, 0, 0)');
+    expect(hostile.popoverLook).not.toContain('rgb(255, 0, 0)');
+  });
+}
+
+test('an override of the public properties still wins beside a hostile host, in the mount and in its floating layers', async ({ page, site }) => {
+  await open(page, site, 'light', 'hostile-host');
+  await page.addStyleTag({ url: `${site.origin}/overrides/cobalt.css` });
+  await settle(page);
+  expect(await computed(page, '[data-section="button"] .agui-btn--primary:not(:disabled)', 'background-color')).toBe(await expression(page, 'background-color', 'oklch(0.52 0.19 262)'));
+  expect(await computed(page, '[data-section="button"] .agui-btn:not([class*="--"])', 'border-top-left-radius')).toBe('1.4px');
 });

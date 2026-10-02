@@ -9,16 +9,21 @@
 // make the inspector fetch a route it was not handed.
 import type { AgentCapabilities } from '@ag-ui/core';
 import { AgentCapabilitiesSchema } from '@ag-ui/core/schemas';
-import { CAPABILITY_GROUPS, FORMAT_VERSION, type AgentConfig, type ConfigFile, type JsonValue } from '../../contracts.ts';
+import { CAPABILITY_GROUPS, FORMAT_VERSION, THEME_PROPERTIES, type AgentConfig, type ConfigFile, type JsonValue, type ThemeConfig, type ThemeMap } from '../../contracts.ts';
 import { parsePreset } from '../presets/index.ts';
-import { describeError, fail, isJsonObject, isRecord, ok, unexpectedKey, urlProblem, type Result } from './validation.ts';
+import { describeError, fail, isJsonObject, isRecord, ok, themeValueProblem, unexpectedKey, urlProblem, type Result } from './validation.ts';
 
 export type { Result } from './validation.ts';
 
 /** Reads one text resource. The caller routes it through the guarded transport. */
 export type FetchText = (url: string) => Promise<string>;
 
-export type ParsedConfig = ConfigFile & { readonly agents: readonly AgentConfig[]; readonly version: typeof FORMAT_VERSION };
+export type ParsedConfig = ConfigFile & {
+  readonly agents: readonly AgentConfig[];
+  readonly version: typeof FORMAT_VERSION;
+  /** Theme overrides that were rejected. They never stop the configuration from loading. */
+  readonly warnings: readonly string[];
+};
 
 const AGENT_FIELDS = ['id', 'name', 'url', 'capabilities', 'preset'];
 
@@ -61,6 +66,41 @@ function parseAgent(value: unknown, index: number): Result<AgentConfig> {
   return ok(agent);
 }
 
+/** A name from the file, quoted and cut short so a hostile one cannot flood the page. */
+const shown = (name: string) => JSON.stringify(name.length > 48 ? `${name.slice(0, 48)}…` : name);
+
+/** One light or dark map: every accepted property is kept, every other one is a warning. */
+function parseThemeMap(value: unknown, where: string, warnings: string[]): ThemeMap | undefined {
+  if (!isRecord(value)) {
+    warnings.push(`${where} must be an object of --agui-* properties; it was ignored`);
+    return undefined;
+  }
+  const accepted: Record<string, string> = {};
+  for (const [name, entry] of Object.entries(value)) {
+    const problem = (THEME_PROPERTIES as readonly string[]).includes(name) ? themeValueProblem(entry) : 'is not a public theme property';
+    if (problem === undefined) accepted[name] = entry as string;
+    else warnings.push(`${where}: ${shown(name)} ${problem}; it was ignored`);
+  }
+  return accepted;
+}
+
+/** The optional `theme` field. Bad names, shapes and values are dropped one by one, each with a warning. */
+function parseTheme(value: unknown, warnings: string[]): ThemeConfig | undefined {
+  if (!isRecord(value)) {
+    warnings.push('theme must be an object with optional "light" and "dark" maps; it was ignored');
+    return undefined;
+  }
+  const theme: { light?: ThemeMap; dark?: ThemeMap } = {};
+  for (const [mode, map] of Object.entries(value)) {
+    if (mode !== 'light' && mode !== 'dark') warnings.push(`theme: ${shown(mode)} is not a theme map (use "light" or "dark"); it was ignored`);
+    else {
+      const parsed = parseThemeMap(map, `theme.${mode}`, warnings);
+      if (parsed !== undefined) theme[mode] = parsed;
+    }
+  }
+  return theme.light !== undefined || theme.dark !== undefined ? theme : undefined;
+}
+
 /** Version 0 only; a file without a version is the historical form and reads as version 0. */
 export function parseConfig(text: string): Result<ParsedConfig> {
   let json: unknown;
@@ -70,7 +110,7 @@ export function parseConfig(text: string): Result<ParsedConfig> {
     return fail(`Configuration is not valid JSON: ${describeError(error)}`);
   }
   if (!isRecord(json)) return fail('Configuration must be a JSON object with an "agents" list');
-  const extra = unexpectedKey(json, ['version', 'agents'], 'configuration', 'configuration');
+  const extra = unexpectedKey(json, ['version', 'agents', 'theme'], 'configuration', 'configuration');
   if (extra) return fail(extra);
   if ('version' in json && json.version !== FORMAT_VERSION) {
     return fail(`Unsupported configuration version ${JSON.stringify(json.version)}; this inspector reads version ${FORMAT_VERSION}`);
@@ -84,7 +124,9 @@ export function parseConfig(text: string): Result<ParsedConfig> {
     if (agents.some((known) => known.id === agent.value.id)) return fail(`Duplicate agent id "${agent.value.id}"`);
     agents.push(agent.value);
   }
-  return ok({ version: FORMAT_VERSION, agents });
+  const warnings: string[] = [];
+  const theme = json.theme === undefined ? undefined : parseTheme(json.theme, warnings);
+  return ok({ version: FORMAT_VERSION, agents, ...(theme !== undefined && { theme }), warnings });
 }
 
 /** Fetches `url` through the callback and parses it. This is the only request made. */

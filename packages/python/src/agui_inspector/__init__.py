@@ -49,11 +49,22 @@ def _find(asset: str):
     return node if node.is_file() else None
 
 
-def mount_inspector(app, *, agents: list[Agent], enabled: bool = False, path: str = DEFAULT_PATH) -> None:
+def mount_inspector(
+    app,
+    *,
+    agents: list[Agent],
+    enabled: bool = False,
+    path: str = DEFAULT_PATH,
+    theme: dict[str, dict[str, str]] | None = None,
+) -> None:
     """Serve the inspector page, its assets and ``<path>/config.json`` from ``app``.
 
     ``enabled`` defaults to False and a disabled call touches nothing, not even the optional
     Starlette import. Enabling logs a warning that names the mount path.
+
+    ``theme`` is ``{"light": {...}, "dark": {...}}``, either map optional, from the ten documented
+    ``--agui-*`` property names to CSS values. It goes into ``config.json`` as given: the page
+    validates it and shows a warning for any name or value it rejects, never an error.
     """
     if not enabled:
         return
@@ -73,7 +84,11 @@ def mount_inspector(app, *, agents: list[Agent], enabled: bool = False, path: st
 
     mount = path.rstrip("/")
     config = json.dumps(
-        {"version": _CONFIG_VERSION, "agents": [{k: v for k, v in asdict(a).items() if v is not None} for a in agents]}
+        {
+            "version": _CONFIG_VERSION,
+            "agents": [{k: v for k, v in asdict(a).items() if v is not None} for a in agents],
+            **({"theme": theme} if theme is not None else {}),
+        }
     )
     headers = {"content-security-policy": _CSP}
 

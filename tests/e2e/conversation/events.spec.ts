@@ -444,7 +444,7 @@ test('the views take their colors, radius and fonts from the theme tokens, in bo
   const probe = (property: string, value: string) =>
     page.evaluate(([prop, expression]) => {
       const el = document.createElement('div');
-      document.body.append(el);
+      document.getElementById('root')?.append(el);
       el.style.setProperty(prop as string, expression as string);
       const computed = getComputedStyle(el).getPropertyValue(prop as string);
       el.remove();

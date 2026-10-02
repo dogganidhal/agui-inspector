@@ -62,3 +62,19 @@ export function urlProblem(url: unknown, where: string): string | undefined {
   }
   return undefined;
 }
+
+// A theme value is written into a CSS declaration and must not leave it or start a request. The
+// functions below load a resource; `@` starts an at-rule such as @import; `;`, `{` and `}` end a
+// declaration or open a rule; a backslash can spell any of them as an escape. Whitespace before `(`
+// is rejected too, and the match is case-insensitive.
+const REQUEST_FUNCTION = /(?:url|src|image(?:-set)?|cross-fade)\s*\(/i;
+const DECLARATION_ESCAPE = /[@;{}\\]/;
+
+/** Why `value` cannot be a theme value, or undefined. */
+export function themeValueProblem(value: unknown): string | undefined {
+  if (typeof value !== 'string' || value.trim() === '') return 'must be a nonempty string';
+  if (REQUEST_FUNCTION.test(value) || DECLARATION_ESCAPE.test(value)) {
+    return 'could start a request or escape its declaration (url(), image-set(), @, ;, { }, backslash)';
+  }
+  return undefined;
+}

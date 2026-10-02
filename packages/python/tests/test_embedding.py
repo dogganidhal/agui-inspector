@@ -139,6 +139,44 @@ class EnabledTest(StaticFixture):
             response.json(),
         )
 
+    def test_theme_maps_are_served_in_config_json_for_starlette_and_fastapi(self):
+        theme = {
+            "light": {"--agui-accent": "#2563eb", "--agui-radius": "6px"},
+            "dark": {"--agui-accent": "#93c5fd"},
+        }
+        for name, app in self.apps():
+            with self.subTest(name):
+                mount_inspector(app, agents=AGENTS, enabled=True, theme=theme)
+                body = TestClient(app).get("/agui-inspector/config.json").json()
+                self.assertEqual({"version": 0, "agents": [{"id": "support", "url": "/agents/support/stream"}], "theme": theme}, body)
+
+    def test_theme_follows_a_custom_mount_path_and_either_map_may_be_omitted(self):
+        app = Starlette()
+        mount_inspector(app, agents=AGENTS, enabled=True, path="/tools/inspector", theme={"dark": {"--agui-bg": "#101418"}})
+        client = TestClient(app)
+        self.assertEqual({"dark": {"--agui-bg": "#101418"}}, client.get("/tools/inspector/config.json").json()["theme"])
+        self.assertEqual(404, client.get("/agui-inspector/config.json").status_code)
+
+    def test_no_theme_means_no_theme_field(self):
+        app = Starlette()
+        mount_inspector(app, agents=AGENTS, enabled=True)
+        self.assertNotIn("theme", TestClient(app).get("/agui-inspector/config.json").json())
+
+    def test_theme_values_are_delivered_unchanged_so_the_page_alone_judges_them(self):
+        # The browser validates names and values and shows a warning; the helper must not hide or repair them.
+        theme = {"light": {"--bg": "red", "--agui-accent": "url(https://example.invalid/x.png)"}, "sepia": {}}
+        app = Starlette()
+        mount_inspector(app, agents=AGENTS, enabled=True, theme=theme)
+        self.assertEqual(theme, TestClient(app).get("/agui-inspector/config.json").json()["theme"])
+
+    def test_a_disabled_helper_with_a_theme_still_mounts_nothing(self):
+        for name, app in self.apps():
+            with self.subTest(name), self.assertNoLogs("agui_inspector"):
+                before = list(app.routes)
+                mount_inspector(app, agents=AGENTS, theme={"light": {"--agui-accent": "red"}})
+                self.assertEqual(before, list(app.routes))
+                self.assertEqual(404, TestClient(app).get("/agui-inspector/config.json").status_code)
+
     def test_agents_need_a_unique_nonempty_id_and_a_url(self):
         for bad in ([Agent(id="a", url="/1"), Agent(id="a", url="/2")], [Agent(id="", url="/1")], [Agent(id="a", url="")]):
             with self.subTest(bad), self.assertRaises(ValueError):

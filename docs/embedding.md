@@ -15,6 +15,7 @@ mount_inspector(
     app,
     agents=[Agent(id="support", url="/agents/support/stream")],
     enabled=settings.debug,
+    theme={"light": {"--agui-accent": "#2563eb"}, "dark": {"--agui-accent": "#93c5fd"}},
 )
 ```
 
@@ -27,6 +28,21 @@ framework, so a host that never enables the inspector installs nothing extra.
 | `agents` | The agents the page lists. `Agent` needs `id` and `url`; `name`, `capabilities` and `preset` are optional and have the same meaning as in [configuration](configuration.md). Ids must be unique. |
 | `enabled` | Defaults to `False`. A disabled call returns before it imports Starlette, registers a route or logs anything. |
 | `path` | Where the page lives, default `/agui-inspector`. It must start with `/` and name a sub-path; a trailing `/` is ignored. |
+| `theme` | Optional `{"light": {...}, "dark": {...}}`, either map optional, from the ten public `--agui-*` names to CSS values. It is written into `config.json` as given. See [Theming the embedded page](#theming-the-embedded-page). |
+
+## Theming the embedded page
+
+`theme` restyles the page for your application's brand: an accent, a radius, the fonts. The helper
+does not look inside it. The page validates the map when it loads `config.json`, applies the part
+for the current light or dark mode, and shows a visible "Configuration" warning for every name or
+value it rejects. A rejected entry never stops the page or the agents from loading. A misspelled
+property name, for example, gives a warning in the page and no change in appearance. The rules for
+names and values, and what the page does with each kind of problem, are in
+[configuration](configuration.md#theme); the properties are in [theming](theming.md).
+
+Passing `theme` changes nothing else: the same routes, the same content security policy header, and
+no extra request from the page. A host that serves the assets itself puts the same `theme` field in
+its own `config.json`.
 
 ## Debug guard
 
@@ -44,7 +60,7 @@ With the default path the helper adds:
 | --- | --- |
 | `GET /agui-inspector` | A 307 redirect to `/agui-inspector/`, keeping the query string, so the page's relative script URL resolves. |
 | `GET /agui-inspector/` | The inspector page. |
-| `GET /agui-inspector/config.json` | The version-0 configuration built from `agents`: `{"version": 0, "agents": [...]}`. Fields left as `None` are omitted. The page reads it from beside itself, so a custom `path` works the same way. |
+| `GET /agui-inspector/config.json` | The version-0 configuration built from `agents` and `theme`: `{"version": 0, "agents": [...], "theme": {...}}`. Fields left as `None` are omitted, and so is `theme` when you pass none. The page reads it from beside itself, so a custom `path` works the same way. |
 | `GET /agui-inspector/<file>` | A packaged asset, including nested ones. Anything else is a 404. |
 
 Other methods are rejected. There are no session endpoints, no storage and no proxy for the agent:

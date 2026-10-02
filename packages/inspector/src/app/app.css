@@ -8,7 +8,8 @@ body,
   height: 100%;
   margin: 0;
 }
-body {
+/* The shell paints on the mount, where the derived tokens live; the host page's body is left alone. */
+#root {
   background: var(--bg);
   color: var(--fg);
   font: 400 13px/1.5 var(--agui-font-sans);
@@ -21,18 +22,21 @@ body {
    switch has a row of its own so the panes keep theirs while it is hidden. */
 .agui-app {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto minmax(0, 1fr);
   height: 100dvh;
   overflow: hidden;
 }
 .agui-app-bar {
   grid-row: 1;
 }
-.agui-app-switch {
+.agui-app-warnings {
   grid-row: 2;
 }
-.agui-app-panes {
+.agui-app-switch {
   grid-row: 3;
+}
+.agui-app-panes {
+  grid-row: 4;
 }
 
 .agui-app-bar {
@@ -70,6 +74,14 @@ body {
 /* The theme switch is the bar's last item and keeps the right edge when the bar wraps. */
 .agui-app-bar > button {
   margin-inline-start: auto;
+}
+
+/* Configuration warnings sit under the bar on every tab: a rejected theme override is never hidden. */
+.agui-app-warnings {
+  display: grid;
+  gap: calc(var(--u) * 1.5);
+  padding: calc(var(--u) * 2) 16px;
+  border-bottom: 1px solid var(--line);
 }
 
 /* The pane switch exists only where one pane fits. */

@@ -53,7 +53,14 @@ agent configuration. Omitted maps/properties keep their defaults. Values cannot 
 or escape declarations: at minimum reject case-insensitive `url(`/`image-set(`, including whitespace
 before `(`, `@`, `;`, `{`, `}` and backslash escapes. The CSP stays unchanged. Every MVP mode loads
 this field through `config.json`; effective overrides follow the existing automatic/manual theme
-selection. Generic derived tokens are declared on the inspector mount `#root`, not document `:root`.
+selection: the page sets the accepted entries for the mode in use as custom properties on the root
+element through the CSS object model (no request, no CSP change), and swaps them when the system
+preference or the top-bar switch changes the mode. Each rejected entry gives one warning in a
+"Configuration" region under the top bar, visible on every tab; its map, the rest of the theme and
+the agents are kept. The Python helper writes `theme` into `config.json` unchanged and the page alone
+validates it. Generic derived tokens and their dark variants are declared on the inspector mount
+`#root`, not document `:root`; the namespaced public `--agui-*` defaults stay on `:root` so a
+stylesheet override or a theme map sits on the same element as the defaults that derive from them.
 
 Preset variables have text/JSON kind and defaults; missing kind means text. Built-ins `threadId`,
 `runId`, `uuid` use Web Crypto, not an added UUID dependency. `uuid` is generated once per dispatch
