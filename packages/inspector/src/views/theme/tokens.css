@@ -1,0 +1,79 @@
+/* Theme tokens (FR-041). Adopters override only the --agui-* properties; every other token below
+   derives from them, and views read the derived tokens. See docs/theming.md.
+   Nothing here loads a font or any other asset: fonts are system stacks (FR-037). */
+:root {
+  --agui-tint-hue: 75;
+  --agui-tint-chroma: 0.006;
+  --agui-bg: oklch(0.993 calc(var(--agui-tint-chroma) * 0.6) var(--agui-tint-hue));
+  --agui-fg: oklch(0.235 calc(var(--agui-tint-chroma) * 2.2) var(--agui-tint-hue));
+  --agui-accent: var(--agui-fg);
+  --agui-accent-contrast: var(--agui-bg);
+  --agui-radius: 8px;
+  --agui-density: 1;
+  --agui-font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --agui-font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  /* Lightness of the event-family and semantic hues; dark mode raises both. */
+  --l-fam: 0.55;
+  --l-sem: 0.54;
+  --pop: 0 0 0 1px var(--line), 0 12px 32px -12px rgb(0 0 0 / 0.18);
+  --lift: 0 1px 2px rgb(0 0 0 / 0.12);
+  --scrim: rgb(0 0 0 / 0.28);
+
+  --bg: var(--agui-bg);
+  --fg: var(--agui-fg);
+  --sunk: color-mix(in oklab, var(--agui-fg) 4%, var(--agui-bg));
+  --hover: color-mix(in oklab, var(--agui-fg) 5.5%, var(--agui-bg));
+  --line: color-mix(in oklab, var(--agui-fg) 10%, var(--agui-bg));
+  --line-2: color-mix(in oklab, var(--agui-fg) 18%, var(--agui-bg));
+  --muted: color-mix(in oklab, var(--agui-fg) 64%, var(--agui-bg));
+  --faint: color-mix(in oklab, var(--agui-fg) 40%, var(--agui-bg));
+  --acc: var(--agui-accent);
+  --acc-fg: var(--agui-accent-contrast);
+  --acc-ink: color-mix(in oklab, var(--agui-accent) 78%, var(--agui-fg));
+  --acc-soft: color-mix(in oklab, var(--agui-accent) 9%, var(--agui-bg));
+  --acc-line: color-mix(in oklab, var(--agui-accent) 40%, var(--agui-bg));
+  --err: oklch(var(--l-sem) 0.17 27);
+  --warn: oklch(calc(var(--l-sem) + 0.06) 0.13 70);
+  --ok: oklch(var(--l-sem) 0.12 150);
+  --err-soft: color-mix(in oklab, var(--err) 11%, var(--agui-bg));
+  --warn-soft: color-mix(in oklab, var(--warn) 14%, var(--agui-bg));
+  --ok-soft: color-mix(in oklab, var(--ok) 11%, var(--agui-bg));
+  --f-text: oklch(var(--l-fam) 0.13 255);
+  --f-tool: oklch(var(--l-fam) 0.14 300);
+  --f-reason: oklch(var(--l-fam) 0.09 200);
+  --f-state: oklch(calc(var(--l-fam) + 0.08) 0.12 75);
+  --f-activity: oklch(var(--l-fam) 0.15 350);
+  --f-neutral: var(--muted);
+  --j-str: oklch(var(--l-fam) 0.1 150);
+  --j-num: oklch(var(--l-fam) 0.12 255);
+  --j-lit: oklch(var(--l-fam) 0.13 300);
+  --u: calc(4px * var(--agui-density));
+  --r: var(--agui-radius);
+  --r-sm: calc(var(--agui-radius) * 0.7);
+  --r-xs: calc(var(--agui-radius) * 0.45);
+  --ease: cubic-bezier(.16, 1, .3, 1);
+  color-scheme: light;
+}
+
+/* Dark mode: the operating system preference, unless the root says data-theme="light". */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --agui-bg: oklch(0.175 calc(var(--agui-tint-chroma) * 1.2) var(--agui-tint-hue));
+    --agui-fg: oklch(0.93 calc(var(--agui-tint-chroma) * 1.2) var(--agui-tint-hue));
+    --l-fam: 0.76;
+    --l-sem: 0.72;
+    --pop: 0 0 0 1px var(--line-2), 0 16px 40px -12px rgb(0 0 0 / 0.6);
+    color-scheme: dark;
+  }
+}
+
+/* Dark mode: an explicit data-theme="dark" on the root, which the top-bar switch sets. */
+:root[data-theme="dark"] {
+  --agui-bg: oklch(0.175 calc(var(--agui-tint-chroma) * 1.2) var(--agui-tint-hue));
+  --agui-fg: oklch(0.93 calc(var(--agui-tint-chroma) * 1.2) var(--agui-tint-hue));
+  --l-fam: 0.76;
+  --l-sem: 0.72;
+  --pop: 0 0 0 1px var(--line-2), 0 16px 40px -12px rgb(0 0 0 / 0.6);
+  color-scheme: dark;
+}

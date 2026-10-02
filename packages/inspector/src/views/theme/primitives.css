@@ -1,0 +1,376 @@
+/* View primitives (design.md, Components). Every color, radius, spacing step and font comes from the
+   tokens in tokens.css; spacing is a multiple of --u so --agui-density scales it. Classes carry an
+   agui- prefix so they cannot collide with a host page's own CSS. */
+
+:is([class^="agui-"], [class*=" agui-"]) {
+  box-sizing: border-box;
+}
+
+:is([class^="agui-"], [class*=" agui-"]):focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--acc) 55%, transparent);
+  outline-offset: 1px;
+}
+
+.agui-icon {
+  flex: none;
+  display: block;
+}
+
+/* Button */
+.agui-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: calc(var(--u) * 1.5);
+  height: calc(var(--u) * 7.5);
+  padding: 0 calc(var(--u) * 2.75);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  background: var(--bg);
+  color: var(--fg);
+  font: 500 12.5px/1 var(--agui-font-sans);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s var(--ease), border-color 0.15s var(--ease), transform 0.1s var(--ease);
+}
+.agui-btn:hover { background: var(--hover); }
+.agui-btn:active { transform: scale(0.98); }
+.agui-btn--primary { background: var(--acc); color: var(--acc-fg); border-color: transparent; }
+.agui-btn--primary:hover { background: color-mix(in oklab, var(--acc) 86%, var(--bg)); }
+.agui-btn--ghost { border-color: transparent; background: transparent; }
+.agui-btn--ghost:hover { background: var(--hover); }
+.agui-btn--icon { width: calc(var(--u) * 7.5); padding: 0; }
+.agui-btn--small { height: calc(var(--u) * 6); padding: 0 calc(var(--u) * 2); font-size: 12px; }
+.agui-btn--small.agui-btn--icon { width: calc(var(--u) * 6); padding: 0; }
+.agui-btn:disabled { opacity: 0.42; cursor: not-allowed; transform: none; }
+
+/* Tag */
+.agui-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--u) * 1);
+  height: 19px;
+  padding: 0 calc(var(--u) * 1.5);
+  border-radius: var(--r-xs);
+  background: var(--sunk);
+  color: var(--muted);
+  font: 500 11px/1 var(--agui-font-mono);
+  white-space: nowrap;
+  flex: none;
+}
+.agui-tag--line { background: none; box-shadow: inset 0 0 0 1px var(--line-2); }
+.agui-tag--dashed { background: none; outline: 1px dashed var(--line-2); outline-offset: -1px; }
+.agui-tag--accent { background: var(--acc-soft); color: var(--acc-ink); }
+.agui-tag--ok { background: var(--ok-soft); color: var(--ok); }
+.agui-tag--warn { background: var(--warn-soft); color: color-mix(in oklab, var(--warn) 75%, var(--fg)); }
+.agui-tag--err { background: var(--err-soft); color: var(--err); }
+
+.agui-pulse {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: agui-pulse 1.2s var(--ease) infinite;
+}
+@keyframes agui-pulse { 50% { opacity: 0.25; } }
+
+/* Family dot */
+.agui-dot {
+  --c: var(--f-neutral);
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--c);
+  flex: none;
+}
+.agui-dot--hollow { background: none; box-shadow: inset 0 0 0 1.5px var(--c); }
+.agui-dot[data-family="text"] { --c: var(--f-text); }
+.agui-dot[data-family="tool"] { --c: var(--f-tool); }
+.agui-dot[data-family="reason"] { --c: var(--f-reason); }
+.agui-dot[data-family="state"] { --c: var(--f-state); }
+.agui-dot[data-family="activity"] { --c: var(--f-activity); }
+
+/* Filter chip */
+.agui-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--u) * 1.5);
+  height: calc(var(--u) * 6.5);
+  padding: 0 calc(var(--u) * 2.5);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--bg);
+  color: var(--muted);
+  font: 400 12px/1 var(--agui-font-sans);
+  cursor: pointer;
+}
+.agui-chip:hover { color: var(--fg); border-color: var(--line-2); }
+.agui-chip[aria-pressed="true"] { color: var(--fg); background: var(--sunk); border-color: var(--line-2); }
+.agui-chip:disabled { opacity: 0.45; cursor: not-allowed; }
+.agui-count { font: 500 11px var(--agui-font-mono); color: var(--faint); }
+
+/* Card */
+.agui-card {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--bg);
+  color: var(--fg);
+}
+.agui-card-h {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: calc(var(--u) * 2);
+  min-width: 0;
+  padding: calc(var(--u) * 2) calc(var(--u) * 3);
+  border-bottom: 1px solid var(--line);
+}
+.agui-card-b {
+  display: grid;
+  gap: calc(var(--u) * 2.5);
+  min-width: 0;
+  padding: calc(var(--u) * 3);
+}
+.agui-card-f {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: calc(var(--u) * 2);
+  padding: calc(var(--u) * 2) calc(var(--u) * 3);
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+}
+.agui-card--interrupt { border-color: var(--acc-line); box-shadow: 0 0 0 4px var(--acc-soft); }
+.agui-card--interrupt > .agui-card-h { border-bottom-color: var(--acc-line); }
+
+/* Code block */
+.agui-code {
+  min-width: 0;
+  max-height: 340px;
+  margin: 0;
+  padding: calc(var(--u) * 2.5) calc(var(--u) * 3);
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--sunk);
+  color: var(--fg);
+  font: 12px/1.55 var(--agui-font-mono);
+  white-space: pre-wrap;
+  word-break: break-all;
+  tab-size: 2;
+}
+.agui-j-k { color: var(--fg); }
+.agui-j-s { color: var(--j-str); }
+.agui-j-n { color: var(--j-num); }
+.agui-j-b { color: var(--j-lit); }
+.agui-j-p { color: var(--faint); }
+
+/* Segmented control */
+.agui-seg {
+  display: inline-flex;
+  gap: calc(var(--u) * 0.5);
+  padding: calc(var(--u) * 0.5);
+  border-radius: var(--r-sm);
+  background: var(--sunk);
+}
+.agui-seg-opt {
+  height: calc(var(--u) * 6);
+  padding: 0 calc(var(--u) * 2.5);
+  border: 0;
+  border-radius: calc(var(--r-sm) * 0.8);
+  background: none;
+  color: var(--muted);
+  font: 500 12px/1 var(--agui-font-sans);
+  cursor: pointer;
+}
+.agui-seg-opt[aria-pressed="true"] { background: var(--bg); color: var(--fg); box-shadow: 0 0 0 1px var(--line), var(--lift); }
+
+/* Switch */
+.agui-switch {
+  position: relative;
+  flex: none;
+  width: calc(var(--u) * 7.5);
+  height: calc(var(--u) * 4.5);
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--line-2);
+  cursor: pointer;
+  transition: background 0.2s var(--ease);
+}
+.agui-switch::after {
+  content: "";
+  position: absolute;
+  top: calc(var(--u) * 0.5);
+  left: calc(var(--u) * 0.5);
+  width: calc(var(--u) * 3.5);
+  height: calc(var(--u) * 3.5);
+  border-radius: 50%;
+  background: var(--bg);
+  box-shadow: var(--lift);
+  transition: transform 0.2s var(--ease);
+}
+.agui-switch[aria-checked="true"] { background: var(--acc); }
+.agui-switch[aria-checked="true"]::after { transform: translateX(calc(var(--u) * 3)); background: var(--acc-fg); }
+.agui-switch:disabled { opacity: 0.42; cursor: not-allowed; }
+
+/* Field, search field, editor */
+.agui-field,
+.agui-editor {
+  min-width: 0;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  color: var(--fg);
+}
+.agui-field {
+  height: calc(var(--u) * 8);
+  padding: 0 calc(var(--u) * 2.5);
+  background: var(--bg);
+  font: 13px var(--agui-font-sans);
+}
+.agui-editor {
+  width: 100%;
+  min-height: calc(var(--u) * 22);
+  padding: calc(var(--u) * 2.5) calc(var(--u) * 3);
+  resize: vertical;
+  background: var(--sunk);
+  font: 12px/1.55 var(--agui-font-mono);
+  tab-size: 2;
+}
+.agui-field:focus,
+.agui-editor:focus,
+.agui-search:focus-within { border-color: var(--acc-line); box-shadow: 0 0 0 3px var(--acc-soft); }
+/* The input inside a search field gives up its own ring; the field shows one instead. */
+.agui-search:focus-within { outline: 2px solid color-mix(in oklab, var(--acc) 55%, transparent); outline-offset: 1px; }
+.agui-field[aria-invalid="true"],
+.agui-editor[aria-invalid="true"] { border-color: var(--err); }
+.agui-field[aria-invalid="true"]:focus,
+.agui-editor[aria-invalid="true"]:focus { box-shadow: 0 0 0 3px var(--err-soft); }
+.agui-search {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 2);
+  height: calc(var(--u) * 8);
+  padding: 0 calc(var(--u) * 2.5);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  background: var(--bg);
+  color: var(--muted);
+}
+.agui-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: none;
+  color: var(--fg);
+  font: 13px var(--agui-font-sans);
+}
+
+/* Popover */
+.agui-pop {
+  inset: auto;
+  width: min(340px, calc(100vw - 32px));
+  margin: 0;
+  padding: calc(var(--u) * 1.5);
+  border: 0;
+  border-radius: var(--r);
+  background: var(--bg);
+  color: var(--fg);
+  font: 13px/1.5 var(--agui-font-sans);
+  box-shadow: var(--pop);
+}
+
+/* Dialog */
+.agui-dialog {
+  width: min(420px, calc(100vw - 32px));
+  padding: 0;
+  border: 0;
+  border-radius: calc(var(--r) * 1.3);
+  background: var(--bg);
+  color: var(--fg);
+  font: 13px/1.5 var(--agui-font-sans);
+  box-shadow: var(--pop);
+}
+.agui-dialog::backdrop { background: var(--scrim); }
+.agui-dialog-b { display: grid; gap: calc(var(--u) * 2.5); padding: calc(var(--u) * 4.5); }
+.agui-dialog-b h2 { margin: 0; font-size: 15px; letter-spacing: -0.01em; }
+.agui-dialog-b p { margin: 0; color: var(--muted); font-size: 13px; }
+.agui-dialog-f {
+  display: flex;
+  justify-content: flex-end;
+  gap: calc(var(--u) * 2);
+  padding: calc(var(--u) * 3) calc(var(--u) * 4.5);
+  border-top: 1px solid var(--line);
+}
+
+/* Toast */
+.agui-toasts {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--u) * 4 + env(safe-area-inset-bottom, 0px));
+  z-index: 50;
+  display: grid;
+  gap: calc(var(--u) * 2);
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  transform: translateX(-50%);
+}
+.agui-toast {
+  padding: calc(var(--u) * 2.25) calc(var(--u) * 3.5);
+  border-radius: var(--r-sm);
+  background: var(--fg);
+  color: var(--bg);
+  font: 12.5px/1.4 var(--agui-font-sans);
+  box-shadow: var(--pop);
+  animation: agui-in 0.4s var(--ease);
+}
+
+/* Finding */
+.agui-finding {
+  display: flex;
+  align-items: flex-start;
+  gap: calc(var(--u) * 2);
+  padding: calc(var(--u) * 1.75) calc(var(--u) * 2.5);
+  border-radius: var(--r-sm);
+  background: var(--sunk);
+  color: var(--muted);
+  font: 12px/1.45 var(--agui-font-sans);
+}
+.agui-finding--warn { background: var(--warn-soft); color: color-mix(in oklab, var(--warn) 60%, var(--fg)); }
+.agui-finding--err { background: var(--err-soft); color: color-mix(in oklab, var(--err) 80%, var(--fg)); }
+.agui-finding b { font-weight: 600; }
+
+/* Label */
+.agui-label {
+  color: var(--muted);
+  font: 500 10.5px/1.4 var(--agui-font-sans);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+/* Motion utilities for views: the streaming caret and the fade-in of new rows. */
+.agui-caret::after {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 1.05em;
+  margin-left: calc(var(--u) * 0.5);
+  vertical-align: -2px;
+  background: var(--acc);
+  animation: agui-blink 1s steps(2, start) infinite;
+}
+@keyframes agui-blink { to { visibility: hidden; } }
+.agui-fresh { animation: agui-in 0.5s var(--ease); }
+@keyframes agui-in { from { opacity: 0; transform: translateY(-3px); } }
+
+@media (prefers-reduced-motion: reduce) {
+  :is([class^="agui-"], [class*=" agui-"]),
+  :is([class^="agui-"], [class*=" agui-"])::before,
+  :is([class^="agui-"], [class*=" agui-"])::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
