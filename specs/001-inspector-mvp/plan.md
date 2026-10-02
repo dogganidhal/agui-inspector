@@ -52,7 +52,7 @@ architecture satisfies the principle; it does not certify unbuilt runtime behavi
 | V. Small/auditable | PASS | PASS | Exact pins/locks, no lifecycle installs, dependency rationale, native primitives, no speculative plugin/service layers. |
 | VI. Every event view | PASS | PASS | 31 named fixture cases; L03/L04/L05 frame/conversation mapping, original chunks plus derived expansions; encrypted values never decoded. |
 | Architecture/distribution | PASS | PASS | Same bundle in static/npm/wheel; explicit Python enable switch/warning; strict TS/React/esbuild/node tests/Playwright/uv; optional Starlette; no excluded modes. |
-| Workflow/quality | PASS | PASS as plan, execution pending | F02 establishes required CI; each slice contains regression tests/docs; benchmark fixed below; absent infrastructure is not counted as passed. |
+| Workflow/quality | INCOMPLETE: 50,000-frame criteria were missing | PASS planning criteria, execution pending | Measurable 5,000- and 50,000-frame profiles/thresholds/methods are now defined below; only 5,000-frame implementation/testing belongs to MVP tasks. F02 establishes required CI; absent infrastructure and unrun workloads are not counted as passed. |
 | Release/version governance | PASS | PASS with release blocked | Pre-stable version-0 local formats and migration docs; FR-040 provenance/trusted-publishing requirements preserved as documented gates; no publication/tags. Stable-v1 and 1.0.0 audits deferred. |
 
 **G1 approval is blocked on G-07:** incompatible guarantees are not silently resolved. This plan
@@ -72,13 +72,21 @@ Every roadmap Open decisions item appears once; none has a chosen answer.
 | G-04 capability-discovery | Whether/when the protocol defines discovery | Any discovery beyond inline/configured URL | AG-UI protocol maintainers define mechanism; project maintainer selects future scope |
 | G-05 websocket-push | Protocol-defined WebSocket/push semantics | These transports and notifications; no inferred contract from capability names | AG-UI protocol maintainers, then project maintainer for a later release |
 | G-06 in-app-isolation | Element isolation with document-injected A2UI styles; unresolved shadow-root integration | In-app element/style architecture | Project maintainer/user after renderer integration research |
-| G-07 echoed-credentials | FR-008/principle I unchanged evidence versus FR-036/principle IV no recorded authentication credentials when a target echoes the entered token | G1 approval of a fully compliant implementation/privacy acceptance policy | User/project maintainer via explicit spec clarification or constitution amendment |
+| G-07 echoed-credentials | FR-008/principle I unchanged evidence versus FR-036/principle IV no recorded authentication credentials when a target echoes the entered token | G1 implementation approval for all F01-F05/L01-L07 slices; contradictory raw/privacy checks and full FR-008/FR-036/SC-008 sign-off | User/project maintainer via explicit spec clarification or constitution amendment |
 | G-08 post-W2 integration acceptance | Whether an extra integrated-main integration/acceptance PR is needed after independently owned lane PRs | Authorization for that extra PR and final acceptance sign-off if integration gaps remain | User/project maintainer at G1 |
 
 G-07 **candidate only**: interpret credential privacy as prohibiting inspector-originated recording
 of transport credentials, while preserving server-supplied echo payloads with the export warning.
 This interpretation has not been approved. An alternative changing/redacting raw evidence would
 also require explicit governance resolution; workers must not choose either.
+
+**G-07 blocked checks:** F04/F05 raw capture/retention, L02 transport/run inspection, L03 conversation
+inspection, L04 frame/session display and export, L05 surface display, L06 embedded inspection and
+L07 assembled inspection cannot claim both unchanged echoed-token evidence and credential absence.
+Their full FR-008/FR-036 acceptance and integrated SC-008 credential-exclusion check remain blocked.
+Transport-only header injection, no recorder header access/export, volatile token clearing,
+credential-free profile/config storage and sensitive-payload warnings remain required; passing
+those non-conflicting checks does not clear G-07 or authorize any slice before G1.
 
 G-08 would cover cross-lane assembly defects, complete SC-001 through SC-009 verification, network
 and packaging checks, and physical-runner benchmark evidence. Its reason is that isolated lane
@@ -217,9 +225,51 @@ development fixtures, host-package code, duplicate copies of the same bundle in 
 and documentation. F03 reports per-file and total bytes and fails above either limit; no renderer
 exclusion or remote dependency is allowed.
 
-**1.0.0 workload:** no 50,000-frame acceptance is claimed for this MVP. A future stable-release plan
-must freeze that profile and measurable criteria before implementation, with on-demand renderer
-and WCAG 2.2 AA audit; those obligations are retained, not substituted for SC-009.
+## Defined 50,000-frame criteria: 1.0.0 only
+
+These criteria satisfy the constitution's both-workloads planning obligation. They are a future
+stable-release acceptance definition, **not MVP implementation, test tasks, or a measured pass**.
+The 0.1.0 workload and SC-009 remain unchanged. Any future profile change requires explicit review,
+not automatic substitution of newer hardware, browser or protocol fixtures.
+
+**Profile:** use the same named Mac mini M2/16 GB/macOS 15.7 runner, headed Chromium 153.0.8010.12
+revision 1243/Playwright 1.63.0, viewport, scale, loopback origins, production build and no-throttling
+conditions defined above. Repeat the entire 5,000-frame mix ten times in one retained session,
+rebasing all thread/run/message/tool/activity ids and parent links to avoid cross-cycle collisions.
+This gives 100 sequential 500-frame exchanges at 50 original frames/second for 1,000 seconds:
+49,000 schema-valid and 1,000 invalid/unknown frames, with every table row's count multiplied by
+ten and identical per-type payload sizes. Keep all 31 types, fragment/multiline/interleaving rules,
+80 RUN_FINISHED and 20 RUN_ERROR events. LF/CRLF/CR counts become 30,000/15,000/5,000. Freeze an
+ordered serialized-size/hash manifest for this future workload before its implementation.
+
+**Renderer assumption:** the stable-release A2UI renderer starts unloaded and loads only on first
+enabled v0.9 surface use, with local assets/catalog and no third-party requests. Surface use occurs
+before the measured interaction window; do not prefetch the renderer to bypass the on-demand
+requirement. Record first-use load/render latency separately as a diagnostic. The responsiveness
+criteria below measure inspection while the surface renderer is active, not a renderer-excluded
+bundle or an unloaded synthetic UI.
+
+**Interactions and metrics:** at t=920 seconds, with 46,000 frames retained, begin 200 trusted
+interactions every 400 ms through t=999.6 seconds, alternating 100 filter changes and 100 raw
+expansions. Use the same 34 type/33 substring/33 issue-filter schedule and normal/malformed/16 KiB
+expansion selections as the MVP. The final 50 interactions occur with at least 49,000 retained
+frames. Report per-class p95, maximum, percentage <=200 ms, frame count/order/raw hashes, actual
+arrival timing and diagnostic peak heap. Do not pause capture, discard retained evidence, time
+only visible-row subsets, or remove slow samples.
+
+**Measurement and thresholds:** timestamp the actual browser input handler through the expected
+React commit plus double-requestAnimationFrame paint opportunity, with Playwright-visible
+list/raw-content verification; include parsing, filtering and scheduling. After one identical
+warm-up, run three complete measured captures. **Each run must retain exactly 50,000 original
+frames in manifest order with identical raw hashes, and at least 95/100 filters and 95/100 raw
+expansions must finish visibly within 200 ms.** Reusing the MVP latency limit preserves the same
+interaction responsiveness at tenfold retention; it is not a relaxed stable-release target.
+Absent matching hardware, missing samples, hash/count mismatch or a failed class means the
+50,000-frame criterion has not passed. No such run is implemented or executed by this MVP plan.
+
+The stable-release WCAG 2.2 AA audit, all-mode/reference/conformance obligations and on-demand
+renderer implementation remain future scope. Defining these criteria adds no 1.0.0 slice or
+checklist task to [tasks.md](tasks.md).
 
 ## Project Structure
 

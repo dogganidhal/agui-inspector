@@ -8,6 +8,15 @@ No task chooses a license/name/upstream/discovery/transport/element decision, re
 frames, permits credential recording, publishes, creates LICENSE/tags/releases, or edits agent
 context. `agui-inspector` remains a working name.
 
+**G-07 hold:** G1 implementation approval is blocked for every F01-F05 and L01-L07 slice.
+The conflicting raw/privacy acceptance in F04/F05 and L02/L03/L04/L05/L06/L07, full
+FR-008/FR-036 sign-off and integrated SC-008 credential-exclusion check cannot pass for a
+server-echoed token until the user resolves the guarantees. Non-conflicting header isolation,
+no-header recording/export, volatile-token clearing, credential-free settings and export warnings
+remain required; passing them does not clear the gate. Do not adopt the candidate interpretation
+or implement redaction. The plan's 50,000-frame criteria define future 1.0.0 acceptance only and
+add no implementation or test task here.
+
 **Format:** Fxx/Lxx identifies a one-PR slice; Txxx identifies its executable checklist tasks.
 `[USn]` identifies the story; `[P]` marks an independent task within an available slice, not permission
 to ignore wave prerequisites. Foundation tasks have no story tag. User-requested waves and disjoint
