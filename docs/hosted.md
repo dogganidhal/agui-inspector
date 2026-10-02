@@ -1,6 +1,7 @@
 # Hosted deployment
 
-`agui-inspector` is a working name. This page covers serving the inspector as a static site, so a
+`agui-inspector` is the approved package name. Nothing is published yet (see [distribution](distribution.md)).
+This page covers serving the inspector as a static site, so a
 developer opens it in a browser and it talks straight to an agent they name. For the same files
 inside a Starlette or FastAPI application, see [embedding](embedding.md).
 
@@ -133,12 +134,12 @@ against scripted, model-free agents on separate loopback origins:
 
 This is scoped acceptance, not the product sign-off. Loopback cannot trigger private-network or
 secure-context blocks, so those are stood in for by aborting the request in the browser; their wording
-is the transport's. The remaining checks wait for integrated main: the whole
-[quickstart](../specs/001-inspector-mvp/quickstart.md) with every lane merged (G-08 decides whether
-that needs a further pull request), the 5,000-frame benchmark on the named hardware, and the
-credential-echo checks that depend on the undecided G-07 policy. The app records frames exactly as
-received and does not redact them; whether a server that echoes a token back is a problem is not
-decided here.
+is the transport's. The whole [quickstart](../specs/001-inspector-mvp/quickstart.md) was checked on integrated main, and G-08
+closed without a further pull request. The credential-echo checks (G-07, constitution 1.0.3) are in
+`tests/e2e/inspection/credential-echo.spec.ts`. The app records frames exactly as received and does not
+redact them (see [recordings](recordings.md#a-token-you-entered-and-a-server-that-repeats-it)). Two checks
+remain: the 5,000-frame benchmark on the named hardware, which the maintainer runs, and a manual smoke run in
+every distribution mode before any release.
 
 ```sh
 npm run typecheck

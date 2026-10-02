@@ -1,6 +1,7 @@
 # Session recordings
 
-`agui-inspector` is a working name. This page describes the session file: what export writes,
+`agui-inspector` is the approved package name. Nothing is published yet (see [distribution](distribution.md)).
+This page describes the session file: what export writes,
 what import accepts, and what to be careful about before sharing one. The code is in
 `packages/inspector/src/core/session-files`.
 

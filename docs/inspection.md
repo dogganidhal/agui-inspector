@@ -1,6 +1,7 @@
 # Inspection evidence
 
-`agui-inspector` is a working name. This page says what the inspector records from the wire and how
+`agui-inspector` is the approved package name. Nothing is published yet (see [distribution](distribution.md)).
+This page says what the inspector records from the wire and how
 that differs from what it derives or reports about the transport. It covers the recorder
 (`packages/inspector/src/core/recorder`), the frame reader (`src/core/frames`) and the session
 store (`src/core/store`).

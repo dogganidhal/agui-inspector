@@ -1,7 +1,8 @@
 # A2UI surfaces
 
 The inspector draws `a2ui-surface` activities with the official A2UI renderer and keeps their operations
-available as JSON. Only A2UI v0.9 is supported. `agui-inspector` is a working name.
+available as JSON. Only A2UI v0.9 is supported. The approved package name `agui-inspector` is not published yet
+(see [distribution](distribution.md)).
 
 ## What is drawn
 

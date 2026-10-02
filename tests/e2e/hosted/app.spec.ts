@@ -310,7 +310,7 @@ test('the token goes to the target as the chosen header and is kept nowhere: not
   await send(page, 'after reload');
   await expect(page.getByText(AGENT_REPLY).first()).toBeVisible();
   expect(site.agent.seen.at(-1)?.token).toBeUndefined();
-  info.annotations.push({ type: 'g-07', description: 'Server-echoed credentials are not exercised: the agent never echoes a header.' });
+  info.annotations.push({ type: 'g-07', description: 'Server-echoed credentials are not exercised here: the agent never echoes a header. tests/e2e/inspection/credential-echo.spec.ts covers them.' });
 });
 
 test('an imported recording is inspection only: it sends nothing and nothing can be sent until a reload', async ({ page, openSite, requested }, info) => {
