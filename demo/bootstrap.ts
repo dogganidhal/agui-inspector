@@ -44,6 +44,9 @@ function prepareExamples(): Promise<Outcome> {
     const asked = new WeakSet<ServiceWorker>();
     let wrongVersion = false;
     let updateFailed = false;
+    let registered: ServiceWorkerRegistration | undefined;
+    /** A newer worker that is still installing or waiting to take over. */
+    const incoming = () => registered?.installing ?? registered?.waiting ?? null;
 
     const finish = (outcome: Outcome) => {
       clearTimeout(timer);
@@ -55,7 +58,9 @@ function prepareExamples(): Promise<Outcome> {
       () =>
         finish(
           unavailable(
-            wrongVersion
+            incoming() !== null
+              ? 'a newer version of the example worker is waiting to take over.'
+              : wrongVersion
               ? 'an older version of the example worker is still in control.'
               : container.controller === null
                 ? 'the example worker did not take control of this page within 10 seconds.'
@@ -74,6 +79,8 @@ function prepareExamples(): Promise<Outcome> {
       const controller = container.controller;
       if (controller === null || controller.scriptURL !== script) return;
       if (ready.has(controller)) return finish({ ok: true });
+      // A newer worker is on its way in and skips waiting: greeting the one in control now would only race its takeover.
+      if (incoming() !== null) return;
       if (!asked.has(controller)) {
         asked.add(controller);
         controller.postMessage({ type: HELLO });
@@ -95,8 +102,11 @@ function prepareExamples(): Promise<Outcome> {
     container.register(WORKER, { scope: './', updateViaCache: 'none' }).then(
       (registration) => {
         if (registration.scope !== scope) return finish(unavailable('the example worker has an unexpected scope.'));
-        // Registering the script a page already has looks for no newer one, so a stale worker would stay in control.
-        if (hadController) {
+        registered = registration;
+        for (const worker of [registration.installing, registration.waiting]) worker?.addEventListener('statechange', check);
+        // Registering the script a page already has does not always look for a newer one, so a stale worker would
+        // stay in control. Where the browser already found one, a second check would only race the first.
+        if (hadController && registration.installing === null && registration.waiting === null) {
           registration.update().catch(() => {
             updateFailed = true;
             check();

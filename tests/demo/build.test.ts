@@ -125,6 +125,8 @@ test('only the demo page registers the worker, with the sibling script, this dir
   assert.match(bootstrap, /const WAIT_MS = 10_000/);
   // A page that is already controlled looks for a newer worker itself, and a worker that cannot be updated is not trusted.
   assert.match(bootstrap, /registration\.update\(\)/);
+  // A newer worker on its way in is given the takeover before the old one is greeted: a greeting in flight can stall it.
+  assert.match(bootstrap, /if \(incoming\(\) !== null\) return;/);
   assert.match(bootstrap, /an older version of the example worker is in control and could not be updated/);
   // The handshake literals mirror demo/service-worker.ts exactly.
   const worker = source('demo/service-worker.ts');
