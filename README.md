@@ -4,7 +4,7 @@ A developer tool for [AG-UI](https://docs.ag-ui.com) servers: point it at an age
 sends and every event that comes back, in order, with its timing, checked against the protocol. It drives runs the
 way a client does, answering interrupts, tool calls and A2UI surfaces, and sends the requests no client would.
 
-It works with any AG-UI server, and loads four ways:
+It is designed to work with any AG-UI server, with four distribution modes:
 
 - **embedded**: a server SDK helper mounts it next to your agent routes, on the same origin;
 - **hosted**: a static page, pointed at your server;
@@ -13,5 +13,8 @@ It works with any AG-UI server, and loads four ways:
 
 ## Status
 
-Specification stage: no code yet. [SPEC.md](SPEC.md) defines the first release, 0.1.0, and the stable target,
-1.0.0.
+The [0.1.0 MVP specification](specs/001-inspector-mvp/spec.md) is written; planning and implementation
+have not started. [ROADMAP.md](ROADMAP.md) tracks release goals, dependencies, and open decisions.
+
+The [original product brief](docs/reference/product-brief.md) preserves protocol details and
+architecture inputs for planning.

@@ -1,3 +1,8 @@
+> Historical reference, archived 2026-10-02. The original text below is preserved for source
+> traceability and planning input. [Feature specifications](../../specs/) define current requirements;
+> [the roadmap](../../ROADMAP.md) tracks releases. Recorded feature clarifications take precedence
+> over this snapshot.
+
 # agui-inspector specification
 
 Status: draft. This document defines the first release, **0.1.0 (MVP)**, and the release that makes the project stable,

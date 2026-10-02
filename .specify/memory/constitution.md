@@ -14,10 +14,10 @@ and allow the supplied JSON to be sent unchanged.
 ### II. The protocol, not a framework
 
 Protocol schemas and client behavior MUST use `@ag-ui/core` and `@ag-ui/client` against the AG-UI
-baseline in `SPEC.md`. A2UI rendering MUST use A2UI's own renderer packages, including
-`@a2ui/react` and `@a2ui/web_core`, for the release's supported versions. Chat frameworks MUST NOT sit
-between the wire and inspection views. The recorder, frame reader, rule checks, session store, and
-presets MUST stay framework-free TypeScript, separate from React views.
+baseline in the applicable feature specification. A2UI rendering MUST use A2UI's own renderer
+packages, including `@a2ui/react` and `@a2ui/web_core`, for the release's supported versions. Chat
+frameworks MUST NOT sit between the wire and inspection views. The recorder, frame reader, rule
+checks, session store, and presets MUST stay framework-free TypeScript, separate from React views.
 
 ### III. Generic core, application presets
 
@@ -48,11 +48,12 @@ abstractions or unrelated functionality.
 
 ### VI. Every event type has a view
 
-Every event type in the supported protocol baseline MUST have a frames-list view and, where
-`SPEC.md` requires, a conversation view. Original chunk events MUST remain visible alongside their
-expansions. Encrypted reasoning MUST NOT be decoded. Each supported type MUST have a dedicated
-fixture test. Adding protocol support MUST update the corresponding views, fixtures, and
-documentation together. Unrecognized or invalid frames MUST remain available for raw inspection.
+Every event type in the supported protocol baseline MUST have a frames-list view and, where the
+applicable feature specification requires, a conversation view. Original chunk events MUST remain
+visible alongside their expansions. Encrypted reasoning MUST NOT be decoded. Each supported type
+MUST have a dedicated fixture test. Adding protocol support MUST update the corresponding views,
+fixtures, and documentation together. Unrecognized or invalid frames MUST remain available for
+raw inspection.
 
 ## Architecture and distribution constraints
 
@@ -67,10 +68,10 @@ documentation together. Unrecognized or invalid frames MUST remain available for
   cookies. The CLI MUST bind only to localhost, proxy only to explicitly configured targets, and pass
   target bytes unchanged. In-app mode MUST observe the host's `AbstractAgent` without requests of
   its own.
-- Release scope MUST follow `SPEC.md` sections 10 and 11. Product 0.1.0 is the HTTP/SSE MVP with hosted
-  and Python embedded modes plus the static bundle. Adding CLI, in-app mode, JS server helpers,
-  other transports, plugins, or conformance tooling to the MVP MUST require an explicit scope
-  revision. `SPEC.md` section 13's open decisions remain unresolved.
+- Release scope MUST follow `ROADMAP.md` and accepted feature specifications under `specs/`.
+  Product 0.1.0 is the HTTP/SSE MVP with hosted and Python embedded modes plus the static bundle.
+  Adding CLI, in-app mode, JS server helpers, other transports, plugins, or conformance tooling to
+  the MVP MUST require an explicit scope revision. Open product decisions are tracked in `ROADMAP.md`.
 
 ## Development workflow and quality gates
 
@@ -100,10 +101,12 @@ documentation together. Unrecognized or invalid frames MUST remain available for
 
 ## Governance
 
-This constitution governs engineering decisions and review. `SPEC.md` defines product behavior,
-release scope, and acceptance criteria within these rules. Conflicting specifications, plans, tasks,
-or implementations MUST be corrected or preceded by an approved amendment; silent exceptions are
-prohibited.
+This constitution governs engineering decisions and review. `ROADMAP.md` tracks release scope,
+status, and open decisions. Accepted feature specifications under `specs/` define product behavior
+and acceptance criteria within these rules. `docs/reference/product-brief.md` preserves historical
+source material and planning input; accepted feature specifications and approved amendments take
+precedence over historical descriptions. Conflicting specifications, plans, tasks, or implementations
+MUST be corrected or preceded by an approved amendment; silent exceptions are prohibited.
 
 Amendments MUST document rationale, affected principles or sections, compatibility impact, and
 migration or follow-up work. Project-maintainer approval MUST precede adoption. Amendments MUST
@@ -120,4 +123,4 @@ approval, reviewers MUST check applicable protocol, privacy, dependency, coverag
 and identify unresolved violations. Requirement changes MUST update acceptance criteria and
 documentation in the same change.
 
-**Version**: 1.0.1 | **Ratified**: 2026-10-01 | **Last Amended**: 2026-10-01
+**Version**: 1.0.2 | **Ratified**: 2026-10-01 | **Last Amended**: 2026-10-02
