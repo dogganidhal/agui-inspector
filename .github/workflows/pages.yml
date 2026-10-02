@@ -26,6 +26,8 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read
+      # Only to read the site's origin and base path below; the build job cannot write anything.
+      pages: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -34,8 +36,16 @@ jobs:
         with:
           node-version: 24
       - run: npm ci --ignore-scripts
-      # The deployed base path. The build refuses anything that is not a plain absolute path.
-      - run: node scripts/build-demo.mjs --outdir .build/public-demo --base-path /agui-inspector/
+      # Reads the site's origin and base path. No input is set, so it cannot enable Pages: it fails when
+      # the maintainer has not.
+      - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
+        id: pages
+      # The examples' URLs carry this origin and base path. The build refuses anything that is not one
+      # plain origin and one plain absolute path, so a bad value stops here rather than shipping.
+      - run: node scripts/build-demo.mjs --outdir .build/public-demo --origin "$PAGES_ORIGIN" --base-path "$PAGES_BASE_PATH/"
+        env:
+          PAGES_ORIGIN: ${{ steps.pages.outputs.origin }}
+          PAGES_BASE_PATH: ${{ steps.pages.outputs.base_path }}
       # Every shipped demo asset counts against the same limits as the ordinary build.
       - run: node scripts/bundle-budget.mjs --dir .build/public-demo
       # The build, isolation and workflow checks; they need no browser, no uv and no previous build.

@@ -14,7 +14,7 @@ import path from 'node:path';
 import { after, before, test } from 'node:test';
 import { parseConfig } from '../../packages/inspector/src/core/config/index.ts';
 import { parseHostingConfig } from '../../packages/inspector/src/app/security.ts';
-import { DEFAULT_BASE_PATH, DEMO_FILES, EXAMPLES_FILE, normalizeBasePath, prefixDemoConfig } from '../../scripts/build-demo.mjs';
+import { DEFAULT_BASE_PATH, DEFAULT_ORIGIN, DEMO_FILES, EXAMPLES_FILE, normalizeBasePath, normalizeOrigin, prefixDemoConfig } from '../../scripts/build-demo.mjs';
 import { evaluate, LIMITS, measure } from '../../scripts/bundle-budget.mjs';
 import { planSteps } from '../../scripts/ci.mjs';
 
@@ -56,7 +56,7 @@ const DEMO_ONLY_MARKERS = ['agui-demo-hello', 'agui-demo-ready', '__demo__', 'se
 before(() => {
   // Ordinary build, then the demo, then the ordinary build again: the demo build must leave no trace on it.
   build('scripts/build.mjs', '--outdir', ordinaryBefore);
-  build('scripts/build-demo.mjs', '--outdir', demoDir, '--base-path', DEFAULT_BASE_PATH);
+  build('scripts/build-demo.mjs', '--outdir', demoDir, '--base-path', DEFAULT_BASE_PATH, '--origin', DEFAULT_ORIGIN);
   build('scripts/build.mjs', '--outdir', ordinaryAfter);
 });
 
@@ -123,6 +123,9 @@ test('only the demo page registers the worker, with the sibling script, this dir
   assert.match(bootstrap, /register\(WORKER, \{ scope: '\.\/', updateViaCache: 'none' \}\)/);
   assert.match(bootstrap, /const WORKER = '\.\/service-worker\.js'/);
   assert.match(bootstrap, /const WAIT_MS = 10_000/);
+  // A page that is already controlled looks for a newer worker itself, and a worker that cannot be updated is not trusted.
+  assert.match(bootstrap, /registration\.update\(\)/);
+  assert.match(bootstrap, /an older version of the example worker is in control and could not be updated/);
   // The handshake literals mirror demo/service-worker.ts exactly.
   const worker = source('demo/service-worker.ts');
   assert.match(worker, /const HELLO = 'agui-demo-hello'/);
@@ -183,7 +186,7 @@ test('the hosting file is the checked-in hosted opt-in and passes the real parse
   assert.deepEqual(ordinary.ok && ordinary.value, { mode: 'embedded', allowedOrigins: [] });
 });
 
-test('the examples file has the base path in front of every endpoint and preparation, templates intact', () => {
+test('the examples file has the origin and base path in front of every endpoint and preparation, templates intact', () => {
   const sourceText = source('demo/config.json');
   const sourceHash = sha256(sourceText);
   const text = read(demoDir, EXAMPLES_FILE);
@@ -191,14 +194,14 @@ test('the examples file has the base path in front of every endpoint and prepara
   assert.equal(parsed.ok, true, parsed.ok ? '' : parsed.error);
   const config = JSON.parse(text);
   assert.deepEqual(config.agents.map((agent: { url: string }) => agent.url), [
-    '/agui-inspector/__demo__/agent/interactive',
-    '/agui-inspector/__demo__/agent/a2ui',
-    '/agui-inspector/__demo__/agent/protocol/baseline',
-    '/agui-inspector/__demo__/agent/protocol/run-error',
+    'https://dogganidhal.github.io/agui-inspector/__demo__/agent/interactive',
+    'https://dogganidhal.github.io/agui-inspector/__demo__/agent/a2ui',
+    'https://dogganidhal.github.io/agui-inspector/__demo__/agent/protocol/baseline',
+    'https://dogganidhal.github.io/agui-inspector/__demo__/agent/protocol/run-error',
   ]);
   assert.deepEqual(config.agents[0].preset.prepare.map((step: { method: string; path: string }) => `${step.method} ${step.path}`), [
-    'PUT /agui-inspector/__demo__/prepare/sessions/{{threadId}}',
-    'POST /agui-inspector/__demo__/prepare/warm',
+    'PUT https://dogganidhal.github.io/agui-inspector/__demo__/prepare/sessions/{{threadId}}',
+    'POST https://dogganidhal.github.io/agui-inspector/__demo__/prepare/warm',
   ]);
   assert.deepEqual(config.agents[0].preset.prepare.map((step: { body: unknown }) => step.body), [{ thread: '{{threadId}}' }, { run: '{{runId}}' }]);
   // Nothing but those references changed.
@@ -214,19 +217,32 @@ test('the examples file has the base path in front of every endpoint and prepara
   assert.doesNotMatch(text, /"__demo__\//);
 });
 
-test('a different base path is applied to the same references, and a stray reference is an error', () => {
+test('another origin and base path are applied to the same references, and a stray reference is an error', () => {
   const sourceText = source('demo/config.json');
-  const nested = JSON.parse(prefixDemoConfig(sourceText, '/tools/inspector/'));
-  assert.equal(nested.agents[2].url, '/tools/inspector/__demo__/agent/protocol/baseline');
-  assert.equal(JSON.parse(prefixDemoConfig(sourceText, '/')).agents[0].url, '/__demo__/agent/interactive');
+  const nested = JSON.parse(prefixDemoConfig(sourceText, 'https://example.org', '/tools/inspector/'));
+  assert.equal(nested.agents[2].url, 'https://example.org/tools/inspector/__demo__/agent/protocol/baseline');
+  assert.equal(JSON.parse(prefixDemoConfig(sourceText, 'http://127.0.0.1:4173', '/')).agents[0].url, 'http://127.0.0.1:4173/__demo__/agent/interactive');
   const withUrl = (url: unknown) => JSON.stringify({ version: 0, agents: [{ id: 'a', url }] });
   for (const url of ['https://elsewhere.example/agent', '/agent', 'agent/interactive', undefined, 3]) {
-    assert.throws(() => prefixDemoConfig(withUrl(url), '/agui-inspector/'), /demo-relative/, String(url));
+    assert.throws(() => prefixDemoConfig(withUrl(url), DEFAULT_ORIGIN, '/agui-inspector/'), /demo-relative/, String(url));
   }
   const prepare = (path: unknown) => JSON.stringify({ version: 0, agents: [{ id: 'a', url: '__demo__/a', preset: { prepare: [{ method: 'POST', path }] } }] });
-  assert.throws(() => prefixDemoConfig(prepare('https://elsewhere.example/warm'), '/agui-inspector/'), /prepare\[0\]\.path must be a demo-relative/);
+  assert.throws(() => prefixDemoConfig(prepare('https://elsewhere.example/warm'), DEFAULT_ORIGIN, '/agui-inspector/'), /prepare\[0\]\.path must be a demo-relative/);
   const capabilities = JSON.stringify({ version: 0, agents: [{ id: 'a', url: '__demo__/a', capabilities: '__demo__/capabilities' }] });
-  assert.throws(() => prefixDemoConfig(capabilities, '/agui-inspector/'), /capabilities must be inline/);
+  assert.throws(() => prefixDemoConfig(capabilities, DEFAULT_ORIGIN, '/agui-inspector/'), /capabilities must be inline/);
+});
+
+test('a local preview built for its own origin points every example at that origin, so none can leave the page', () => {
+  const origin = 'http://127.0.0.1:4173';
+  const outdir = path.join(scratch, 'preview');
+  build('scripts/build-demo.mjs', '--outdir', outdir, '--origin', origin);
+  const config = read(outdir, EXAMPLES_FILE);
+  const urls = [...config.matchAll(/"(?:url|path)": "([^"]+)"/g)].map((m) => m[1]!);
+  assert.equal(urls.length, 6);
+  for (const url of urls) assert.ok(url.startsWith(`${origin}/agui-inspector/__demo__/`), url);
+  // Only the origin differs between that build and the default one.
+  assert.equal(config.replaceAll(origin, DEFAULT_ORIGIN), read(demoDir, EXAMPLES_FILE));
+  assert.deepEqual(tree(outdir), { ...tree(demoDir), [EXAMPLES_FILE]: sha256(config) });
 });
 
 // ---------------------------------------------------------------------------------------------
@@ -240,6 +256,18 @@ test('the base path is an absolute path with a trailing slash and nothing else',
     '/a?x=1/', '/a#frag/', 'user@host/', '/a%2e%2e/', '/a b/', '/a\\b/', '/a:b/', '/{{x}}/',
   ];
   for (const value of bad) assert.throws(() => normalizeBasePath(value), /--base-path/, JSON.stringify(value));
+});
+
+test('the origin is one origin, HTTPS or plain HTTP to localhost or 127.0.0.1, and nothing else', () => {
+  for (const good of ['https://dogganidhal.github.io', 'https://www.example.com', 'https://example.org:8443', 'http://localhost:4173', 'http://127.0.0.1:4173', 'http://localhost']) {
+    assert.equal(normalizeOrigin(good), good);
+  }
+  const bad = [
+    '', 'dogganidhal.github.io', 'https://dogganidhal.github.io/', 'https://dogganidhal.github.io/agui-inspector/', 'https://user:pass@example.org', 'https://user@example.org',
+    'https://example.org?x=1', 'https://example.org#frag', 'http://example.org', 'http://192.168.1.5:8080', 'http://[::1]:4173', 'http://127.0.0.2:4173', 'http://foo.localhost:4173',
+    'ftp://example.org', 'file:///tmp', 'javascript:alert(1)', 'data:text/plain,x', '//example.org', 'https://EXAMPLE.org', 'https://example.org:443', 'https://exa mple.org', '*',
+  ];
+  for (const value of bad) assert.throws(() => normalizeOrigin(value), /--origin must be one origin/, JSON.stringify(value));
 });
 
 test('arguments are strict: unknown, missing, repeated and out-of-bounds values fail before anything is written', () => {
@@ -262,6 +290,10 @@ test('arguments are strict: unknown, missing, repeated and out-of-bounds values 
   refused(['--outdir', '.build/a', '--outdir', '.build/b'], /--outdir was given twice/);
   refused(['--base-path', '/a/', '--base-path', '/b/'], /--base-path was given twice/);
   refused(['--base-path', 'agui-inspector'], /--base-path must be an absolute path/);
+  refused(['--origin'], /--origin needs a value/);
+  refused(['--origin', 'https://a.example', '--origin', 'https://b.example'], /--origin was given twice/);
+  refused(['--origin', 'https://example.org/agui-inspector/'], /--origin must be one origin/);
+  refused(['--origin', 'http://example.org'], /--origin must be one origin/);
   // The output directory is emptied first, so it may only be a directory of its own under .build.
   for (const outdir of ['', '.', '.build', '..', '../elsewhere', '/tmp/demo', 'packages/inspector/dist', '.build/../packages', '.build/../dist', marker.replace(`${path.sep}.build${path.sep}`, `${path.sep}`)]) {
     refused(['--outdir', outdir], /--outdir/);
@@ -271,14 +303,15 @@ test('arguments are strict: unknown, missing, repeated and out-of-bounds values 
   assert.equal(existsSync(defaultOutdir) ? existsSync(path.join(defaultOutdir, 'bootstrap.js')) : false, false);
 });
 
-test('the defaults are .build/public-demo and /agui-inspector/, and a trailing -- is tolerated like the other scripts', () => {
+test('the defaults are .build/public-demo, /agui-inspector/ and the Pages origin, and a leading -- is tolerated like the other scripts', () => {
   const source = readFileSync(path.join(repo, 'scripts', 'build-demo.mjs'), 'utf8');
   assert.match(source, /DEFAULT_OUTDIR = path\.join\(scratchRoot, 'public-demo'\)/);
   assert.equal(DEFAULT_BASE_PATH, '/agui-inspector/');
+  assert.equal(DEFAULT_ORIGIN, 'https://dogganidhal.github.io');
   const done = run('scripts/build-demo.mjs', '--', '--outdir', path.relative(repo, path.join(scratch, 'dashed')), '--base-path', '/x/');
   assert.equal(done.status, 0, done.stderr);
-  assert.match(done.stdout, /built the public demo into .*dashed for \/x\//);
-  assert.equal(JSON.parse(read(path.join(scratch, 'dashed'), EXAMPLES_FILE)).agents[0].url, '/x/__demo__/agent/interactive');
+  assert.match(done.stdout, /built the public demo into .*dashed for https:\/\/dogganidhal\.github\.io\/x\//);
+  assert.equal(JSON.parse(read(path.join(scratch, 'dashed'), EXAMPLES_FILE)).agents[0].url, 'https://dogganidhal.github.io/x/__demo__/agent/interactive');
 });
 
 // ---------------------------------------------------------------------------------------------
@@ -367,10 +400,11 @@ test('a repository that has the demo worker but not the rest of the demo fails t
 
 test('pull request CI deploys nothing and gains no Pages permission', () => {
   const ci = source('.github/workflows/ci.yml');
+  const configured = ci.replace(/^\s*#.*$/gm, ''); // what the workflow does, not what its comments say
   assert.match(ci, /^on:\n {2}pull_request:\n/m);
   assert.doesNotMatch(ci, /^\s*(push|workflow_dispatch|schedule|release):/m);
   assert.match(ci, /^permissions:\n {2}contents: read\n/m);
-  assert.doesNotMatch(ci, /pages|id-token|deploy|upload-pages-artifact|environment:|actions: write|contents: write/i);
+  assert.doesNotMatch(configured, /pages|id-token|deploy|upload-pages-artifact|environment:|actions: write|contents: write/i);
   assert.match(ci, /npm run check:ci/);
 });
 
@@ -393,10 +427,11 @@ test('the Pages workflow runs for main only: a push to main or a manual run that
 
 test('the Pages workflow gives the build job read access and the deploy job Pages access only, serialized', () => {
   const text = source(PAGES);
-  const permissions = (block: string) => block.match(/^ {4}permissions:\n((?: {6}.*\n)+)/m)?.[1]?.trim().split('\n').map((line) => line.trim());
+  const permissions = (block: string) => block.match(/^ {4}permissions:\n((?: {6}.*\n)+)/m)?.[1]?.trim().split('\n').map((line) => line.trim()).filter((line) => !line.startsWith('#'));
   const build = jobBlock(text, 'build');
   const deploy = jobBlock(text, 'deploy');
-  assert.deepEqual(permissions(build), ['contents: read']);
+  // Reading the Pages site's origin and path needs `pages: read`; nothing in the build job can write.
+  assert.deepEqual(permissions(build), ['contents: read', 'pages: read']);
   assert.deepEqual(permissions(deploy), ['pages: write', 'id-token: write']);
   assert.match(text, /^permissions: \{\}$/m, 'nothing is granted by default');
   assert.match(deploy, /^ {4}needs: build$/m);
@@ -412,7 +447,8 @@ test('the Pages workflow validates and uploads only the isolated demo directory,
   const build = jobBlock(text, 'build');
   const order = [
     'npm ci --ignore-scripts',
-    'node scripts/build-demo.mjs --outdir .build/public-demo --base-path /agui-inspector/',
+    'actions/configure-pages@',
+    'node scripts/build-demo.mjs --outdir .build/public-demo',
     'node scripts/bundle-budget.mjs --dir .build/public-demo',
     'npm run test:unit -- tests/demo/build.test.ts',
     'actions/upload-pages-artifact@',
@@ -420,7 +456,12 @@ test('the Pages workflow validates and uploads only the isolated demo directory,
     assert.ok(build.includes(needle), `${needle} is a step`);
     return build.indexOf(needle);
   });
-  assert.deepEqual(order, [...order].sort((a, b) => a - b), 'install, build, budget, checks, then upload');
+  assert.deepEqual(order, [...order].sort((a, b) => a - b), 'install, site settings, build, budget, checks, then upload');
+  // The origin and base path come from the site's own settings, so a fork deploys with its own; no literal host.
+  assert.match(build, /uses: actions\/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5\n\s+id: pages\n(?!\s+with:)/, 'pinned, and no input: it cannot enable Pages');
+  assert.match(build, /node scripts\/build-demo\.mjs --outdir \.build\/public-demo --origin "\$PAGES_ORIGIN" --base-path "\$PAGES_BASE_PATH\/"/);
+  assert.match(build, /PAGES_ORIGIN: \$\{\{ steps\.pages\.outputs\.origin \}\}\n\s+PAGES_BASE_PATH: \$\{\{ steps\.pages\.outputs\.base_path \}\}/);
+  assert.doesNotMatch(text, /dogganidhal|github\.io/, 'no literal host in the workflow');
   assert.match(build, /uses: actions\/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4\n\s+with:\n\s+path: \.build\/public-demo\n/);
   assert.match(text, /uses: actions\/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4\n/);
   assert.match(build, /persist-credentials: false/);
@@ -433,8 +474,30 @@ test('the Pages workflow validates and uploads only the isolated demo directory,
 
 test('the Pages workflow neither enables Pages, nor ships a package, tags or releases, nor reads a secret', () => {
   const text = source(PAGES);
-  assert.doesNotMatch(text, /configure-pages|enablement|gh api|gh repo|gh release|git tag|git push|npm publish|uv publish|twine|provenance|attest/i);
+  assert.doesNotMatch(text, /enablement|gh api|gh repo|gh release|git tag|git push|npm publish|uv publish|twine|provenance|attest/i);
   assert.doesNotMatch(text, /\bpublish\b|pypi/i);
   assert.doesNotMatch(text, /secrets\.|packages: write|contents: write|attestations/);
   assert.doesNotMatch(text, /pull_request/);
+});
+
+// ---------------------------------------------------------------------------------------------
+// The documentation says what the build does
+// ---------------------------------------------------------------------------------------------
+
+test('the demo guide states the public URL, the matching-origin rule, the commands and the separate authorization', () => {
+  const doc = source('docs/public-demo.md');
+  assert.match(doc, /https:\/\/dogganidhal\.github\.io\/agui-inspector\//);
+  assert.match(doc, /\*\*Build for the origin you serve from\.\*\*/);
+  assert.match(doc, /node scripts\/build-demo\.mjs --outdir \.build\/public-demo --base-path \/agui-inspector\//);
+  assert.match(doc, /--origin http:\/\/127\.0\.0\.1:4173/);
+  assert.match(doc, /The workflow does not turn Pages on/);
+  assert.match(doc, /\[embedding guide\]\(https:\/\/github\.com\/dogganidhal\/agui-inspector\/blob\/main\/docs\/embedding\.md\)/);
+  for (const topic of ['localhost', 'CORS', 'IPv6', 'reload the page', 'Export session', '10 seconds']) assert.ok(doc.includes(topic), topic);
+  const development = source('docs/development.md');
+  for (const command of [
+    'npm exec -- tsc -p demo/tsconfig.json',
+    'npm exec -- tsc -p demo/tsconfig.worker.json',
+    'node scripts/build-demo.mjs --outdir .build/public-demo --base-path /agui-inspector/',
+    'node scripts/bundle-budget.mjs --dir .build/public-demo',
+  ]) assert.ok(development.includes(command), command);
 });

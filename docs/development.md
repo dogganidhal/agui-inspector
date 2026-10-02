@@ -19,11 +19,15 @@ Run from the repository root.
 | `npm run typecheck` | Strict type check of the repository tooling and of `packages/inspector` (sources and tests). |
 | `npm run test:unit` | Compiles `*.test.ts(x)` with esbuild into `.build/tests`, then runs them with `node --test`. |
 | `npm run test:unit -- packages/inspector/tests/foundation` | Same, limited to the given files or directories. No tests found is a failure. |
-| `npm run build` | Writes `packages/inspector/dist` (`index.html` and `app.js`). `-- --outdir <dir>` builds elsewhere. |
+| `npm run build` | Writes `packages/inspector/dist` (`index.html`, `app.js` and `app.css`). `-- --outdir <dir>` builds elsewhere. |
 | `npm run check:bundle` | Fails when the files in `packages/inspector/dist` exceed 2,000,000 minified bytes or 600,000 gzip bytes. Run `npm run build` first. |
 | `npm run check:bundle:renderer` | Builds a representative bundle (scaffold app plus the pinned A2UI v0.9 renderer) into `.build/representative` and reports the headroom left. |
 | `npm run test:benchmark` | Checks the 5,000-frame fixture and its schedule and reports UI responsiveness as pending. `-- --strict` fails while it is pending. `-- --measure` runs the browser benchmark (about seven minutes). |
 | `npm run test:e2e` | Runs Playwright against `tests/e2e`. |
+| `npm exec -- tsc -p demo/tsconfig.json` | Strict type check of the public demo's page bootstrap, with the DOM library and no Node types. Part of `npm run check:ci`. |
+| `npm exec -- tsc -p demo/tsconfig.worker.json` | The same for the demo's service worker, with the WebWorker library. Part of `npm run check:ci`. |
+| `node scripts/build-demo.mjs --outdir .build/public-demo --base-path /agui-inspector/` | Builds the public demo into its own directory under `.build`. `--origin` names the site's origin and defaults to the Pages site. It never touches `packages/inspector/dist`. See [public demo](public-demo.md). |
+| `node scripts/bundle-budget.mjs --dir .build/public-demo` | The same budget as `check:bundle`, on the complete demo asset set. |
 | `npm run package:python` | Builds the assets, stages them into `packages/python`, checksums them and runs `uv build`. See [embedding](embedding.md) and [build provenance](build-provenance.md). |
 | `npm run check:ci` | Runs the pull request gate locally (see below). |
 | `npm run check:ci -- --strict` | The same gate, but suites that are not introduced yet fail it. |
@@ -101,11 +105,21 @@ commit SHA; bump a pin only after reading the new release.
 | Step | Command | Runs when |
 | --- | --- | --- |
 | typecheck | `npm run typecheck` | Always. |
-| unit tests | `npm run test:unit` | Always. |
+| demo typecheck | `npm exec -- tsc -p demo/tsconfig.json`, then `npm exec -- tsc -p demo/tsconfig.worker.json` | `demo/service-worker.ts` exists (feature 002). A demo without either project fails instead of being skipped. |
+| unit tests | `npm run test:unit` | Always. Includes `tests/demo`, so the demo's build, isolation and workflow checks run here. |
+| demo unit tests | none: fails when `tests/demo` holds no `*.test.ts` | The demo exists. Present tests already ran in the step above. |
 | build | `npm run build` | Always. |
 | bundle budget | `npm run check:bundle` | `scripts/bundle-budget.mjs` exists (slice F03). |
+| demo build and budget | `node scripts/build-demo.mjs --outdir .build/public-demo --base-path /agui-inspector/`, then `node scripts/bundle-budget.mjs --dir .build/public-demo` | The demo exists. A missing build script or budget script fails the step. A missing or empty output fails the budget check. |
 | end-to-end tests | `npm run test:e2e` | `tests/e2e` holds at least one `*.spec.ts`. |
-| python tests | `uv sync --project packages/python --locked --extra embedded --group test`, then `uv run --project packages/python python -m unittest discover -s packages/python/tests` | `packages/python/pyproject.toml` exists. |
+| python tests | `uv sync --project packages/python --locked --extra embedded --group test`, then `uv run --project packages/python python -m unittest discover -s packages/python/tests` | `packages/python/pyproject.toml` exists. These open the real npm archive, wheel and sdist, so the package build comes first. |
+
+The end-to-end step also runs `tests/e2e/public-demo`, which builds the demo itself, serves it under `/agui-inspector/` and drives the
+real service worker in Chromium. The unit and Python steps check that no demo file reaches the npm package, the wheel or the sdist.
+
+`.github/workflows/pages.yml` is the only other workflow. It runs on `main` only, builds and checks the demo the same way and deploys it
+with Pages-scoped permissions; it never runs for a pull request and `ci.yml` gains no deployment permission. See
+[public demo](public-demo.md#deployment-and-who-authorizes-it).
 
 A suite that is not introduced yet is printed as `PENDING` with the reason. It has no command, so
 it cannot report success, and the summary says that pending suites do not count as passing. Once a
@@ -137,6 +151,7 @@ checked by the gate from what is still open.
 | End-to-end tests and network-allowlist checks | Present under `tests/e2e`. |
 | Python package and tests | Present (slice L06). Packaging and tests run through `npm run package:python` and the uv commands in [embedding](embedding.md). |
 | 5,000-frame benchmark fixture, manifest and browser measurement | Present (slices F03 and L04). |
+| Public demo build, worker typecheck, isolation checks and browser tests | Present (feature 002, slice P03); run by `npm run check:ci`. The first Pages deployment happens when `pages.yml` reaches `main`. |
 | 5,000-frame responsiveness certification (SC-009) | Pending: measured on an Apple M4 Pro with headless Chromium (development evidence only); the headed Mac mini M2 run is pending with the maintainer. |
 
 The foundation tests prove that the pinned baseline works together: the 31 event types, the fetch

@@ -34,6 +34,7 @@ function prepareExamples(): Promise<Outcome> {
   if (!window.isSecureContext) return Promise.resolve(unavailable('service workers need a secure page (HTTPS or localhost).'));
 
   const container = navigator.serviceWorker;
+  const hadController = container.controller !== null;
   const script = new URL(WORKER, location.href).href;
   const scope = new URL('./', location.href).href;
 
@@ -42,6 +43,7 @@ function prepareExamples(): Promise<Outcome> {
     const ready = new WeakSet<ServiceWorker>();
     const asked = new WeakSet<ServiceWorker>();
     let wrongVersion = false;
+    let updateFailed = false;
 
     const finish = (outcome: Outcome) => {
       clearTimeout(timer);
@@ -67,6 +69,8 @@ function prepareExamples(): Promise<Outcome> {
 
     // Control and readiness arrive in either order, so both are checked on every event.
     function check() {
+      // An older worker that cannot be replaced will never answer for this version: say so now, not after 10 seconds.
+      if (wrongVersion && updateFailed) return finish(unavailable('an older version of the example worker is in control and could not be updated.'));
       const controller = container.controller;
       if (controller === null || controller.scriptURL !== script) return;
       if (ready.has(controller)) return finish({ ok: true });
@@ -91,9 +95,23 @@ function prepareExamples(): Promise<Outcome> {
     container.register(WORKER, { scope: './', updateViaCache: 'none' }).then(
       (registration) => {
         if (registration.scope !== scope) return finish(unavailable('the example worker has an unexpected scope.'));
+        // Registering the script a page already has looks for no newer one, so a stale worker would stay in control.
+        if (hadController) {
+          registration.update().catch(() => {
+            updateFailed = true;
+            check();
+          });
+        }
         check();
       },
-      (error: unknown) => finish(unavailable(`the example worker could not be registered (${error instanceof Error ? error.name : 'error'}).`)),
+      (error: unknown) => {
+        // A page that is already controlled may still have a working worker: the handshake decides.
+        if (hadController) {
+          updateFailed = true;
+          return check();
+        }
+        finish(unavailable(`the example worker could not be registered (${error instanceof Error ? error.name : 'error'}).`));
+      },
     );
   });
 }

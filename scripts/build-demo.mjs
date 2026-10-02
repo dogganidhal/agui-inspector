@@ -1,10 +1,15 @@
 // Builds the public demo into its own directory, apart from the ordinary static assets (P03, FR-001,
 // FR-006, FR-012, FR-013). It reuses the app build unchanged, then adds only what the demo needs: its
 // page, bootstrap, stylesheet, the sibling service worker, the hosting file and the examples'
-// configuration with the deployment sub-path in front of its endpoint and preparation references.
+// configuration with the deployment origin and sub-path in front of its endpoint and preparation references.
 // Nothing here writes to packages/inspector/dist, so the npm package and the Python wheel cannot pick
 // up a demo file.
-// Usage: node scripts/build-demo.mjs [--outdir .build/public-demo] [--base-path /agui-inspector/]
+// Usage: node scripts/build-demo.mjs [--outdir .build/public-demo] [--base-path /agui-inspector/] [--origin https://dogganidhal.github.io]
+//
+// Why the origin: a hosted page refuses any endpoint that is not an absolute URL, so the examples' URLs
+// carry the origin the page is served from. The worker answers only same-origin requests, so a build whose
+// origin differs from the serving origin would send example requests out of the page. Build for the
+// origin you serve from (the default is the authorized Pages site); the Pages workflow passes its own.
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { build } from 'esbuild';
@@ -16,6 +21,7 @@ const scratchRoot = path.join(root, '.build');
 
 export const DEFAULT_OUTDIR = path.join(scratchRoot, 'public-demo');
 export const DEFAULT_BASE_PATH = '/agui-inspector/';
+export const DEFAULT_ORIGIN = 'https://dogganidhal.github.io';
 /** The examples' configuration as the page reads it. There is deliberately no `config.json`. */
 export const EXAMPLES_FILE = 'examples.json';
 /** Everything a demo build must hold; a missing one fails the build rather than shipping a broken page. */
@@ -46,6 +52,25 @@ export function normalizeBasePath(value) {
 }
 
 /**
+ * One origin written alone: HTTPS, or plain HTTP to localhost or 127.0.0.1 for a local preview, the same
+ * boundary the hosted page enforces. No credentials, path, query or fragment, and no trailing slash.
+ * @param {string} value
+ */
+export function normalizeOrigin(value) {
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    url = undefined;
+  }
+  const loopback = url?.hostname === 'localhost' || url?.hostname === '127.0.0.1';
+  if (url === undefined || url.origin !== value || !(url.protocol === 'https:' || (url.protocol === 'http:' && loopback))) {
+    throw new Error(`--origin must be one origin such as https://owner.github.io (http only for localhost or 127.0.0.1), without a path, credentials, query or fragment, got "${value}"`);
+  }
+  return value;
+}
+
+/**
  * Where the demo may be written: a directory of its own under `.build`. The build empties it first, so
  * it must never be `.build` itself, the ordinary dist or anything outside the scratch directory.
  * @param {string} value
@@ -65,7 +90,7 @@ export function checkOutdir(value) {
 
 /**
  * @param {readonly string[]} argv
- * @returns {{ outdir: string, basePath: string }}
+ * @returns {{ outdir: string, basePath: string, origin: string }}
  */
 export function parseDemoArgs(argv) {
   /** @type {Record<string, string>} */
@@ -74,26 +99,31 @@ export function parseDemoArgs(argv) {
   for (let index = 0; index < args.length; index += 2) {
     const flag = args[index] ?? '';
     const value = args[index + 1];
-    if (flag !== '--outdir' && flag !== '--base-path') throw new Error(`unknown argument "${flag}"; expected --outdir <dir> or --base-path <path>`);
+    if (flag !== '--outdir' && flag !== '--base-path' && flag !== '--origin') throw new Error(`unknown argument "${flag}"; expected --outdir <dir>, --base-path <path> or --origin <origin>`);
     if (value === undefined || value.startsWith('--')) throw new Error(`${flag} needs a value`);
     if (flag in given) throw new Error(`${flag} was given twice`);
     given[flag] = value;
   }
-  return { outdir: checkOutdir(given['--outdir'] ?? DEFAULT_OUTDIR), basePath: normalizeBasePath(given['--base-path'] ?? DEFAULT_BASE_PATH) };
+  return {
+    outdir: checkOutdir(given['--outdir'] ?? DEFAULT_OUTDIR),
+    basePath: normalizeBasePath(given['--base-path'] ?? DEFAULT_BASE_PATH),
+    origin: normalizeOrigin(given['--origin'] ?? DEFAULT_ORIGIN),
+  };
 }
 
 /**
- * The checked-in demo configuration with the base path in front of each endpoint and preparation path.
- * Only those references change: `{{threadId}}`-style templates, bodies and every other field are kept
- * as written, and a reference that is not demo-relative is an error, never silently left alone.
+ * The checked-in demo configuration with the origin and base path in front of each endpoint and
+ * preparation path. Only those references change: `{{threadId}}`-style templates, bodies and every other
+ * field are kept as written, and a reference that is not demo-relative is an error, never silently left alone.
  * @param {string} text the contents of demo/config.json
+ * @param {string} origin a normalized origin
  * @param {string} basePath a normalized base path
  */
-export function prefixDemoConfig(text, basePath) {
+export function prefixDemoConfig(text, origin, basePath) {
   /** @param {unknown} value @param {string} where */
   const prefixed = (value, where) => {
     if (typeof value !== 'string' || !value.startsWith(DEMO_PREFIX)) throw new Error(`${where} must be a demo-relative reference starting with ${DEMO_PREFIX}`);
-    return `${basePath}${value}`;
+    return `${origin}${basePath}${value}`;
   };
   const config = JSON.parse(text);
   for (const [index, agent] of config.agents.entries()) {
@@ -118,14 +148,13 @@ const sharedAppExternal = {
 };
 
 /**
- * @param {{ outdir?: string, basePath?: string }} [options]
+ * @param {{ outdir?: string, basePath?: string, origin?: string }} [options]
  * @returns {Promise<string>} the directory written
  */
-export async function buildDemo({ outdir = DEFAULT_OUTDIR, basePath = DEFAULT_BASE_PATH } = {}) {
+export async function buildDemo({ outdir = DEFAULT_OUTDIR, basePath = DEFAULT_BASE_PATH, origin = DEFAULT_ORIGIN } = {}) {
   const target = checkOutdir(outdir);
-  normalizeBasePath(basePath);
-  // Prefix first: a bad checked-in config fails before anything is written.
-  const examples = prefixDemoConfig(readFileSync(path.join(demoDir, 'config.json'), 'utf8'), basePath);
+  // Prefix first: a bad option or checked-in config fails before anything is written.
+  const examples = prefixDemoConfig(readFileSync(path.join(demoDir, 'config.json'), 'utf8'), normalizeOrigin(origin), normalizeBasePath(basePath));
   JSON.parse(readFileSync(path.join(demoDir, 'hosting-config.json'), 'utf8'));
 
   rmSync(target, { recursive: true, force: true });
@@ -155,9 +184,9 @@ export async function buildDemo({ outdir = DEFAULT_OUTDIR, basePath = DEFAULT_BA
 
 if (path.basename(process.argv[1] ?? '') === 'build-demo.mjs') {
   try {
-    const { outdir, basePath } = parseDemoArgs(process.argv.slice(2));
-    await buildDemo({ outdir, basePath });
-    console.log(`built the public demo into ${path.relative(root, outdir)} for ${basePath}`);
+    const { outdir, basePath, origin } = parseDemoArgs(process.argv.slice(2));
+    await buildDemo({ outdir, basePath, origin });
+    console.log(`built the public demo into ${path.relative(root, outdir)} for ${origin}${basePath}`);
   } catch (error) {
     console.error(`build-demo: ${error instanceof Error ? error.message : String(error)}`);
     process.exit(1);

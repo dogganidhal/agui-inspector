@@ -1,6 +1,9 @@
 """L06 T046 (US2.3, FR-001, FR-040): the wheel and sdist carry the npm assets, and the wheel runs without Node.
 D01 T055-T058 (G-01, G-02): MIT license and third-party notices ship in the npm tarball, wheel and sdist, the
 manifests stay private, the DOMPurify override resolves exactly, and CI covers Python 3.10 and 3.14.
+P03 T013, T016 (feature 002, FR-012): the public demo's worker, bootstrap, examples and registration are in none
+of the ordinary distributions, a demo build leaves the ordinary assets untouched, and the only other workflow is
+the main-only Pages deployment.
 
 setUpClass runs the real packaging script on the already built ``packages/inspector/dist``
 (``npm run build``), so these tests need Node and a build; a missing one is a failure, not a skip.
@@ -21,6 +24,7 @@ from email.parser import Parser
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[3]
+BUILD = REPO / ".build"
 DIST = REPO / "packages" / "inspector" / "dist"
 PACKAGE = REPO / "packages" / "python" / "src" / "agui_inspector"
 STATIC = "agui_inspector/static/"
@@ -28,6 +32,10 @@ MANIFEST = "agui_inspector/static.sha256"
 LICENSE_FILES = ("LICENSE", "THIRD_PARTY_NOTICES.txt")
 COPYRIGHT = "Copyright (c) 2026 Nidhal Dogga"
 A2UI_PACKAGES = ("@a2ui/react", "@a2ui/web_core", "@a2ui/markdown-it")
+# What only the public demo build holds (scripts/build-demo.mjs): file names, and what its worker and page say.
+DEMO_NAMES = {"service-worker.js", "bootstrap.js", "demo.css", "examples.json"}
+DEMO_MARKERS = ("agui-demo-hello", "agui-demo-ready", "__demo__", "serviceWorker", "service-worker")
+ASSET = re.compile(r"\.(js|css|html|json)$")
 
 
 def sha256(data: bytes) -> str:
@@ -70,6 +78,14 @@ class DistributionTest(unittest.TestCase):
         cls.npm_tarball = next(cls.out.glob("*.tgz"))
         cls.expected = tree(DIST)
         cls.tmp = Path(tmp.name)
+        # A demo build into a directory of its own, run before the isolation checks: it must change nothing ordinary.
+        BUILD.mkdir(exist_ok=True)
+        demo = tempfile.TemporaryDirectory(prefix="distribution-test-demo-", dir=BUILD)
+        cls.addClassCleanup(demo.cleanup)
+        cls.demo = Path(demo.name)
+        built = subprocess.run([node, "scripts/build-demo.mjs", "--outdir", str(cls.demo)], cwd=REPO, capture_output=True, text=True)
+        if built.returncode != 0:
+            raise AssertionError(f"build-demo failed:\n{built.stdout}\n{built.stderr}")
 
     def wheel_static(self) -> dict[str, str]:
         with zipfile.ZipFile(self.wheel) as wheel:
@@ -181,7 +197,55 @@ class DistributionTest(unittest.TestCase):
         self.assertIn("UV_PYTHON: ${{ matrix.python-version }}", text)
         self.assertIsNone(re.search(r"^\s*(tags|release|workflow_dispatch|push):", text, re.M))
         self.assertIsNone(re.search(r"\bpublish\b|pypi|npm publish|gh release", text, re.I))
-        self.assertTrue(list((REPO / ".github" / "workflows").glob("*.yml")) == [REPO / ".github" / "workflows" / "ci.yml"])
+
+    def test_the_only_other_workflow_deploys_the_demo_from_main_and_ships_no_package(self):
+        workflows = sorted(p.name for p in (REPO / ".github" / "workflows").glob("*.yml"))
+        self.assertEqual(["ci.yml", "pages.yml"], workflows)
+        text = (REPO / ".github" / "workflows" / "pages.yml").read_text()
+        self.assertIn("branches: [main]", text)
+        self.assertIsNone(re.search(r"^\s*(tags|release|pull_request|pull_request_target|schedule):", text, re.M))
+        self.assertIsNone(re.search(r"\bpublish\b|pypi|npm publish|uv publish|twine|gh release|git tag|attest", text, re.I))
+        self.assertIn("path: .build/public-demo", text)
+
+    def member_files(self, archive: str) -> dict[str, bytes]:
+        """Every file of one distribution, by archive name."""
+        if archive == "wheel":
+            with zipfile.ZipFile(self.wheel) as wheel:
+                return {n: wheel.read(n) for n in wheel.namelist() if not n.endswith("/")}
+        path = self.sdist if archive == "sdist" else self.npm_tarball
+        with tarfile.open(path) as tar:
+            return {m.name: tar.extractfile(m).read() for m in tar.getmembers() if m.isfile()}
+
+    def test_no_distribution_holds_the_demo_worker_bootstrap_examples_or_registration(self):
+        assets = {"wheel": STATIC, "sdist": "/src/" + STATIC, "npm": "package/dist/"}
+        for label, archive in (("wheel", "wheel"), ("sdist", "sdist"), ("npm", "npm")):
+            files = self.member_files(archive)
+            self.assertTrue(files, label)
+            self.assertFalse({Path(n).name for n in files} & DEMO_NAMES, f"{label} holds a demo file")
+            shipped = {n: data for n, data in files.items() if assets[label] in n and ASSET.search(n)}
+            self.assertIn("index.html", {Path(n).name for n in shipped}, label)
+            for name, data in shipped.items():
+                text = data.decode("utf-8")
+                for marker in DEMO_MARKERS:
+                    self.assertTrue(marker not in text, f"{label}: {name} mentions {marker}")  # not assertNotIn: it would print the asset
+        # The built ordinary directory they were made from is clean too, and a demo build changed none of it.
+        self.assertFalse({p.name for p in DIST.rglob("*")} & DEMO_NAMES)
+        for name in self.expected:
+            if ASSET.search(name):
+                text = (DIST / name).read_text()
+                for marker in DEMO_MARKERS:
+                    self.assertTrue(marker not in text, f"dist/{name} mentions {marker}")
+        self.assertEqual(self.expected, tree(DIST))
+
+    def test_the_demo_build_is_separate_from_the_ordinary_assets_it_shares(self):
+        demo = tree(self.demo)
+        self.assertEqual({"app.css", "app.js", "bootstrap.js", "demo.css", "examples.json", "hosting-config.json", "index.html", "service-worker.js"}, set(demo))
+        # The shared app is the ordinary app, byte for byte; the demo adds files and replaces the page and the hosting file.
+        for shared in ("app.js", "app.css"):
+            self.assertEqual(self.expected[shared], demo[shared], shared)
+        self.assertNotEqual(self.expected["index.html"], demo["index.html"])
+        self.assertIn("embedded", (DIST / "hosting-config.json").read_text())
+        self.assertIn("hosted", (self.demo / "hosting-config.json").read_text())
 
     def test_installed_wheel_serves_without_node_or_network(self):
         site = self.tmp / "site"
