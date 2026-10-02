@@ -1,0 +1,356 @@
+// L04 T034 (FR-010, FR-012, FR-017; US1.2 to US1.4): the frames view model and its markup.
+// The model is plain TypeScript; the markup is checked as static HTML, and the interactive
+// behavior (typing, clicking, copying) is covered by tests/e2e/inspection.
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { EventType } from '@ag-ui/core';
+import type { InspectionSession, RawFrame } from '../../src/contracts.ts';
+import {
+  FAMILIES,
+  NO_FILTER,
+  copyFramesJson,
+  exchangeRows,
+  familyOf,
+  frameMatches,
+  indexSession,
+  summarizeFrame,
+  typeLabel,
+  type FrameFilter,
+} from '../../src/views/inspection/model.ts';
+import { FramesPanel } from '../../src/views/inspection/frames.tsx';
+import { capture, conversationRequest, eventFixtures, invalidCases, richSession, wireOf, wireScenario } from './support.ts';
+
+const TYPES = Object.keys(eventFixtures);
+const filter = (patch: Partial<FrameFilter>): FrameFilter => ({ ...NO_FILTER, ...patch });
+
+/** One real frame for each fixture, taken through the recorder, reader and store. */
+async function framesByType(): Promise<Map<string, RawFrame>> {
+  const store = await capture(wireScenario('all', conversationRequest('{}'), wireOf(...TYPES.map((type) => JSON.stringify(eventFixtures[type as keyof typeof eventFixtures])))));
+  return new Map(store.snapshot().frames.map((frame) => [frame.eventType!, frame]));
+}
+
+const expectedSummaries: Record<string, string> = {
+  RUN_STARTED: 'r-proto',
+  RUN_FINISHED: 'success',
+  RUN_ERROR: 'synthetic_error · synthetic failure',
+  STEP_STARTED: 'plan',
+  STEP_FINISHED: 'plan',
+  TEXT_MESSAGE_START: 'm1 · assistant',
+  TEXT_MESSAGE_CONTENT: 'm1 "héllo wörld, 你好 🙂"',
+  TEXT_MESSAGE_END: 'm1',
+  TEXT_MESSAGE_CHUNK: 'm2 "héllo wörld, 你好 🙂"',
+  TOOL_CALL_START: 'search_documents · tc1',
+  TOOL_CALL_ARGS: 'tc1 "{\\"query\\":\\"synthetic\\"}"',
+  TOOL_CALL_END: 'tc1',
+  TOOL_CALL_CHUNK: 'fetch_resource · tc2 "{\\"resource\\":\\"synthetic\\"}"',
+  TOOL_CALL_RESULT: 'tc1 → synthetic result',
+  REASONING_START: 'rs1',
+  REASONING_MESSAGE_START: 'rs1 · reasoning',
+  REASONING_MESSAGE_CONTENT: 'rs1 "héllo wörld, 你好 🙂"',
+  REASONING_MESSAGE_END: 'rs1',
+  REASONING_MESSAGE_CHUNK: 'rs2 "héllo wörld, 你好 🙂"',
+  REASONING_END: 'rs1',
+  REASONING_ENCRYPTED_VALUE: 'message · rs1 · 24 B · not decoded',
+  STATE_SNAPSHOT: 'snapshot · round, items',
+  STATE_DELTA: 'add /round',
+  MESSAGES_SNAPSHOT: '2 messages',
+  ACTIVITY_SNAPSHOT: 'synthetic-progress · act1',
+  ACTIVITY_DELTA: 'synthetic-progress · 1 op',
+  SUBAGENT_STARTED: 'synthetic-researcher · sub1',
+  SUBAGENT_FINISHED: 'sub1',
+  SUBAGENT_ERROR: 'sub2 · synthetic subagent failure',
+  CUSTOM: 'synthetic.custom = {"note":"custom"}',
+  RAW: 'synthetic',
+};
+
+test('all 31 event types have a frames-list summary, family and type label', async () => {
+  assert.equal(TYPES.length, 31);
+  assert.deepEqual(TYPES.slice().sort(), Object.values(EventType).slice().sort());
+  const frames = await framesByType();
+  for (const type of TYPES) {
+    const frame = frames.get(type);
+    assert.ok(frame, `${type} frame captured`);
+    assert.equal(frame.schemaVerdict, 'valid', `${type} fixture is valid`);
+    assert.equal(summarizeFrame(frame), expectedSummaries[type], `${type} summary`);
+    assert.equal(typeLabel(frame), type);
+    assert.ok(familyOf(type), `${type} has a family`);
+  }
+  assert.deepEqual(Object.keys(expectedSummaries).sort(), TYPES.slice().sort());
+});
+
+test('families group the 31 types as the design lists them, and run, step, subagent and custom stay neutral', () => {
+  assert.deepEqual(FAMILIES.map((family) => family.key), ['run', 'step', 'text', 'tool', 'reasoning', 'state', 'activity', 'subagent', 'ext']);
+  const grouped = new Map<string, string[]>();
+  for (const type of TYPES) grouped.set(familyOf(type)!, [...(grouped.get(familyOf(type)!) ?? []), type]);
+  assert.deepEqual(grouped.get('run'), ['RUN_STARTED', 'RUN_FINISHED', 'RUN_ERROR']);
+  assert.deepEqual(grouped.get('state'), ['STATE_SNAPSHOT', 'STATE_DELTA', 'MESSAGES_SNAPSHOT']);
+  assert.deepEqual(grouped.get('ext'), ['CUSTOM', 'RAW']);
+  // Only the 31 baseline types belong to a family; anything else is reachable by search and by the issues filter.
+  assert.equal(familyOf('SOMETHING_NEW'), undefined);
+  assert.equal(familyOf(undefined), undefined);
+  for (const family of FAMILIES) assert.equal(family.hollow, ['run', 'step', 'subagent', 'ext'].includes(family.key));
+});
+
+test('the run summaries name outcomes, interrupts, pending tool calls and parents', async () => {
+  const wire = [
+    { type: 'RUN_STARTED', threadId: 't', runId: 'r2', parentRunId: 'r1' },
+    { type: 'RUN_FINISHED', threadId: 't', runId: 'r2', outcome: { type: 'interrupt', interrupts: [{ id: 'i1', reason: 'approval' }, { id: 'i2', reason: 'approval' }] } },
+    { type: 'RUN_FINISHED', threadId: 't', runId: 'r2', outcome: { type: 'success', pendingToolCallIds: ['a', 'b', 'c'] } },
+    { type: 'RUN_FINISHED', threadId: 't', runId: 'r2', outcome: { type: 'success', pendingToolCallIds: ['a'] } },
+    { type: 'RUN_FINISHED', threadId: 't', runId: 'r2', outcome: { type: 'cancelled' } },
+    { type: 'RUN_ERROR', message: 'x'.repeat(100) },
+  ].map((event) => JSON.stringify(event));
+  const store = await capture(wireScenario('runs', conversationRequest('{}'), wireOf(...wire)));
+  assert.deepEqual(
+    store.snapshot().frames.map(summarizeFrame),
+    ['r2  ← r1', 'interrupt · 2 waiting', 'success · 3 pending tool calls', 'success · 1 pending tool call', 'cancelled', `${'x'.repeat(55)}…`],
+  );
+});
+
+test('long values are cut at about 56 characters and newlines stay escaped', async () => {
+  const store = await capture(
+    wireScenario('long', conversationRequest('{}'), wireOf(JSON.stringify({ type: 'TEXT_MESSAGE_CONTENT', messageId: 'm1', delta: `line one\nline two ${'y'.repeat(100)}` }))),
+  );
+  const summary = summarizeFrame(store.snapshot().frames[0]!);
+  assert.match(summary, /^m1 "line one\\nline two y+…"$/);
+  assert.ok(summary.length <= 'm1 '.length + 56 + 3);
+});
+
+test('malformed frames keep their evidence and are summarized without trusting their shape', async () => {
+  const store = await capture(
+    wireScenario(
+      'malformed',
+      conversationRequest('{}'),
+      wireOf(
+        invalidCases.prose.data,
+        invalidCases.truncatedJson.data,
+        invalidCases.unknownType.data,
+        invalidCases.wrongFieldType.data,
+        invalidCases.missingField.data,
+        invalidCases.noType.data,
+        invalidCases.notAnObject.data,
+        invalidCases.jsonNull.data,
+        invalidCases.jsonArray.data,
+        invalidCases.emptyData.data,
+      ),
+    ),
+  );
+  const frames = store.snapshot().frames;
+  assert.equal(frames.length, 10);
+  assert.deepEqual(frames.map(typeLabel), ['unparsed', 'unparsed', 'SYNTHETIC_FUTURE_EVENT', 'TEXT_MESSAGE_CONTENT', 'TOOL_CALL_START', 'untyped', 'untyped', 'untyped', 'untyped', 'unparsed']);
+  assert.equal(summarizeFrame(frames[0]!), 'unparsed · 15 bytes');
+  assert.equal(summarizeFrame(frames[9]!), 'unparsed · 0 bytes');
+  for (const frame of frames) assert.equal(typeof summarizeFrame(frame), 'string');
+  // A known type with a wrong field falls back to the reader's own summary, never to a guess.
+  assert.equal(summarizeFrame(frames[3]!), frames[3]!.summary);
+  assert.equal(summarizeFrame(frames[2]!), frames[2]!.summary);
+  // The frames themselves are untouched by being summarized.
+  assert.equal(frames[0]!.data, 'not json at all');
+});
+
+test('a summary never throws, whatever the fields of a frame hold', async () => {
+  const frames = await framesByType();
+  const weird: unknown[] = [null, 7, true, [], {}, [1, { a: 1 }], { toString: 1 }, 'x'.repeat(5000), '', '\u0000'];
+  for (const [type, frame] of frames) {
+    for (const key of Object.keys(frame.parsed as object)) {
+      for (const value of weird) {
+        const parsed = { ...(frame.parsed as object), [key]: value };
+        const hostile: RawFrame = { ...frame, parsed: parsed as RawFrame['parsed'], data: JSON.stringify(parsed) };
+        const summary = summarizeFrame(hostile);
+        assert.equal(typeof summary, 'string', `${type}.${key}`);
+        assert.ok(summary.length < 400, `${type}.${key} stays short`);
+      }
+    }
+  }
+});
+
+test('control and partial evidence has its own labels and is never given an event type', async () => {
+  const session = await richSession();
+  const control = session.frames.find((frame) => frame.classification === 'control')!;
+  assert.equal(typeLabel(control), 'control');
+  assert.equal(summarizeFrame(control), control.summary);
+  const partial = (await capture(wireScenario('cut', conversationRequest('{}'), 'data: {"type":"RUN_STAR'))).snapshot().frames[0]!;
+  assert.equal(partial.classification, 'partial');
+  assert.equal(typeLabel(partial), 'partial');
+});
+
+test('filters match type, content and issues, case-insensitively and together', async () => {
+  const session = await richSession();
+  const index = indexSession(session);
+  const matching = (patch: Partial<FrameFilter>) => session.frames.filter((frame) => frameMatches(frame, index.issuesOf(frame), filter(patch)));
+
+  assert.equal(matching({}).length, session.frames.length, 'no filter shows every frame, control evidence included');
+
+  const text = matching({ families: new Set(['text']) });
+  assert.ok(text.length > 0 && text.every((frame) => familyOf(frame.eventType) === 'text'));
+
+  const several = matching({ families: new Set(['text', 'tool']) });
+  assert.equal(several.length, text.length + matching({ families: new Set(['tool']) }).length);
+
+  const content = matching({ query: 'SYNTHETIC-RESEARCHER' });
+  assert.ok(content.length > 0 && content.every((frame) => frame.data!.toLowerCase().includes('synthetic-researcher')));
+
+  assert.deepEqual(matching({ query: 'run_finished' }).map((frame) => frame.eventType).filter((type, at, all) => all.indexOf(type) === at), ['RUN_FINISHED']);
+  assert.equal(matching({ query: 'no frame says this' }).length, 0);
+
+  const issues = matching({ issuesOnly: true });
+  assert.ok(issues.length >= 5, 'json and schema findings');
+  assert.ok(issues.every((frame) => index.issuesOf(frame) > 0));
+  assert.ok(session.frames.filter((frame) => frame.jsonVerdict === 'invalid').every((frame) => issues.includes(frame)));
+
+  const both = matching({ issuesOnly: true, query: 'future' });
+  assert.deepEqual(both.map((frame) => frame.eventType), ['SYNTHETIC_FUTURE_EVENT']);
+
+  // Control evidence has no type or issue; only a text query can reach it.
+  assert.ok(matching({ families: new Set(['text']) }).every((frame) => frame.classification === 'data'));
+  assert.ok(matching({ query: 'keepalive' }).every((frame) => frame.classification === 'control' && frame.envelope.includes('keepalive')));
+  assert.ok(matching({ query: 'keepalive' }).length > 0);
+});
+
+test('exchanges are listed newest first, with counts that follow the filter', async () => {
+  const session = await richSession();
+  const index = indexSession(session);
+  assert.deepEqual(index.newestFirst.map((entry) => entry.exchange.id), session.exchanges.map((exchange) => exchange.id).reverse());
+  assert.equal(index.newestFirst[0]!.exchange.kind, 'raw');
+
+  const baseline = index.newestFirst.find((entry) => entry.exchange.kind === 'conversation' && entry.runLabel === 'r-proto')!;
+  assert.equal(baseline.dataFrames, 30);
+  assert.equal(exchangeRows(baseline, NO_FILTER).shown, 30);
+  const filtered = exchangeRows(baseline, filter({ families: new Set(['tool']) }));
+  assert.equal(filtered.shown, 5);
+  assert.equal(filtered.rows.filter((row) => row.type === 'frame').length, 5);
+  assert.equal(index.dataFrames, session.frames.filter((frame) => frame.classification === 'data').length);
+  assert.equal(index.issues, index.newestFirst.reduce((sum, entry) => sum + entry.issues, 0));
+  assert.equal(index.issues, session.findings.length, 'every finding is counted once, on the exchange it concerns');
+});
+
+test('family counts cover data frames only', async () => {
+  const session = await richSession();
+  const index = indexSession(session);
+  let total = 0;
+  for (const family of FAMILIES) total += index.familyCounts.get(family.key) ?? 0;
+  const typed = session.frames.filter((frame) => frame.classification === 'data' && TYPES.includes(frame.eventType ?? ''));
+  assert.equal(total, typed.length, 'frames with an unknown or missing type belong to no family');
+  assert.ok(typed.length < index.dataFrames);
+});
+
+test('original chunk events stay in the list, with the expansion beside them marked derived and linked back', async () => {
+  const session = await richSession();
+  const index = indexSession(session);
+  const entry = index.newestFirst.find((candidate) => candidate.runLabel === 'r-proto')!;
+  const rows = exchangeRows(entry, NO_FILTER).rows;
+  const at = rows.findIndex((row) => row.type === 'frame' && row.frame.eventType === 'TEXT_MESSAGE_CHUNK');
+  assert.ok(at >= 0, 'the original chunk is listed');
+  const next = rows[at + 1]!;
+  assert.equal(next.type, 'derived');
+  assert.equal(next.type === 'derived' && next.entry.provenance, 'derived');
+  assert.deepEqual(next.type === 'derived' && next.entry.sources, [(rows[at] as { frame: RawFrame }).frame.id]);
+  assert.equal('index' in (next as object), false);
+  assert.equal('offsetMs' in ((next as { entry: object }).entry), false);
+
+  // A filter that hides the chunk does not hide an expansion that matches on its own.
+  const onlyExpansion = exchangeRows(entry, filter({ query: 'expanded from' })).rows;
+  assert.deepEqual(onlyExpansion.map((row) => row.type), ['derived']);
+  // And one that matches the chunk by type shows both.
+  const chunkRows = exchangeRows(entry, filter({ query: 'text_message_chunk' })).rows.map((row) => row.type);
+  assert.deepEqual(chunkRows, ['frame', 'derived']);
+});
+
+test('a derived entry whose source cannot be identified is listed apart, not attached to a guess', async () => {
+  const store = await capture(wireScenario('one', conversationRequest('{}'), wireOf(JSON.stringify(eventFixtures.RUN_STARTED))));
+  store.appendDerived({ id: 'd-amb', provenance: 'derived', derivation: 'projection', sources: [], attribution: 'ambiguous', eventType: 'STATE_DELTA', label: 'State after delta' });
+  const index = indexSession(store.snapshot());
+  assert.deepEqual(index.unattributed.map((entry) => entry.id), ['d-amb']);
+  assert.deepEqual(exchangeRows(index.newestFirst[0]!, NO_FILTER).rows.map((row) => row.type), ['frame']);
+});
+
+test('copying an exchange gives its original frame records in arrival order, and only those', async () => {
+  const session = await richSession();
+  const index = indexSession(session);
+  for (const entry of index.newestFirst) {
+    const copied = JSON.parse(copyFramesJson(entry)) as RawFrame[];
+    const expected = session.frames.filter((frame) => frame.exchangeId === entry.exchange.id);
+    assert.deepEqual(copied, expected, entry.exchange.id);
+    assert.deepEqual(copied.map((frame) => frame.index), expected.map((_, at) => at));
+    assert.ok(copied.every((frame) => frame.provenance === 'raw'));
+  }
+  const withDerived = index.newestFirst.find((entry) => entry.runLabel === 'r-proto')!;
+  assert.ok(!copyFramesJson(withDerived).includes('Expanded from'), 'client-derived entries are not copied as frames');
+});
+
+const render = (session: InspectionSession, patch: Partial<Parameters<typeof FramesPanel>[0]> = {}) =>
+  renderToStaticMarkup(
+    createElement(FramesPanel, {
+      session,
+      filter: NO_FILTER,
+      openExchanges: new Map<string, boolean>(),
+      openFrames: new Set<string>(),
+      onFilter: () => {},
+      onToggleExchange: () => {},
+      onToggleFrame: () => {},
+      onCopy: () => {},
+      ...patch,
+    }),
+  );
+
+test('the newest exchange is expanded first and older ones are collapsed', async () => {
+  const session = await richSession();
+  const html = render(session);
+  const headers = [...html.matchAll(/data-exchange-header="([^"]+)"[^>]*aria-expanded="(true|false)"/g)].map((match) => [match[1], match[2]]);
+  assert.deepEqual(headers.map(([id]) => id), session.exchanges.map((exchange) => exchange.id).reverse());
+  assert.deepEqual(headers.map(([, open]) => open), ['true', 'false', 'false', 'false', 'false', 'false']);
+  // Only the expanded exchange builds frame rows.
+  assert.equal((html.match(/data-frame-row=/g) ?? []).length, 0, 'the raw exchange has no frames');
+  assert.match(html, /Raw body, sent unchanged/);
+  assert.match(html, /422/);
+  assert.match(html, /threadId must be a string/);
+});
+
+test('an exchange the user opened shows its rows: offsets, types, summaries, verdicts, derived links', async () => {
+  const session = await richSession();
+  const baseline = session.exchanges[1]!;
+  const html = render(session, { openExchanges: new Map([[baseline.id, true]]), openFrames: new Set(['derived-1']) });
+  assert.equal((html.match(/data-frame-row=/g) ?? []).length, 30);
+  assert.match(html, /\+0\.\d{3}/, 'offsets as +s.mmm');
+  assert.match(html, /TEXT_MESSAGE_CHUNK/);
+  assert.match(html, /derived/);
+  assert.match(html, /Not on the wire/i);
+  assert.match(html, /data-derived-from="exchange-2:frame-\d+"/);
+  assert.match(html, /<button[^>]*data-frame-row="exchange-2:frame-0"[^>]*aria-expanded="false"/);
+});
+
+test('an expanded frame shows its findings and its raw text as received', async () => {
+  const session = await richSession();
+  const invalid = session.exchanges[2]!;
+  const bad = session.frames.find((frame) => frame.exchangeId === invalid.id && frame.jsonVerdict === 'invalid')!;
+  const html = render(session, { openExchanges: new Map([[invalid.id, true]]), openFrames: new Set([bad.id]) });
+  assert.match(html, /Data is not valid JSON/);
+  assert.match(html, /as received/);
+  assert.match(html, new RegExp(bad.data!.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/"/g, '&quot;')));
+  assert.match(html, /unparsed/);
+});
+
+test('filters show counts and shown/total on every exchange header', async () => {
+  const session = await richSession();
+  assert.doesNotMatch(render(session), /\d+\/\d+ frames/);
+  const html = render(session, { filter: filter({ families: new Set(['tool']) }) });
+  assert.match(html, /data-exchange-header="exchange-2"[^>]*>[\s\S]*?5\/30 frames/);
+  assert.match(html, /aria-pressed="true"[^>]*>[\s\S]{0,200}Tools/);
+  const none = render(session, { filter: filter({ query: 'zzz' }), openExchanges: new Map([[session.exchanges[1]!.id, true]]) });
+  assert.match(none, /No frames match the filter/, 'an expanded exchange without matches says so');
+});
+
+test('with no exchanges the list says so', () => {
+  const empty: InspectionSession = { id: 'e', exchanges: [], runs: [], frames: [], findings: [], derived: [] };
+  assert.match(render(empty), /No exchanges yet/);
+});
+
+test('the list carries the state a measurement needs: totals, shown and the interaction generation', async () => {
+  const session = await richSession();
+  const html = render(session, { generation: 7, openExchanges: new Map([[session.exchanges[1]!.id, true]]) });
+  assert.match(html, /data-testid="frames"[^>]*data-generation="7"/);
+  assert.match(html, /data-frame-total="\d+"/);
+  assert.match(html, /data-frame-shown="\d+"/);
+});
