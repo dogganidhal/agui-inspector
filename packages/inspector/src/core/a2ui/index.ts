@@ -41,8 +41,8 @@ export interface SurfaceSession<T extends ComponentApi> {
 }
 
 export interface SurfaceSessionOptions<T extends ComponentApi> {
-  /** Builds the one catalog surfaces resolve against; `report` hears about every refused resource. */
-  catalog(report: ReportBlocked): Catalog<T>;
+  /** Builds the catalog (or the same catalog under several ids) surfaces resolve against; `report` hears about every refused resource. */
+  catalog(report: ReportBlocked): Catalog<T> | readonly Catalog<T>[];
   /** Called only for an action a user triggered on a surface. */
   onAction(action: A2uiAction): void;
 }
@@ -90,7 +90,7 @@ export function createSurfaceSession<T extends ComponentApi>(options: SurfaceSes
   };
 
   const start = (): MessageProcessor<T> => {
-    const next = new MessageProcessor<T>([catalog], (payload) => options.onAction(toA2uiAction(payload)));
+    const next = new MessageProcessor<T>([catalog].flat(), (payload) => options.onAction(toA2uiAction(payload)));
     next.onSurfaceCreated((surface) => {
       surface.onError.subscribe((error) => note({ source: 'surface', message: error.message, surfaceId: surface.id }));
     });

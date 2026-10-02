@@ -17,9 +17,30 @@ does not edit, mask or filter received bytes, so the file contains whatever cros
 - If you find a secret in a recording, rotate the secret. Deleting the file does not recall copies.
 - Sessions live in the browser's memory only. The inspector never stores them on a server. A file exists only because you exported it.
 
-How a server that echoes an authentication token should be treated is an open decision (G-07 in
-the plan). Nothing here redacts or singles out such a value, and the format does not change when
-that decision is made: only the warning text could.
+## A token you entered and a server that repeats it
+
+A credential can end up near a recording in two ways. The inspector treats them differently
+(constitution 1.0.3, principle IV).
+
+- **A credential the inspector holds.** The token you enter lives in memory only. The inspector never
+  writes it into configuration, browser storage, a request recording, an inspection view, a log or an
+  export. The recorder does not read headers, and the file has no header fields, so there is nowhere for
+  the token to be copied from.
+- **Bytes the target sent.** A server can repeat your token in its answer, for example by logging the
+  request it received. Those bytes are the evidence of what the server did. The inspector keeps them
+  exactly as received, in capture and in the export, even when they contain the token you entered. It
+  does not redact, mask or hash them, and it does not check the file for your token.
+
+So an exported file can contain your token if, and only if, the server sent it back. The export dialog
+warns about that each time. If you find a token in a file, rotate it before you share the file.
+
+`tests/e2e/inspection/credential-echo.spec.ts` covers both. A scripted target
+(`examples/reference-agent/credential-echo.ts`) repeats a synthetic token in one frame with unusual
+spacing, non-ASCII text and `\r\n` delimiters. The test checks that the frame is identical on the
+clipboard and in the exported file, and that the warning appears before the download. It also checks
+that the token is absent from the configuration, the exported profile, browser storage, all requests
+except the chosen header on the one request to the target, the exchanges and runs in the file, and
+every field name that could hold a header.
 
 ## What a file contains
 
@@ -44,14 +65,16 @@ export of an imported file gives back the same bytes.
 
 - Request or response headers. No record has a field for them.
 - The authentication header name or token, the target URL of the connection, the abort controller
-  or any other live connection state.
+  or any other live connection state. This is about what the inspector holds: a token repeated inside
+  a received frame is the target's evidence and stays as sent (see above).
 - Anything executable. Import displays a recording; it never sends one of its requests, runs a
   preparation or starts a run, and it makes no network request of its own.
 
 Export writes an explicit list of fields for every record rather than serializing whatever object
-is in memory, so a stray field on an in-memory object cannot reach the file. The end-to-end test
-sends a real token to the scripted agent and checks that the exported file contains neither the
-token nor any field named after a header, cookie, token or credential.
+is in memory, so a stray field on an in-memory object cannot reach the file. The end-to-end tests
+send a synthetic token to a scripted agent and check that the exported file has no field named after a
+header, cookie, token or credential, and that the token appears in the file only inside frames the
+agent chose to echo.
 
 ## What import checks
 

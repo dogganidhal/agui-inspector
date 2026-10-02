@@ -27,13 +27,18 @@ switch, so the received content is always one click away.
 
 - Only `"version": "v0.9"` is accepted. An operation with no version, or with `v0.8`, is reported as unsupported
   and skipped. The renderer's own v0.8 adapter is never reached.
-- The only catalog is the official basic catalog, bundled with the page. Its id is
-  `https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json`. A `createSurface` that names another id
-  is reported as "Catalog not found". Nothing is fetched to resolve it, and catalog aliases are not supported
-  in 0.1.0.
-- The id above is the one the renderer package declares. `@ag-ui/a2ui-middleware` 0.0.11 falls back to a
-  different id (`.../v0_9/basic_catalog.json`) when an agent does not configure one. Those surfaces show the
-  catalog error until the agent sets its default catalog id or aliases are specified.
+- The only catalog is the official basic catalog, bundled with the page. It answers to exactly two ids:
+  - `https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json`, the id the renderer package declares;
+  - `https://a2ui.org/specification/v0_9/basic_catalog.json`, the default id of `@ag-ui/a2ui-middleware` 0.0.11
+    when an agent does not configure one. It is the one built-in alias.
+
+  Both ids resolve to the same bundled catalog with the same guards (see "Nothing leaves the page"), and
+  surfaces in one activity can use either. Nothing is fetched to resolve them, and the received `createSurface` is never rewritten:
+  the activity JSON and the recording still show the id the agent sent.
+- Any other id, including a near miss such as the middleware id with a trailing slash or a `v0_8` path, is
+  reported as "Catalog not found" with the entry as received. Nothing is fetched to resolve it.
+- General catalog aliases, such as mapping other ids onto the bundled catalog or loading a catalog from an
+  address, are not supported in 0.1.0. They are deferred to 1.0.0.
 
 ## How operations are applied
 
@@ -121,7 +126,7 @@ check:bundle:renderer` reports the room left with the renderer included.
 
 | Command | Covers |
 | --- | --- |
-| `npm run test:unit -- packages/inspector/tests/a2ui` | Create, update, delete and delta handling, malformed and non-list input, the action envelope, the `openUrl` guard, JSON-only and unknown-activity output, the stylesheet |
-| `npm run test:e2e -- tests/e2e/a2ui` | The real renderer in Chromium: callback data, scripted continuation, live updates, JSON-only mode, keyboard use, the network allowlist |
+| `npm run test:unit -- packages/inspector/tests/a2ui` | Create, update, delete and delta handling, malformed and non-list input, the action envelope, the `openUrl` guard, JSON-only and unknown-activity output, the stylesheet, and the two catalog ids (`catalog.test.ts`) |
+| `npm run test:e2e -- tests/e2e/a2ui` | The real renderer in Chromium: callback data, scripted continuation, live updates, JSON-only mode, keyboard use, the network allowlist, and an offline render and action round trip under each catalog id |
 
 Scenarios live in `examples/reference-agent/a2ui-scenarios.ts`. They need no model and no network.

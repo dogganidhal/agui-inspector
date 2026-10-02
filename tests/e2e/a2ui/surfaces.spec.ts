@@ -297,3 +297,79 @@ test('surfaces follow the theme tokens: an overridden radius reaches the rendere
   await expect.poll(() => field.evaluate((element) => getComputedStyle(element).borderTopLeftRadius)).not.toBe(before);
   expect(await field.evaluate((element) => getComputedStyle(element).borderTopLeftRadius)).toBe('15.4px');
 });
+
+// D03 T063 (FR-020, US3.4): the bundled catalog answers to the renderer's basic catalog id and to
+// middleware 0.0.11's default catalog id. Both render and round-trip an action offline, with the
+// operations as received; any other id stays a visible error.
+const MIDDLEWARE_CATALOG_ID = 'https://a2ui.org/specification/v0_9/basic_catalog.json';
+
+/** The same scenario addressed to another catalog id; only the id differs. */
+const addressedTo = (operations: readonly Record<string, unknown>[], catalogId: string) =>
+  operations.map((operation) => {
+    const { createSurface } = operation as { createSurface?: Record<string, unknown> };
+    return createSurface === undefined ? operation : { ...operation, createSurface: { ...createSurface, catalogId } };
+  });
+
+for (const [label, catalogId] of [
+  ['renderer basic catalog id', BASIC_CATALOG_ID],
+  ['middleware 0.0.11 default catalog id', MIDDLEWARE_CATALOG_ID],
+] as const) {
+  test(`the ${label} renders, calls back and round-trips offline`, async ({ page, site }) => {
+    const requests: string[] = [];
+    page.on('request', (request) => requests.push(request.url()));
+    await open(page, site);
+    await page.evaluate(() => window.__a2ui.continueWith(true));
+    const operations = addressedTo(formSurface, catalogId);
+    await feed(page, operations);
+
+    await expect(view(page)).toHaveAttribute('data-status', 'rendered');
+    await expect(page.getByRole('alert')).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Order check' })).toBeVisible();
+    await page.getByRole('textbox', { name: 'Note' }).fill('via ' + label);
+    await page.getByRole('button', { name: 'Send note' }).click();
+
+    const [action, ...rest] = await actions(page);
+    expect(rest).toEqual([]);
+    expect(action).toMatchObject({ name: 'send_note', surfaceId: 'form', sourceComponentId: 'send', context: { note: 'via ' + label, count: 1 } });
+    await expect(page.getByText(`Received send_note from send on form: {"note":"via ${label}","count":1}`)).toBeVisible();
+
+    await page.waitForTimeout(300);
+    expect(requests.filter((url) => !url.startsWith(`${site.origin}/`))).toEqual([]);
+    expect(requests.filter((url) => /catalog|a2ui\.org/.test(url))).toEqual([]);
+  });
+
+  test(`the ${label} keeps blocking what reaches outside the page`, async ({ page, site }) => {
+    const requests: string[] = [];
+    page.on('request', (request) => requests.push(request.url()));
+    await open(page, site);
+    await feed(page, addressedTo(externalResources, catalogId));
+
+    const surface = page.locator('[data-surface="media"]');
+    await expect(surface.locator('[data-blocked="Image"]')).toContainText(THIRD_PARTY_HOST);
+    await expect(surface.locator('img, video, audio, iframe')).toHaveCount(0);
+    await page.waitForTimeout(300);
+    expect(requests.filter((url) => !url.startsWith(`${site.origin}/`))).toEqual([]);
+  });
+}
+
+test('both catalog ids stay in the JSON view exactly as received when rendering is off', async ({ page, site }) => {
+  await open(page, site);
+  await page.evaluate(() => window.__a2ui.render(false));
+  await feed(page, addressedTo(formSurface, MIDDLEWARE_CATALOG_ID));
+  await expect(page.getByRole('region', { name: 'Operations of a2ui-surface-1', exact: true })).toContainText(MIDDLEWARE_CATALOG_ID);
+  await expect(page.getByRole('region', { name: 'Operations of a2ui-surface-1', exact: true })).not.toContainText(BASIC_CATALOG_ID);
+});
+
+test('an unsupported catalog id is still a visible error, never a fetch or a silent alias', async ({ page, site }) => {
+  const requests: string[] = [];
+  page.on('request', (request) => requests.push(request.url()));
+  await open(page, site);
+  for (const unknown of [`${MIDDLEWARE_CATALOG_ID}/`, 'https://a2ui.org/specification/v0_8/basic_catalog.json', 'https://catalog.invalid/custom.json']) {
+    await feed(page, addressedTo(formSurface, unknown));
+    await expect(page.getByRole('alert')).toContainText('Catalog not found');
+    await expect(page.getByRole('alert')).toContainText(unknown);
+    await expect(page.locator('[data-surface]')).toHaveCount(0);
+  }
+  await page.waitForTimeout(300);
+  expect(requests.filter((url) => !url.startsWith(`${site.origin}/`))).toEqual([]);
+});
