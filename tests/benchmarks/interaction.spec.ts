@@ -43,6 +43,8 @@ const manifest = JSON.parse(readFileSync(path.join(import.meta.dirname, 'manifes
 const sha256 = (text: string) => createHash('sha256').update(text, 'utf8').digest('hex');
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const CHUNK_SIZES = [1, 7, 64, 4096];
+/** The list reporter holds stdout until the test ends; this shows where a long run is. */
+const progress = (line: string) => process.stderr.write(`${line}\n`);
 
 /** Streams exchange `index` of the fixture at 50 frames a second, flushing every chunk on its own. */
 function benchmarkRoutes(): (pathname: string, response: ServerResponse) => boolean {
@@ -160,7 +162,7 @@ async function oneRun(browser: Browser, site: Site, label: string, log: (line: s
    * closing what an earlier expansion opened, finding a frame of the wanted kind, scrolling it into
    * view. What it returns is only the input itself and the checks to run on the answer.
    */
-  async function prepare(item: ReturnType<typeof planInteractions>[number], name: string): Promise<{ act(): Promise<Sample | undefined>; check(sample: Sample): Promise<void> } | undefined> {
+  async function prepare(item: ReturnType<typeof planInteractions>[number], name: string): Promise<{ stillValid(): Promise<boolean>; act(): Promise<Sample | undefined>; check(sample: Sample): Promise<void> } | undefined> {
     const before = await sampleCount();
     if (item.class === 'filter') {
       const turn = Math.floor(item.ordinal / 3);
@@ -179,6 +181,7 @@ async function oneRun(browser: Browser, site: Site, label: string, log: (line: s
         applied = () => void (state.filter.issues = !state.filter.issues);
       }
       return {
+        stillValid: async () => true,
         act: async () => {
           const sample = await sampleAfter(name, before, input);
           applied();
@@ -231,6 +234,8 @@ async function oneRun(browser: Browser, site: Site, label: string, log: (line: s
     await row.scrollIntoViewIfNeeded();
     const readyBefore = await sampleCount();
     return {
+      // A new exchange closes the one that was open by default, and its rows go with it.
+      stillValid: async () => (await row.count()) > 0,
       act: async () => {
         const sample = await sampleAfter(name, readyBefore, () => row.click());
         state.openFrame = chosen;
@@ -249,9 +254,11 @@ async function oneRun(browser: Browser, site: Site, label: string, log: (line: s
 
   for (const item of plan) {
     const name = `${item.index}:${item.class}:${item.variant}`;
-    const ready = await prepare(item, name);
+    progress(`${label} ${name}`);
+    let ready = await prepare(item, name);
     const wait = startedAt + item.atMs - performance.now();
     if (wait > 1) await sleep(wait);
+    if (ready && !(await ready.stillValid())) ready = await prepare(item, name);
     const sample = ready ? await ready.act() : undefined;
     if (sample && ready) await ready.check(sample);
 

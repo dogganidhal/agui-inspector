@@ -11,5 +11,6 @@ export default defineConfig({
   fullyParallel: false,
   forbidOnly: true,
   reporter: 'list',
-  use: { browserName: 'chromium', headless: process.env.BENCHMARK_HEADED !== '1' },
+  // A stalled step must fail with a message, not wait for the whole test timeout.
+  use: { browserName: 'chromium', headless: process.env.BENCHMARK_HEADED !== '1', actionTimeout: 15_000 },
 });
