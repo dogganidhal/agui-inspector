@@ -1,11 +1,11 @@
 # Implementation Plan: inspector 0.1.0 MVP
 
-**Branch**: `mvp/w0-plan` | **Date**: 2026-10-02 | **Spec**: [spec.md](spec.md)
+**Branch**: `mvp/w3-d00-record-release-decisions` | **Date**: 2026-10-02 | **Spec**: [spec.md](spec.md)
 
-**Input**: `specs/001-inspector-mvp/spec.md`, constitution 1.0.2, roadmap, and the repository PR template.
-`agui-inspector` is a working name only. The coordinator confirmed the unchanged spec is the reviewed
-planning baseline despite its Draft status and historical branch header. Spec Kit's directory
-override reports `001-inspector-mvp` as its feature identity; the actual Git branch is `mvp/w0-plan`.
+**Input**: `specs/001-inspector-mvp/spec.md`, constitution 1.0.3, roadmap, repository PR template,
+and maintainer-approved release decisions of 2026-10-02. W1/W2 are implemented on main (PRs #3-#18).
+`agui-inspector` is the approved npm/PyPI name; neither was registered on 2026-10-02.
+Spec Kit's directory override reports `001-inspector-mvp` as its feature identity.
 
 ## Summary
 
@@ -17,8 +17,8 @@ priority orders delivery rather than cutting scope.
 
 No CLI/proxy, in-app element, JS server helpers, non-SSE transports, plugins, conformance tooling,
 replay, automatic replies, Markdown conversation rendering, stable-v1 formats, or release operations
-are included. Do not create a LICENSE, publish packages/sites, create tags/releases, or choose
-license/package/upstream answers.
+are included in this decision-recording PR. W3 D01 implements the approved MIT LICENSE and notices;
+publication, tags and releases remain unauthorized, manifests remain private, and G-03 stays open.
 
 ## Technical Context
 
@@ -45,56 +45,56 @@ architecture satisfies the principle; it does not certify unbuilt runtime behavi
 
 | Principle/constraint | Pre-design | Post-design | Evidence, justification, or gate |
 | --- | --- | --- | --- |
-| I. Wire comes first | PASS | PASS except G-07 | F04/F05 preserve original response and raw frame text/order/time; raw sends retain entered JSON bytes; no fabricated terminal events. Echoed credentials remain a conflict, not an exception. |
+| I. Wire comes first | PASS | PASS | F04/F05 preserve original response and raw frame text/order/time, including target-supplied credential echoes; no redaction or fabricated terminal events. D03 proves echo retention end to end. |
 | II. Protocol, not framework | PASS | PASS | Required upstream packages; framework-free core; React only in views; explicit raw/expanded/client-derived separation; A2UI `/v0_9`. |
 | III. Generic core/presets | PASS | PASS | L01 templates/preparation/input composition; no server-specific branches; preparation errors prevent run dispatch. Plugins excluded. |
-| IV. Local/privacy | PASS except G-07 | UNRESOLVED G-07 | Memory-only auth, no recorder header access, no export headers, explicit allowlist/CSP, hosted no cookies, no server-side sessions. Raw-preservation versus server-echoed auth requires user decision. CLI clauses N/A. |
-| V. Small/auditable | PASS | PASS | Exact pins/locks, no lifecycle installs, dependency rationale, native primitives, no speculative plugin/service layers. F06 theming is plain CSS custom properties with no added dependency. |
+| IV. Local/privacy | PASS | PASS | Constitution 1.0.3 clarifies inspector-held credentials remain memory-only and are never written by the inspector; target evidence is unchanged with export warning. No recorder header access/export headers; allowlist/CSP unchanged; hosted no cookies or server-side sessions. D03 regression pending, not a policy block. CLI clauses N/A. |
+| V. Small/auditable | PASS | PASS | Exact pins/locks, no lifecycle installs, native primitives and CSS theming. D01's exact dompurify 3.4.16 root override/lock is a documented upstream-pin exception, removed when A2UI fixes its pin. |
 | VI. Every event view | PASS | PASS | 31 named fixture cases; L03/L04/L05 frame/conversation mapping, original chunks plus derived expansions; encrypted values never decoded. |
 | Architecture/distribution | PASS | PASS | Same bundle in static/npm/wheel; explicit Python enable switch/warning; strict TS/React/esbuild/node tests/Playwright/uv; optional Starlette; no excluded modes. |
 | Workflow/quality | INCOMPLETE: 50,000-frame criteria were missing | PASS planning criteria, execution pending | Measurable 5,000- and 50,000-frame profiles/thresholds/methods are now defined below; only 5,000-frame implementation/testing belongs to MVP tasks. F02 establishes required CI; absent infrastructure and unrun workloads are not counted as passed. |
 | Release/version governance | PASS | PASS with release blocked | Pre-stable version-0 local formats and migration docs; FR-040 provenance/trusted-publishing requirements preserved as documented gates; no publication/tags. Stable-v1 and 1.0.0 audits deferred. |
 
-**G1 approval is blocked on G-07:** incompatible guarantees are not silently resolved. This plan
-retains all non-conflicting privacy/raw requirements; it does not authorize redaction or a privacy
-exception. G-08 is a user decision about additional integration work, not permission for a W3 task.
-There are no justified constitution violations or approved complexity exceptions.
+**Maintainer resolution, 2026-10-02:** G-07 is closed by constitution PATCH 1.0.3; G-08 is closed
+without an extra integration PR. Exactly three W3 follow-up PRs are authorized below.
+There are no constitution violations or approved complexity exceptions; the DOMPurify override
+changes an upstream dependency pin, not principle V's exact-pin/lockfile rule.
 
 ## Open-decision and approval gates
 
-Every roadmap Open decisions item appears once; none has a chosen answer.
+All gate statuses are recorded below; G-03 through G-06 remain open.
 
-| Gate | Unchosen question | What it blocks | Decision owner |
+| Gate | Status / decision | Remaining work or block | Decision owner |
 | --- | --- | --- | --- |
-| G-01 license | Final license and dependency obligations; original MIT candidate is not adopted | LICENSE creation and any publication | Project maintainer/user, with dependency/legal review |
-| G-02 package-names | npm/PyPI availability of working name; conditional upstream namespace | Public package identities and publishing | Project maintainer/user; upstream namespace owner if relevant |
+| G-01 license | CLOSED: MIT; Copyright (c) 2026 Nidhal Dogga | D01 ships LICENSE and third-party notices in npm/wheel, including Apache-2.0 texts and any NOTICE for @a2ui/react, @a2ui/web_core, @a2ui/markdown-it; publishing still unauthorized under FR-040 | Project maintainer, 2026-10-02 |
+| G-02 package-names | CLOSED: agui-inspector on npm and PyPI, both unregistered on 2026-10-02 | @ag-ui/inspector remains conditional on upstream adoption (G-03); no registration/publication authorized | Project maintainer, 2026-10-02 |
 | G-03 upstream-placement | Whether upstream accepts `apps/inspector`, and when | Upstream submission/relocation/namespace commitments, not local MVP implementation | Project maintainer/user and upstream maintainers |
 | G-04 capability-discovery | Whether/when the protocol defines discovery | Any discovery beyond inline/configured URL | AG-UI protocol maintainers define mechanism; project maintainer selects future scope |
 | G-05 websocket-push | Protocol-defined WebSocket/push semantics | These transports and notifications; no inferred contract from capability names | AG-UI protocol maintainers, then project maintainer for a later release |
 | G-06 in-app-isolation | Element isolation with document-injected A2UI styles; unresolved shadow-root integration | In-app element/style architecture | Project maintainer/user after renderer integration research |
-| G-07 echoed-credentials | FR-008/principle I unchanged evidence versus FR-036/principle IV no recorded authentication credentials when a target echoes the entered token | G1 implementation approval for all F01-F06/L01-L07 slices; contradictory raw/privacy checks and full FR-008/FR-036/SC-008 sign-off | User/project maintainer via explicit spec clarification or constitution amendment |
-| G-08 post-W2 integration acceptance | Whether an extra integrated-main integration/acceptance PR is needed after independently owned lane PRs | Authorization for that extra PR and final acceptance sign-off if integration gaps remain | User/project maintainer at G1 |
-| G-09 theme-delivery | How hosts supply `--agui-*` overrides: a file next to the configuration, a configuration field, or host-page CSS only | Any product mechanism that loads adopter overrides; not F06 or the W2 views, which test overrides with a stylesheet loaded after the inspector's | Project maintainer/user |
+| G-07 echoed-credentials | CLOSED: adopt candidate, constitution 1.0.3 PATCH; inspector-held credentials isolated, target bytes unchanged, no redaction | D03 echo regression completes SC-008 credential acceptance; policy no longer blocks slices | Project maintainer, 2026-10-02 |
+| G-08 post-W2 integration acceptance | CLOSED: no extra integration PR; checkpoint 13 pass, 1 fail (F-01 embedded config path, fixed by #18), 2 pending | SC-008 credential part goes to D03; SC-009 physical M2 runner is run by maintainer | Project maintainer, 2026-10-02 |
+| G-09 theme-delivery | CLOSED: config.json theme with optional light/dark maps of documented public --agui-* names | D02 validates/applies in every MVP mode and Python helper; visible nonfatal warnings for invalid names/unsafe values, unchanged CSP | Project maintainer, 2026-10-02 |
 
-G-07 **candidate only**: interpret credential privacy as prohibiting inspector-originated recording
-of transport credentials, while preserving server-supplied echo payloads with the export warning.
-This interpretation has not been approved. An alternative changing/redacting raw evidence would
-also require explicit governance resolution; workers must not choose either.
+G-07 **candidate adopted**: principle IV and FR-036 cover credentials the inspector holds.
+Entered tokens stay in memory; the inspector never writes them to configuration, browser storage,
+recordings, views, logs or exports, and the recorder never reads headers. Target bytes are evidence
+under principle I/FR-008 and remain unchanged even when they echo credentials. Export retains its
+sensitive-data warning. No redaction anywhere. Constitution 1.0.3 records rationale, affected
+sections, compatibility impact and D03 follow-up; ratification is unchanged.
 
-**G-07 blocked checks:** F04/F05 raw capture/retention, L02 transport/run inspection, L03 conversation
-inspection, L04 frame/session display and export, L05 surface display, L06 embedded inspection and
-L07 assembled inspection cannot claim both unchanged echoed-token evidence and credential absence.
-Their full FR-008/FR-036 acceptance and integrated SC-008 credential-exclusion check remain blocked.
-Transport-only header injection, no recorder header access/export, volatile token clearing,
-credential-free profile/config storage and sensitive-payload warnings remain required; passing
-those non-conflicting checks does not clear G-07 or authorize any slice before G1.
+**G-07 formerly blocked checks, now resolved:** F04/F05 and L02-L07 retain all target evidence,
+including echoes, while excluding inspector-held auth from their own writes. FR-008/FR-036 no
+longer conflict. Header isolation/absence, token clearing, credential-free config/profile storage
+and export warnings remain required. D03 proves the byte-identical echoed frame, warning and
+absence of the entered token from configuration, browser storage, exported headers and request
+recordings; until that regression passes, the SC-008 credential part is pending, not blocked policy.
 
-G-08 would cover cross-lane assembly defects, complete SC-001 through SC-009 verification, network
-and packaging checks, and physical-runner benchmark evidence. Its reason is that isolated lane
-checks cannot certify all combined behavior. There is no W3 slice or automatic new scope: run the
-integrated checks after W2 merges, report gaps, and let the user decide whether a further PR is
-necessary. Publication additionally requires G-01/G-02, approved license obligations, reviewed
-tag-triggered CI builds, npm provenance and PyPI trusted publishing; FR-040 is not dropped.
+G-08 records the integrated-main checkpoint: 13 pass, 1 fail (F-01 embedded config path, fixed by
+PR #18), 2 pending (SC-008 credential part, D03; SC-009 physical M2, maintainer).
+No extra integration PR is authorized. Release verification still requires SC-009 on that runner,
+a manual smoke run in all MVP distribution modes, and publishing authorization/safeguards.
+FR-040 remains unchanged: reviewed tag-CI builds, npm provenance and PyPI trusted publishing.
 
 ## Architecture and interface boundaries
 
@@ -121,6 +121,13 @@ tag-triggered CI builds, npm provenance and PyPI trusted publishing; FR-040 is n
    capabilities/state, and the v0.9 renderer. Native editors/buttons and accessible names/keyboard
    focus suffice; no theme/framework dependency is required. Views style only through F06's plain-CSS
    `--agui-*` tokens and shared primitives, specified in [design/design.md](design/design.md).
+8. Every MVP mode loads `config.json`; its optional `theme.light`/`theme.dark` maps override only
+   the ten documented public names. Reject unknown/private names and unsafe values with visible
+   nonfatal configuration warnings. At minimum deny case-insensitive `url(`/`image-set(` including
+   whitespace before `(`, `@`, `;`, `{`, `}` and backslash escapes; values cannot request resources
+   or escape declarations. Apply light/dark selection without changing the CSP. The Python helper
+   accepts the same field. Scope generic derived tokens to the inspector mount root, including
+   dialogs/popovers in its subtree; they must not overwrite/inherit host generic tokens.
 
 Public contracts are in [contracts/mvp.md](contracts/mvp.md); entities and provenance distinctions
 are in [data-model.md](data-model.md). F01 defines the concrete shared TypeScript boundary types
@@ -319,10 +326,25 @@ Full-SC acceptance is pending rather than silently counted as passed during isol
 
 Missing infrastructure is W1 work. F02 runs all relevant checks as packages/tests appear, but explicitly
 reports not-yet-introduced suites as pending. Release verification requires every suite, no empty-suite
-or feature-skipped success. Local packaging and provenance-input verification are allowed; publishing,
-license creation, tags, releases, main pushes and merges are not part of the planner's work.
+or feature-skipped success. Local packaging/provenance checks and D01's approved license creation
+are allowed; publishing, tags, releases, main pushes and merges remain unauthorized.
+
+W3: D01 release-hygiene, D02 theme-delivery, D03 a2ui-catalog-and-credential-echo. Each is one PR
+depending only on main after this decision PR, with disjoint exact ownership in [tasks.md](tasks.md).
+D01 implements MIT/notices/metadata, exact DOMPurify 3.4.16 override and committed lock, Python
+3.10/3.14 CI and benchmark-doc cleanup. D02 implements config theme delivery and root-scoped
+derived tokens. D03 adds the single catalog-factory alias and credential-echo E2E regression.
+The M4 Pro headless benchmark result is informational; headed M2 SC-009 certification remains
+pending with the maintainer. No follow-up may publish, un-private manifests, tag, release or merge.
+
+**Recorded development measurement (#14):** Apple M4 Pro, 12 cores/48 GiB, macOS 26.7.1,
+headless Chromium 153.0.8010.12/Playwright 1.63.0; one warm-up and three measured runs. Each measured
+run retained 5,000 frames in ten exchanges with matching hashes, completed 200/200 interactions,
+and had 100/100 filters and 100/100 expansions within 200 ms (p95 31.0-32.6 ms; interaction lateness
+p95 40-66 ms). This is not the specified M2 headed runner and does not pass SC-009. D01 records this
+result in the stale benchmark docs; no profile substitution is authorized.
 
 ## Complexity Tracking
 
-None approved. G-07 is an unresolved requirement conflict, not a justified violation. G-08 is an
-authorization gate, not extra implementation scope.
+None approved. G-07/G-08/G-09 are resolved; G-03 through G-06 remain open. D01's documented
+DOMPurify override is compatible with principle V, not a constitution exception.

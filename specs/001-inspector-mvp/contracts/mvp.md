@@ -1,6 +1,6 @@
 # MVP interface contracts
 
-Working-name, version-0 contracts. Published stable JSON Schemas are a 1.0.0 obligation, not
+Approved-name (`agui-inspector` on npm/PyPI), version-0 contracts. Published stable JSON Schemas are a 1.0.0 obligation, not
 introduced here. F01 translates these boundaries into strict TypeScript types in
 `packages/inspector/src/contracts.ts`; W2 does not widen them without coordinated review.
 
@@ -10,6 +10,10 @@ One built directory contains index HTML, external JS/CSS, and all local renderer
 its location through `staticAssetsPath` and packages those files; it does not expose a CLI or JS
 server-mount helper. Python copies the identical built files into wheel and sdist package data.
 An installed wheel serves them using `importlib.resources`, without invoking Node or downloading.
+Both distributions include MIT LICENSE (`Copyright (c) 2026 Nidhal Dogga`) and third-party notices
+covering bundled dependencies, including Apache-2.0 texts and any NOTICE for `@a2ui/react`,
+`@a2ui/web_core` and `@a2ui/markdown-it`. npm's `files` includes notices; wheel/sdist package data
+includes them. Publishing remains unauthorized and private metadata remains in place.
 
 The proposed Python API follows the existing brief:
 
@@ -20,6 +24,7 @@ mount_inspector(
     app,
     agents=[Agent(id="support", url="/agents/support/stream")],
     enabled=settings.debug,
+    theme={"light": {"--agui-accent": "#2563eb"}, "dark": {"--agui-accent": "#93c5fd"}},
 )
 ```
 
@@ -38,6 +43,17 @@ as version 0, or explicit `version: 0`, and reject other versions visibly. Expor
 explicit version 0. Each agent requires unique `id` and `url`; optional `name`, `capabilities`
 (inline eleven-group declaration or URL), and `preset`. Embedded relative targets resolve against
 the page origin; hosted targets must be absolute permitted HTTP(S) URLs.
+
+Optional `theme` is `{ "light": { ...properties }, "dark": { ...properties } }`; either map may be
+omitted. The Python `mount_inspector(..., theme=...)` accepts the same shape and exposes it in adjacent
+`config.json`. Only the ten public names in [design](../design/design.md#public-properties) are accepted;
+values are strings. Unknown/non-public names, invalid shape/value types and unsafe values yield a
+visible nonfatal configuration warning, rejecting the affected overrides while preserving usable
+agent configuration. Omitted maps/properties keep their defaults. Values cannot initiate requests
+or escape declarations: at minimum reject case-insensitive `url(`/`image-set(`, including whitespace
+before `(`, `@`, `;`, `{`, `}` and backslash escapes. The CSP stays unchanged. Every MVP mode loads
+this field through `config.json`; effective overrides follow the existing automatic/manual theme
+selection. Generic derived tokens are declared on the inspector mount `#root`, not document `:root`.
 
 Preset variables have text/JSON kind and defaults; missing kind means text. Built-ins `threadId`,
 `runId`, `uuid` use Web Crypto, not an added UUID dependency. `uuid` is generated once per dispatch
@@ -58,6 +74,8 @@ profile forwarded properties override same-named preset properties. Tools/contex
 selected profile values, not concatenate duplicate tool names. Protocol-required A2UI action data
 and resume/tool-result fields cannot be overwritten by generic forwarded-property editing.
 No auth-header/token fields are accepted or serialized; unknown envelope/version errors are visible.
+`renderA2ui` changes display only and persists/exports without changing run inputs.
+`injectA2uiTool` remains the A2UI input-affecting control.
 
 ## Request, recording and security boundary
 
@@ -120,6 +138,11 @@ wait for all manual results and add corresponding tool messages. Argument fragme
 streaming and parse at completion; invalid arguments produce inspection errors, not dropped calls.
 
 A2UI renders `a2ui-surface` activity content's `a2ui_operations` using v0.9 bundled catalog packages.
+The catalog factory in `packages/inspector/src/views/a2ui/catalog.tsx` recognizes exactly one built-in
+alias: `https://a2ui.org/specification/v0_9/basic_catalog.json` (middleware 0.0.11 default) resolves
+to `https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json` (renderer basic catalog).
+This performs no network fetch and does not rewrite recorded operations; other aliases remain
+deferred to 1.0.0 and unsupported ids still produce visible renderer errors.
 Renderer-disabled and unknown activities remain JSON. Actions preserve
 `forwardedProps.a2uiAction.userAction.{name,surfaceId,sourceComponentId,context,timestamp}` and
 dispatch a new ordinary run with preparations. Tool injection uses the official `RENDER_A2UI_TOOL`
@@ -139,6 +162,7 @@ Preserve the old loaded session on failure. Successful import opens an inspectio
 initiates zero network requests. Same-version round trips preserve inspectable text/order/time/input.
 Future incompatible version-0 changes document migration in the changelog; no v1 promise is made.
 
-Absolute auth-echo behavior remains undecided under [G-07](../plan.md#open-decision-and-approval-gates).
-These contracts require transport credential isolation and header absence without selecting an
-exception to raw retention or credential privacy.
+G-07 is closed under constitution 1.0.3: credentials held by the inspector stay memory-only and are
+never written from auth state into configuration, browser storage, recordings, views, logs or exports.
+Target bytes remain unchanged evidence even when they echo credentials. No redaction; the export
+warning remains mandatory. The recorder never reads headers and exports contain no headers.

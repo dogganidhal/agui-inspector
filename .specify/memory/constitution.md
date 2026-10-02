@@ -1,3 +1,17 @@
+<!--
+Sync Impact Report
+Version: 1.0.2 -> 1.0.3 (PATCH clarification).
+Approval: project maintainer, 2026-10-02.
+Modified principle: IV. Local-only operation and credential privacy (title unchanged).
+Affected sections: principle IV; principle I remains unchanged.
+Added/removed sections: none.
+Rationale: distinguish credentials held by the inspector from evidence supplied by a target.
+Compatibility impact: no wire, saved-format or API change; no redaction or migration.
+Dependent artifacts: FR-036, SC-008, plan G-07 and checks, research, data model, contracts,
+quickstart, design and roadmap synchronized in this decision-recording PR.
+Follow-up: W3 D03 adds the credential-echo end-to-end regression.
+Deferred governance placeholders: none.
+-->
 # agui-inspector Constitution
 
 ## Core Principles
@@ -33,7 +47,10 @@ add server-specific core branches.
 The inspector MUST NOT send telemetry, analytics, or third-party requests. Page requests MUST go
 only to configured targets and the page's own origin for assets and configuration. CLI mode MUST
 reach targets through its local proxy. Authentication credentials MUST stay in memory only and
-MUST NOT enter configuration files, recordings, inspection views, logs, or exports. Entered tokens
+MUST NOT be written by the inspector into configuration files, browser storage, recordings,
+inspection views, logs, or exports. This guarantee covers credentials the inspector holds.
+Bytes supplied by a target are evidence under principle I and MUST be retained unchanged, even
+when they echo an entered credential; no redaction is permitted. Entered tokens
 MUST be cleared on reload or target change. The recorder MUST NOT read headers; session exports
 MUST contain no headers. Session exports MUST warn that raw frames may contain sensitive data.
 Captured sessions MUST NOT be stored server-side.
@@ -123,4 +140,4 @@ approval, reviewers MUST check applicable protocol, privacy, dependency, coverag
 and identify unresolved violations. Requirement changes MUST update acceptance criteria and
 documentation in the same change.
 
-**Version**: 1.0.2 | **Ratified**: 2026-10-01 | **Last Amended**: 2026-10-02
+**Version**: 1.0.3 | **Ratified**: 2026-10-01 | **Last Amended**: 2026-10-02

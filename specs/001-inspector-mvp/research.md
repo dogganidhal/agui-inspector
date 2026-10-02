@@ -1,7 +1,8 @@
 # Research: 0.1.0 inspector MVP
 
 Date: 2026-10-02. Scope and authority: [spec](spec.md), [constitution](../../.specify/memory/constitution.md),
-[roadmap](../../ROADMAP.md). `agui-inspector` is a working name, not a reserved package name.
+[roadmap](../../ROADMAP.md). `agui-inspector` is the approved npm/PyPI name; both were unregistered
+on 2026-10-02. Approval does not authorize registration or publishing.
 
 ## Protocol and renderer packages
 
@@ -22,6 +23,19 @@ Date: 2026-10-02. Scope and authority: [spec](spec.md), [constitution](../../.sp
   client fetch hook and sequence-error reporting, A2UI v0.9 action callback, and tool declaration
   together. A failed compatibility check is a visible blocker, not permission to downgrade the
   baseline. Renderer transitive networking must be checked in L05.
+- **Built-in compatibility alias (D03):** middleware 0.0.11 defaults to
+  `https://a2ui.org/specification/v0_9/basic_catalog.json`; the renderer uses
+  `https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json`. Add only that built-in alias
+  beside the bundled catalog factory in `packages/inspector/src/views/a2ui/catalog.tsx`.
+  Do not rewrite recorded operations or fetch catalogs. General aliases remain 1.0.0 scope.
+- **Documented upstream-pin exception (D01):** `@a2ui/markdown-it@0.2.0`, bundled transitively,
+  pins DOMPurify 3.4.11, affected by
+  [GHSA-c2j3-45gr-mqc4](https://github.com/advisories/GHSA-c2j3-45gr-mqc4) and
+  [GHSA-55q2-fjhq-7xh7](https://github.com/advisories/GHSA-55q2-fjhq-7xh7).
+  Root `package.json` MUST contain npm `"overrides": { "dompurify": "3.4.16" }` with the committed
+  lockfile resolving exactly 3.4.16. This avoids changing the required renderer or adding a direct
+  Markdown dependency. Remove the override when A2UI ships a fixed pin; document that change and
+  review the lockfile. Principle V remains satisfied: exact pin, committed lock, demonstrated need.
 - **Sources:** [core registry](https://registry.npmjs.org/@ag-ui/core/1.0.1),
   [client registry](https://registry.npmjs.org/@ag-ui/client/1.0.1),
   [middleware registry](https://registry.npmjs.org/@ag-ui/a2ui-middleware/0.0.11),
@@ -59,9 +73,10 @@ Date: 2026-10-02. Scope and authority: [spec](spec.md), [constitution](../../.sp
   endpoints/config/capabilities/preparation URLs get a visible error, not a proxy.
 - **Alternatives considered:** `connect-src *`, late permissive CSP, remote fonts/catalog fetches,
   a hosted proxy, and telemetry violate the approved privacy policy. A2UI uses bundled catalogs.
-- **Unresolved:** server-echoed authentication credentials conflict with exact raw retention.
-  [G-07](plan.md#open-decision-and-approval-gates) records the conflict and candidate interpretation;
-  no exception or redaction policy was adopted.
+- **Resolved G-07:** constitution 1.0.3 clarifies inspector-held credential isolation. Tokens stay
+  memory-only and are not copied by the inspector into settings/storage/recordings/views/logs/exports;
+  the recorder reads no headers. Target bytes, including echoes, remain unchanged evidence with
+  the export warning. No redaction. D03 supplies the end-to-end echo regression.
 - **Source:** [CSP guide](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CSP).
 
 ## Tooling and distribution
@@ -87,6 +102,13 @@ Date: 2026-10-02. Scope and authority: [spec](spec.md), [constitution](../../.sp
   package. The installed wheel must serve assets on a machine without Node.
 - **Alternatives considered:** downloading assets at startup or building in the host violates the
   distribution/privacy requirements. Python must not read/store captured sessions server-side.
+- **Approved release hygiene (D01):** MIT with `Copyright (c) 2026 Nidhal Dogga`; both distributions
+  ship LICENSE and a third-party notices file for bundled dependencies. Include Apache-2.0 license
+  text and any upstream NOTICE content for `@a2ui/react`, `@a2ui/web_core` and `@a2ui/markdown-it`;
+  inspect the bundled dependency closure rather than assuming those are the only obligations.
+  Include notices in npm `files` and wheel/sdist package data. License fields use MIT; manifests
+  remain private, Python retains its private classifier, and FR-040 publishing safeguards remain.
+  PR CI runs the Python tests on both 3.10 and 3.14.
 - **Sources:** [npm ignore-scripts](https://docs.npmjs.com/cli/v10/commands/npm-ci#ignore-scripts),
   [Python resources](https://docs.python.org/3.10/library/importlib.resources.html),
   [uv builds](https://docs.astral.sh/uv/guides/package/),
@@ -105,8 +127,11 @@ Date: 2026-10-02. Scope and authority: [spec](spec.md), [constitution](../../.sp
 - **Decision:** six chained W1 PRs and seven disjoint W2 PRs. W2 modules exercise their own public
   seams using scripted collaborators and frame fixtures; full-product acceptance runs on integrated
   main without adding W2 branch dependencies.
-- **Unresolved:** a possible subsequent integration PR is [G-08](plan.md#open-decision-and-approval-gates),
-  not an authorized third wave. All roadmap decisions remain named gates, not research choices.
+- **Resolved G-08:** integrated checkpoint: 13 pass, 1 fail (F-01 embedded config path, fixed by
+  PR #18), 2 pending (SC-008 credential part, D03; SC-009 physical M2 runner, maintainer).
+  No extra integration PR. Exactly three independent W3 release follow-ups are authorized.
+  The M4 Pro headless result is informational, not headed M2 certification; D01 updates the stale
+  measurement-pending lines in `docs/development.md` and `tests/benchmarks/profile.md`.
 
 ## Views and theming
 
@@ -122,11 +147,19 @@ Date: 2026-10-02. Scope and authority: [spec](spec.md), [constitution](../../.sp
   runtime dependency for markup that native elements already cover. CSS-in-JS adds runtime cost and
   can conflict with the page's content security policy. Per-lane styling cannot stay consistent
   across disjoint owners. Loading fonts from a font CDN breaks FR-037.
-- **Unresolved:** how hosts deliver overrides is [G-09](plan.md#open-decision-and-approval-gates).
+- **Resolved G-09 (D02):** `config.json` has optional `theme.light`/`theme.dark` string maps keyed by
+  documented public `--agui-*` names; all MVP modes load it, and Python accepts the same field.
+  Unknown/private names or unsafe values show nonfatal configuration warnings, not startup failure.
+  Reject request/declaration escape syntax: at minimum case-insensitive `url(`/`image-set(`,
+  including whitespace before `(`, `@`, `;`, `{`, `}` and backslash escapes. CSP stays unchanged.
+  Scope all generic derived tokens to the inspector's `#root` mount element, not document `:root`:
+  rendered dialogs/popovers remain DOM descendants even in the top layer; no view portal renders
+  outside it. Public theme properties remain the adopter contract. Host generic tokens must neither
+  override inspector derivations nor be overwritten by them.
 
 ## Phase 0 closure
 
 Technical implementation choices are resolved above, subject to the concrete F01 compatibility
-checks. G-01 through G-06 and G-09 are intentionally unchosen product decisions; G-07 and G-08 require the
-user's G1 review before they can authorize conflicting behavior or extra work. This is a gated
-design proposal, not a declaration that every implementation/release gate has passed.
+checks, completed in merged W1/W2. Maintainer decisions close G-01, G-02, G-07, G-08 and G-09;
+G-03 through G-06 remain open. W3 implements only the approved follow-ups. Policy closure is not a
+claim that D01-D03, physical SC-009, the all-mode manual smoke or publishing have passed.

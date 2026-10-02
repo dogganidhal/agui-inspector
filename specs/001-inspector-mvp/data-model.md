@@ -9,9 +9,10 @@ than locally redefined protocol schemas.
 
 | Entity | Fields and relationships | Validation/invariants |
 | --- | --- | --- |
-| Agent configuration | `id`, optional `name`, `url`, optional inline `capabilities` or capabilities URL, optional `preset`; configuration contains `agents[]` | Unique nonempty id; URL resolved according to mode and deployment policy; no credentials/header fields or URL userinfo |
+| Agent configuration | `id`, optional `name`, `url`, optional inline `capabilities` or capabilities URL, optional `preset`; configuration contains `agents[]` and optional `theme` | Unique nonempty id; URL resolved according to mode and deployment policy; no credentials/header fields or URL userinfo |
+| Theme configuration | Optional `theme.light` and `theme.dark` maps from the ten documented public `--agui-*` names to string values; accepted by browser config and Python helper | Unknown/private names, non-string values and request/declaration escape syntax are rejected with visible nonfatal configuration warnings; at minimum reject case-insensitive `url(`/`image-set(` (including whitespace before `(`), `@`, `;`, `{`, `}` and backslash escapes; CSP unchanged; valid config remains usable |
 | Preset | Variables keyed by name with default and text/JSON kind; ordered preparation method/path/body entries; forwarded properties; `messages: full \| turn`; quick-message strings | Full is default; undefined variables/invalid edited JSON fail visibly before dispatch; built-in threadId/runId/uuid cannot be redefined; no credential configuration |
-| Client profile | Protocol version, tools with JSON Schemas, context, A2UI render/tool-injection switches, message mode, forwarded properties | Validate with protocol types where applicable; unique tool names; only these settings persist/export; token/header state is not a field |
+| Client profile | Protocol version, tools with JSON Schemas, context, A2UI render/tool-injection switches, message mode, forwarded properties | `renderA2ui` is display-only and persists/exports without changing next input; `injectA2uiTool` changes tools; validate protocol types; unique tool names; token/header state is not a field |
 | Inspection session | Version, session id, ordered exchanges, runs, raw frames, and separate derived inspection data | In memory until explicit export; no header fields; import is inspect-only; unknown version/invalid references fail visibly before replacing active session |
 | Run | Thread/run/optional parent ids, recorded input, exchange id, start/end timing, observed protocol outcome/result, pending tool calls, interrupts, run findings | Protocol schema on ordinary input; no ordinary dispatch until preparation/reply barriers pass; run outcome is distinct from transport completion |
 | Exchange | Id, kind (`preparation`, `conversation`, `raw`), optional run link, method, path, exact request-body text, optional parsed body, optional response status/body text, start time, elapsed duration, transport status/error, frames | Every dispatched request gets one; status may be absent for transport errors; header access/storage excluded; path contains no credential userinfo |
@@ -57,6 +58,8 @@ including whitespace and key order; parsed JSON is only a validation/inspection 
 Client state, expanded chunks and calculated durations are labeled derived and cannot overwrite
 received evidence. Authentication headers are injected only at the guarded transport boundary.
 
-The server-echoed credential collision is unresolved [G-07](plan.md#open-decision-and-approval-gates).
-This model neither authorizes redaction nor claims an absolute no-echo guarantee. Raw sensitive
-payloads require the export warning regardless of that future decision.
+G-07 is resolved by constitution 1.0.3: inspector-held credentials are never copied from auth state
+into configuration, browser storage, recordings, views, logs or exports. Target-supplied bytes,
+including credential echoes, are retained unchanged; no redaction. Raw sensitive payloads always
+require the export warning. The one built-in middleware-default catalog alias changes renderer
+lookup only, never stored operations or raw frames; general catalog aliases remain deferred.
