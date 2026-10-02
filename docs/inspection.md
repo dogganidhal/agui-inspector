@@ -77,6 +77,10 @@ bound. The recorder reads promptly, so in practice it is the client branch that 
 connection fails or a run is aborted, bytes the platform had buffered but nobody had read yet are
 discarded by the stream itself. The recorder keeps everything it read before that point.
 
+Browsers hand the recorder's branch its own copy of each chunk. Some runtimes, such as Node 24, share
+one buffer between both branches, so a client that overwrites a chunk it has read could alter the
+recorder's view. The protocol client does not, and the recorder does not copy chunks to guard against it.
+
 ## Scenarios
 
 `examples/reference-agent/recorder-fixtures.ts` holds deterministic scenarios, with no model and no

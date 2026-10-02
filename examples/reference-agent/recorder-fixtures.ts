@@ -190,7 +190,7 @@ export function scenarioBody(scenario: RecorderScenario, signal?: AbortSignal): 
       const chunk = scenario.chunks[next];
       if (chunk !== undefined) {
         next += 1;
-        return controller.enqueue(chunk.slice());
+        return controller.enqueue(chunk);
       }
       if (scenario.ending === 'network-error') {
         // The failure arrives after the bytes before it were delivered, not in the same turn.

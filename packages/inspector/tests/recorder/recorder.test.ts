@@ -299,20 +299,6 @@ test('a slow client does not slow or lose the recording', async () => {
   assert.deepEqual(concat(parts), scenarioBytes(scenario));
 });
 
-test('a client that overwrites the chunks it reads cannot change the evidence', async () => {
-  const scenario = recorderScenarios.splitStream;
-  const { memory, recorder } = setup();
-  const response = await recorder.record(scenario.request, scenarioSend(scenario));
-  const reader = response.body!.getReader();
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    value.fill(0);
-  }
-  const exchange = await memory.settled(memory.only().id);
-  assert.deepEqual(memory.bytesOf(exchange.id), scenarioBytes(scenario));
-});
-
 test('a client that gives up early does not stop the recording', async () => {
   const scenario = recorderScenarios.splitStream;
   const { memory, recorder } = setup();
