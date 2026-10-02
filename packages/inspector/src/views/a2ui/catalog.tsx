@@ -29,3 +29,21 @@ export function createBundledCatalog(report: ReportBlocked): Catalog<ReactCompon
     basicCatalog.themeSchema,
   );
 }
+
+/**
+ * The id middleware 0.0.11 puts on its default catalog, `<spec>/basic_catalog.json`: the renderer's
+ * `<spec>/catalogs/basic/catalog.json` one level up. It is the only alias; others wait for 1.0.0.
+ */
+const MIDDLEWARE_CATALOG_ID = basicCatalog.id.replace('/catalogs/basic/catalog.json', '/basic_catalog.json');
+
+/**
+ * What a session resolves `createSurface` against: the bundled catalog, then the same catalog under
+ * the middleware id. Nothing is fetched and the operations are not rewritten; any other id is an error.
+ */
+export function createBundledCatalogs(report: ReportBlocked): Catalog<ReactComponentImplementation>[] {
+  const bundled = createBundledCatalog(report);
+  return [
+    bundled,
+    new Catalog(MIDDLEWARE_CATALOG_ID, bundled.protocolVersion, [...bundled.components.values()], [...bundled.functions.values()], bundled.themeSchema),
+  ];
+}

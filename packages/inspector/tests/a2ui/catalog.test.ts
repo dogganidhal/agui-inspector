@@ -1,0 +1,116 @@
+// D03 T063 (FR-020, FR-025, FR-037; US3.4): the bundled catalog answers to exactly two ids, the
+// renderer's basic catalog id and middleware 0.0.11's default one, and to no other. Both are driven
+// through the real renderer models and action callback with no fetch and no change to the operations.
+// Drawing in a browser is in tests/e2e/a2ui/surfaces.spec.ts.
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { basicCatalog } from '@a2ui/react/v0_9';
+import type { ReactComponentImplementation } from '@a2ui/react/v0_9';
+import type { A2uiAction, JsonValue } from '../../src/contracts.ts';
+import { createSurfaceSession } from '../../src/core/a2ui/index.ts';
+import { createBundledCatalog, createBundledCatalogs } from '../../src/views/a2ui/catalog.tsx';
+import {
+  BASIC_CATALOG_ID,
+  formSurface,
+  THIRD_PARTY_HOST,
+} from '../../../../examples/reference-agent/a2ui-scenarios.ts';
+
+const MIDDLEWARE_CATALOG_ID = 'https://a2ui.org/specification/v0_9/basic_catalog.json';
+
+const json = (value: unknown): JsonValue => JSON.parse(JSON.stringify(value));
+
+/** The same scenario, addressed to another catalog id. Only the id differs. */
+const withCatalog = (operations: readonly Record<string, unknown>[], catalogId: string) =>
+  operations.map((operation) => {
+    const { createSurface } = operation as { createSurface?: Record<string, unknown> };
+    return createSurface === undefined ? operation : { ...operation, createSurface: { ...createSurface, catalogId } };
+  });
+
+function session() {
+  const actions: A2uiAction[] = [];
+  const host = createSurfaceSession<ReactComponentImplementation>({
+    catalog: createBundledCatalogs,
+    onAction: (action) => void actions.push(action),
+  });
+  return { host, actions };
+}
+
+/** Any network use during a test is a failure. */
+function noFetch<T>(run: () => T): T {
+  const globals = globalThis as { fetch?: unknown };
+  const saved = globals.fetch;
+  globals.fetch = () => {
+    throw new Error('the catalog must not fetch');
+  };
+  try {
+    return run();
+  } finally {
+    globals.fetch = saved;
+  }
+}
+
+test('the two ids are the renderer basic catalog and the middleware default, nothing else', () => {
+  assert.equal(BASIC_CATALOG_ID, 'https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json');
+  const catalogs = createBundledCatalogs(() => undefined);
+  assert.deepEqual(catalogs.map((catalog) => catalog.id), [basicCatalog.id, MIDDLEWARE_CATALOG_ID]);
+  assert.equal(createBundledCatalog(() => undefined).id, basicCatalog.id, 'the single-catalog factory is unchanged');
+});
+
+test('the alias is the same guarded catalog under the middleware id', () => {
+  const reports: Array<{ kind: string; url: string }> = [];
+  const [basic, alias] = createBundledCatalogs((blocked) => void reports.push(blocked)) as [ReturnType<typeof createBundledCatalog>, ReturnType<typeof createBundledCatalog>];
+  assert.equal(alias.protocolVersion, basic.protocolVersion);
+  assert.deepEqual([...alias.components.keys()], [...basic.components.keys()]);
+  assert.deepEqual([...alias.functions.keys()], [...basic.functions.keys()]);
+  for (const [name, component] of basic.components) assert.equal(alias.components.get(name), component, `${name} is shared`);
+  for (const [name, fn] of basic.functions) assert.equal(alias.functions.get(name), fn, `${name} is shared`);
+  // The guard sits on the alias too: its openUrl reports instead of opening.
+  alias.functions.get('openUrl')!.execute({ url: `http://${THIRD_PARTY_HOST}/page` }, undefined as never);
+  assert.deepEqual(reports, [{ kind: 'openUrl', url: `http://${THIRD_PARTY_HOST}/page` }]);
+});
+
+for (const [label, catalogId] of [['renderer basic catalog id', BASIC_CATALOG_ID], ['middleware 0.0.11 default catalog id', MIDDLEWARE_CATALOG_ID]] as const) {
+  test(`the ${label} renders, round-trips an action and rewrites nothing`, async () => {
+    const operations = json(withCatalog(formSurface, catalogId));
+    const received = JSON.stringify(operations);
+    const { host, actions } = session();
+    noFetch(() => host.apply(operations));
+    const { surfaces, issues } = host.snapshot();
+    assert.deepEqual(issues, []);
+    assert.deepEqual(surfaces.map((surface) => surface.id), ['form']);
+    assert.equal(surfaces[0]!.defaultCatalog.id, catalogId);
+    assert.equal(JSON.stringify(operations), received, 'the received operations are never altered');
+
+    await surfaces[0]!.dispatchAction({ event: { name: 'send_note', context: { note: { path: '/note' }, count: { path: '/count' } } } }, 'send');
+    assert.equal(actions.length, 1);
+    assert.equal(actions[0]!.name, 'send_note');
+    assert.equal(actions[0]!.surfaceId, 'form');
+    assert.equal(actions[0]!.sourceComponentId, 'send');
+    assert.deepEqual(actions[0]!.context, { note: { path: '/note' }, count: { path: '/count' } });
+  });
+}
+
+test('any other catalog id, including a lookalike, is still a visible error', () => {
+  for (const unknown of [
+    'https://a2ui.org/specification/v0_9/basic_catalog.json/',
+    'https://a2ui.org/specification/v0_8/basic_catalog.json',
+    'https://a2ui.org/specification/v0_9/catalogs/basic/catalog',
+    'basic_catalog.json',
+    'https://catalog.invalid/custom.json',
+  ]) {
+    const { host } = session();
+    noFetch(() => host.apply(json(withCatalog(formSurface, unknown))));
+    const { surfaces, issues } = host.snapshot();
+    assert.deepEqual(surfaces.map((surface) => surface.id), [], unknown);
+    assert.ok(issues.some((issue) => issue.source === 'operation' && /catalog/i.test(issue.message)), `${unknown} is reported`);
+  }
+});
+
+test('both ids can address surfaces in the same activity', () => {
+  const { host } = session();
+  const first = withCatalog(formSurface, BASIC_CATALOG_ID);
+  const second = withCatalog(formSurface, MIDDLEWARE_CATALOG_ID).map((operation) => JSON.parse(JSON.stringify(operation).replaceAll('"form"', '"form-2"')));
+  host.apply(json([...first, ...second]));
+  assert.deepEqual(host.snapshot().issues, []);
+  assert.deepEqual(host.snapshot().surfaces.map((surface) => surface.id), ['form', 'form-2']);
+});

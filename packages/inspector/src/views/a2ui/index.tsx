@@ -4,7 +4,7 @@ import type { ReactComponentImplementation } from '@a2ui/react/v0_9';
 import type { A2uiAction, A2uiViewProps, JsonValue } from '../../contracts';
 import { A2UI_ACTIVITY_TYPE, createSurfaceSession, type SurfaceIssue, type SurfaceSession } from '../../core/a2ui/index';
 import { CodeBlock, Finding } from '../theme/primitives';
-import { createBundledCatalog } from './catalog';
+import { createBundledCatalogs } from './catalog';
 
 export { A2UI_ACTIVITY_TYPE };
 
@@ -53,7 +53,7 @@ function Rendered({ activityId, operations, onAction }: Pick<A2uiViewProps, 'act
   });
   const [session] = useState<SurfaceSession<ReactComponentImplementation>>(() => {
     const created = createSurfaceSession<ReactComponentImplementation>({
-      catalog: createBundledCatalog,
+      catalog: createBundledCatalogs,
       onAction: (action: A2uiAction) => latest.current(action),
     });
     created.apply(operations);

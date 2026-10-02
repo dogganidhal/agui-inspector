@@ -1,10 +1,12 @@
 // Loopback, model-free AG-UI fixture server for tests. Run: node examples/reference-agent/server.ts
 //   --port <n>            listen port (default 8787; 0 picks a free one)
 //   --allow-origin <url>  the single cross-origin page allowed to call it (default: none)
-// It binds 127.0.0.1 only, grants CORS to exactly one origin, never sets credentials headers and
-// never echoes request headers. Prints one JSON line, {"url": "..."}, when ready.
+// It binds 127.0.0.1 only, grants CORS to exactly one origin and never sets credentials headers.
+// /agent never echoes request headers; /credential-echo does, in one known frame, on purpose (D03).
+// Prints one JSON line, {"url": "..."}, when ready.
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { credentialEchoBody, credentialOf } from './credential-echo.ts';
 
 function option(name: string, fallback: string): string {
   const at = process.argv.indexOf(name);
@@ -36,7 +38,7 @@ const server = createServer(async (request, response) => {
   const { pathname } = new URL(request.url ?? '/', 'http://127.0.0.1');
 
   if (pathname === '/health' && request.method === 'GET') return json(response, 200, { ok: true });
-  if (pathname !== '/agent') return json(response, 404, { error: 'not found' });
+  if (pathname !== '/agent' && pathname !== '/credential-echo') return json(response, 404, { error: 'not found' });
 
   if (request.method === 'OPTIONS') {
     if (response.hasHeader('access-control-allow-origin')) {
@@ -59,6 +61,10 @@ const server = createServer(async (request, response) => {
   }
 
   const { threadId, runId } = input;
+  if (pathname === '/credential-echo') {
+    response.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store' });
+    return void response.end(credentialEchoBody(threadId, runId, credentialOf(request.headers)));
+  }
   const events = [
     { type: 'RUN_STARTED', threadId, runId },
     { type: 'TEXT_MESSAGE_START', messageId: 'msg-1', role: 'assistant' },
