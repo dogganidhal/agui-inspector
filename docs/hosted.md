@@ -35,7 +35,7 @@ user saves.
 | `version` | Optional. Only `0` is accepted. |
 | `mode` | `hosted` or `embedded`. Required. |
 | `allowedOrigins` | Hosted only. Each entry is one absolute `http` or `https` origin: no path, no credentials, no wildcard. |
-| `config` | Optional. Where the agent configuration comes from. Without it the page reads `config.json` beside itself. A URL here must be this page's origin or an allowed one. |
+| `config` | Optional. Where the agent configuration comes from. Without it the page reads `config.json` beside itself. A relative value is read beside the page too, so under a mount path such as `/tools/inspector/` it means `/tools/inspector/agents.json`; start it with `/` to read from the origin root. A URL here must be this page's origin or an allowed one. |
 
 The file in the build says `embedded` with no allowed origins, so a page deployed as shipped can reach
 its own origin and nothing else. If the file is missing the page behaves the same way. A file that
@@ -45,7 +45,7 @@ the reason; the page never guesses a wider policy. Unknown fields are errors so 
 
 ## What happens at startup
 
-1. The page reads `hosting-config.json` from its own origin. This is the only request made under the
+1. The page reads `hosting-config.json` from beside itself, on its own origin. This is the only request made under the
    static policy in `index.html`. It uses the page's own credentials, follows no redirect and is never
    cached.
 2. The page turns the file into two things built from the same origin list: the policy the guarded

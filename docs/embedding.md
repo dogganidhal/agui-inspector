@@ -44,7 +44,7 @@ With the default path the helper adds:
 | --- | --- |
 | `GET /agui-inspector` | A 307 redirect to `/agui-inspector/`, keeping the query string, so the page's relative script URL resolves. |
 | `GET /agui-inspector/` | The inspector page. |
-| `GET /agui-inspector/config.json` | The version-0 configuration built from `agents`: `{"version": 0, "agents": [...]}`. Fields left as `None` are omitted. |
+| `GET /agui-inspector/config.json` | The version-0 configuration built from `agents`: `{"version": 0, "agents": [...]}`. Fields left as `None` are omitted. The page reads it from beside itself, so a custom `path` works the same way. |
 | `GET /agui-inspector/<file>` | A packaged asset, including nested ones. Anything else is a 404. |
 
 Other methods are rejected. There are no session endpoints, no storage and no proxy for the agent:

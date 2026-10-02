@@ -78,9 +78,12 @@ export async function startPage(env: StartupEnvironment): Promise<StartResult> {
   const runtime = createRuntime({ store, policy, settings: () => settings, fetch: env.fetch });
   const problems: string[] = [];
 
+  // Relative to the page, like `hosting-config.json`: the guarded transport alone would resolve it against the origin root.
+  const configName = hosting.value.config ?? DEFAULT_CONFIG_FILE;
+  const readText = guardedFetchText(runtime.transport);
   // A page with no `config.json` is allowed: the user types an endpoint. One that exists but is
   // wrong, or that the policy refuses, is an error to show.
-  const loaded: Result<ParsedConfig> = await loadConfig(hosting.value.config ?? DEFAULT_CONFIG_FILE, guardedFetchText(runtime.transport));
+  const loaded: Result<ParsedConfig> = await loadConfig(configName, () => readText(new URL(configName, env.baseUrl).href));
   let agents: readonly AgentConfig[] = [];
   if (loaded.ok) agents = loaded.value.agents;
   else if (hosting.value.config !== undefined || !NOT_FOUND.test(loaded.error)) problems.push(loaded.error);

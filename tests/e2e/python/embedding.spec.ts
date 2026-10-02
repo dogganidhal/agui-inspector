@@ -33,11 +33,11 @@ async function freePort(): Promise<number> {
   return port;
 }
 
-async function startHost(debug: boolean): Promise<{ host: Host; stop(): void }> {
+async function startHost(debug: boolean, script = 'examples/fastapi/app.py'): Promise<{ host: Host; stop(): void }> {
   const port = await freePort();
   const child: ChildProcess = spawn(
     'uv',
-    ['run', '--project', 'packages/python', '--locked', '--extra', 'embedded', '--group', 'test', 'python', 'examples/fastapi/app.py', '--port', String(port)],
+    ['run', '--project', 'packages/python', '--locked', '--extra', 'embedded', '--group', 'test', 'python', script, '--port', String(port)],
     { cwd: root, env: { ...process.env, EXAMPLE_USER: USER, EXAMPLE_PASSWORD: PASSWORD, EXAMPLE_DEBUG: debug ? '1' : '0' }, stdio: ['ignore', 'pipe', 'pipe'] },
   );
   let stderr = '';
@@ -47,13 +47,13 @@ async function startHost(debug: boolean): Promise<{ host: Host; stop(): void }> 
   child.on('exit', () => (exited = true));
   const origin = `http://127.0.0.1:${port}`;
   for (let attempt = 0; attempt < 600; attempt++) {
-    if (exited) throw new Error(`examples/fastapi/app.py exited early:\n${stderr}`);
+    if (exited) throw new Error(`${script} exited early:\n${stderr}`);
     const up = await fetch(origin).then(() => true, () => false);
     if (up) return { host: { origin, stderr: () => stderr }, stop: () => void child.kill() };
     await new Promise((resolve) => setTimeout(resolve, 200));
   }
   child.kill();
-  throw new Error(`examples/fastapi/app.py did not start:\n${stderr}`);
+  throw new Error(`${script} did not start:\n${stderr}`);
 }
 
 /** A generic static file server: the npm assets plus an adjacent config.json, and nothing else. */
@@ -82,7 +82,7 @@ function assetFiles(): string[] {
     .sort();
 }
 
-const test = base.extend<{ requested: string[] }, { enabled: Host; disabled: Host }>({
+const test = base.extend<{ requested: string[] }, { enabled: Host; disabled: Host; custom: Host }>({
   enabled: [
     async ({}, use) => {
       // The stage step needs only an existing build; it never rebuilds under parallel specs.
@@ -97,6 +97,15 @@ const test = base.extend<{ requested: string[] }, { enabled: Host; disabled: Hos
   disabled: [
     async ({ enabled: _enabled }, use) => {
       const { host, stop } = await startHost(false);
+      await use(host);
+      stop();
+    },
+    { scope: 'worker', timeout: 180_000 },
+  ],
+
+  custom: [
+    async ({ enabled: _enabled }, use) => {
+      const { host, stop } = await startHost(true, 'tests/e2e/python/custom_mount_host.py');
       await use(host);
       stop();
     },
@@ -249,3 +258,25 @@ test('another server can serve the same assets beside a config file', async ({ p
     await other.close();
   }
 });
+
+// F-01: the page asked for the origin-root /config.json under a mount path, so no configured agent was listed.
+for (const [name, mount, host] of [
+  ['the default mount', '/agui-inspector', 'enabled'],
+  ['a custom mount', '/tools/inspector', 'custom'],
+] as const) {
+  for (const slash of ['', '/']) {
+    test(`${name}, opened as ${mount}${slash}, reads its files beside the page and lists the configured agent`, async ({ page, requested, enabled, custom }) => {
+      const origin = { enabled, custom }[host].origin;
+      await page.goto(`${origin}${mount}${slash}`);
+      // The first configured agent is selected at the start, so its endpoint is the target.
+      await expect(page.getByRole('textbox', { name: 'Endpoint URL' })).toHaveValue('/agents/demo/stream');
+
+      const paths = requested.map((url) => new URL(url).pathname);
+      expect(paths).toContain(`${mount}/hosting-config.json`);
+      expect(paths).toContain(`${mount}/config.json`);
+      expect(paths, 'nothing is requested from the origin root').not.toContain('/config.json');
+      expect(paths).not.toContain('/hosting-config.json');
+      expect(paths.filter((path) => /\.(js|css)$/.test(path)).every((path) => path.startsWith(`${mount}/`))).toBe(true);
+    });
+  }
+}
