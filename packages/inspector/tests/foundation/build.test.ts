@@ -15,8 +15,12 @@ before(() => {
 });
 after(() => rmSync(outdir, { recursive: true, force: true }));
 
-test('the build emits index.html and one script, nothing else', () => {
-  assert.deepEqual(readdirSync(outdir).sort(), ['app.js', 'index.html']);
+test('the build emits index.html and one script, plus app.css once a view imports the theme, nothing else', () => {
+  const emitted = readdirSync(outdir).sort();
+  assert.ok(
+    ['app.js,index.html', 'app.css,app.js,index.html'].includes(emitted.join(',')),
+    `unexpected build output: ${emitted.join(', ')}`,
+  );
 });
 
 test('index.html loads scripts only from its own origin and has no inline script', () => {
