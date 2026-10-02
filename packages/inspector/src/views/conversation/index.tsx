@@ -1,15 +1,383 @@
-import type { ReactElement } from 'react';
-import type { ConversationViewProps } from '../../contracts';
+// The conversation view (design.md: Conversation). Composes F06 primitives; every entry comes from the
+// projection, which builds it from valid received frames. Text is rendered as text: React escapes it,
+// there is no Markdown or HTML path. Encrypted reasoning shows metadata only.
+//
+// Replying (interrupt answers, tool results, the composer) is the connection lane's, so this view
+// shows outcomes and pending states but offers no reply controls; see docs/event-views.md.
+//
+// Styling: this module imports no stylesheet, so importing it never changes what the build emits. The
+// assembly loads the theme (views/theme/index.ts) and ./conversation.css; see docs/event-views.md.
+import { useState, type ReactElement, type ReactNode } from 'react';
+import type { ConversationViewProps, FrameId, JsonValue, RawFrame } from '../../contracts';
+import type {
+  ActivityEntry,
+  ConversationEntry,
+  Delta,
+  EncryptedEntry,
+  MessageEntry,
+  ReasoningEntry,
+  RunEntry,
+  RunStatus,
+  StepEntry,
+  SubagentEntry,
+  ToolCallEntry,
+} from '../../core/projection/index';
+import { Card, CardBody, CardFooter, CardHeader, CodeBlock, FamilyDot, Finding, Icon, Label, SegmentedControl, Tag, type TagVariant } from '../theme/primitives';
+import { DERIVED_NOTE, Disclosure, FrameRef, formatMs, formatOffset, useProjection } from './shared';
+import { SnapshotMarker } from './state';
 
-/** Scaffold only: transcript, interrupt and tool-result replies are not implemented yet. */
-export function ConversationView(_props: ConversationViewProps): ReactElement {
+/** An optional hook for the assembly: draws an activity's content (an A2UI surface) inside its card. */
+export interface ConversationViewExtras {
+  renderActivity?(entry: ActivityEntry): ReactNode;
+}
+
+type Frames = ReadonlyMap<FrameId, RawFrame>;
+
+const pretty = (value: JsonValue): string => JSON.stringify(value, null, 2) ?? '';
+
+/** JSON gets pretty-printed and highlighted; anything else stays exactly the text it is. */
+function Payload({ text, label }: { text: string; label: string }): ReactElement {
+  try {
+    return <CodeBlock text={pretty(JSON.parse(text) as JsonValue)} aria-label={label} />;
+  } catch {
+    return <CodeBlock text={text} format="raw" aria-label={label} />;
+  }
+}
+
+function Deltas({ deltas, frames, label }: { deltas: readonly Delta[]; frames: Frames; label: string }): ReactElement | null {
+  if (deltas.length === 0) return null;
   return (
-    <section aria-labelledby="conversation-heading" data-view="conversation" data-status="not-implemented">
+    <Disclosure summary={<span className="agui-conv-muted">{deltas.length} {deltas.length === 1 ? 'delta' : 'deltas'}</span>} className="agui-conv-deltas">
+      <ol className="agui-conv-deltalist" aria-label={label}>
+        {deltas.map((delta, i) => (
+          <li key={i}>
+            <span className="agui-conv-mono agui-conv-faint">{formatOffset(delta.offsetMs)}</span>
+            <FrameRef frameId={delta.frameId} frames={frames} />
+            <span className="agui-conv-mono agui-conv-value">{delta.text}</span>
+          </li>
+        ))}
+      </ol>
+    </Disclosure>
+  );
+}
+
+// ---- run header ----
+
+const OUTCOME: Record<RunStatus, { label: string; variant: TagVariant }> = {
+  streaming: { label: 'Streaming', variant: 'accent' },
+  finished: { label: 'Finished', variant: 'ok' },
+  interrupted: { label: 'Interrupted', variant: 'accent' },
+  cancelled: { label: 'Cancelled', variant: 'neutral' },
+  error: { label: 'Error', variant: 'err' },
+  stopped: { label: 'Stopped by you', variant: 'warn' },
+  'no-terminal': { label: 'No terminal event', variant: 'warn' },
+};
+
+function RunHeader({ run }: { run: RunEntry }): ReactElement {
+  const outcome = OUTCOME[run.status];
+  const notes = [
+    run.interrupts.length > 0 && `${run.interrupts.length} ${run.interrupts.length === 1 ? 'interrupt' : 'interrupts'}`,
+    run.pendingToolCallIds.length > 0 && `${run.pendingToolCallIds.length} pending tool ${run.pendingToolCallIds.length === 1 ? 'call' : 'calls'}`,
+  ].filter(Boolean);
+  return (
+    <div className="agui-conv-run" data-entry="run" data-status={run.status}>
+      <div className="agui-conv-rulehead">
+        <b className="agui-conv-mono">{run.runId ?? 'run'}</b>
+        {run.parentRunId !== undefined && <span className="agui-conv-mono agui-conv-muted" title="Parent run">← {run.parentRunId}</span>}
+        <Tag variant={outcome.variant} pulse={run.status === 'streaming'}>{outcome.label}</Tag>
+        {run.durationMs !== undefined && <span className="agui-conv-mono agui-conv-muted" title={DERIVED_NOTE}>{formatMs(run.durationMs)}</span>}
+        {notes.length > 0 && <span className="agui-conv-muted">{notes.join(' · ')}</span>}
+        <span className="agui-conv-rule" />
+      </div>
+      {run.carried.length > 0 && <div className="agui-conv-sub">Carried: {run.carried.map((item) => <span key={item} className="agui-conv-mono"> {item}</span>)}</div>}
+      {run.error !== undefined && (
+        <Finding variant="err" kind={run.error.code ?? 'RUN_ERROR'}>
+          {run.error.message}
+        </Finding>
+      )}
+      {run.transportError !== undefined && (
+        <Finding variant="warn" kind="Connection">
+          {run.transportError}
+        </Finding>
+      )}
+      {run.status === 'no-terminal' && (
+        <Finding variant="warn" kind="Outcome unknown">
+          The stream ended without RUN_FINISHED or RUN_ERROR. No outcome is shown because none was received.
+        </Finding>
+      )}
+      {run.result !== undefined && (
+        <Disclosure summary={<span className="agui-conv-muted">Result</span>}>
+          <CodeBlock text={pretty(run.result)} aria-label="Run result" />
+        </Disclosure>
+      )}
+    </div>
+  );
+}
+
+// ---- messages and reasoning ----
+
+function MessageBlock({ entry, frames }: { entry: MessageEntry; frames: Frames }): ReactElement {
+  return (
+    <div className="agui-conv-msg" data-entry="message" data-role={entry.role}>
+      <div className="agui-conv-who">
+        <Label>{entry.role}</Label>
+        <Tag variant="neutral">{entry.messageId}</Tag>
+        {entry.name !== undefined && <Tag variant="line">{entry.name}</Tag>}
+        {entry.fromChunk && <Tag variant="dashed" title="Opened by a chunk event; the original chunk stays in the frames list">from TEXT_MESSAGE_CHUNK</Tag>}
+        {entry.origin === 'snapshot' && <Tag variant="dashed">from MESSAGES_SNAPSHOT</Tag>}
+        {entry.extraParts > 0 && <Tag variant="line">{entry.extraParts} non-text {entry.extraParts === 1 ? 'part' : 'parts'}</Tag>}
+      </div>
+      <div className={entry.live ? 'agui-conv-body agui-caret' : 'agui-conv-body'}>{entry.text}</div>
+      <Deltas deltas={entry.deltas} frames={frames} label={`Deltas of ${entry.messageId}`} />
+    </div>
+  );
+}
+
+function ReasoningBlock({ entry, frames }: { entry: ReasoningEntry; frames: Frames }): ReactElement {
+  return (
+    <div className="agui-conv-reason" data-entry="reasoning">
+      <Disclosure
+        defaultOpen
+        summary={
+          <>
+            <FamilyDot family="reason" />
+            <span>Reasoning</span>
+            <Tag variant="neutral">{entry.messageId}</Tag>
+            {entry.fromChunk && <Tag variant="dashed" title="Opened by a chunk event; the original chunk stays in the frames list">from REASONING_MESSAGE_CHUNK</Tag>}
+            {entry.live && <Tag variant="accent" pulse>Streaming</Tag>}
+          </>
+        }
+      >
+        <div className={entry.live ? 'agui-conv-body agui-conv-reasontext agui-caret' : 'agui-conv-body agui-conv-reasontext'}>{entry.text}</div>
+        <Deltas deltas={entry.deltas} frames={frames} label={`Deltas of ${entry.messageId}`} />
+      </Disclosure>
+    </div>
+  );
+}
+
+function EncryptedMarker({ entry, frames }: { entry: EncryptedEntry; frames: Frames }): ReactElement {
+  return (
+    <div className="agui-conv-marker" data-entry="encrypted">
+      <Icon name="lock" size={14} />
+      <b>Encrypted reasoning</b>
+      <Tag variant="line">{entry.subtype}</Tag>
+      <Tag variant="line">{entry.entityId}</Tag>
+      <Tag variant="line">{entry.size} bytes</Tag>
+      <span>not decoded</span>
+      {entry.frames[0] !== undefined && <FrameRef frameId={entry.frames[0]} frames={frames} />}
+    </div>
+  );
+}
+
+// ---- tool calls ----
+
+function ToolBlock({ entry, frames }: { entry: ToolCallEntry; frames: Frames }): ReactElement {
+  const status = entry.result
+    ? { label: 'Result received', variant: 'ok' as const }
+    : entry.pending
+      ? { label: 'Pending result', variant: 'warn' as const }
+      : entry.live
+        ? { label: 'Streaming arguments', variant: 'accent' as const }
+        : { label: 'No result', variant: 'neutral' as const };
+  return (
+    <Card data-entry="tool" data-tool-call={entry.toolCallId}>
+      <CardHeader>
+        <FamilyDot family="tool" />
+        <b className="agui-conv-mono">{entry.name}</b>
+        {entry.side && <Tag variant="line">{entry.side} tool</Tag>}
+        <Tag variant="neutral">{entry.toolCallId}</Tag>
+        {entry.fromChunk && <Tag variant="dashed" title="Opened by a chunk event; the original chunk stays in the frames list">from TOOL_CALL_CHUNK</Tag>}
+        <Tag variant={status.variant} pulse={entry.live}>{status.label}</Tag>
+      </CardHeader>
+      <CardBody>
+        <div>
+          <Label>Arguments</Label>
+          {entry.argsParsed !== undefined ? (
+            <CodeBlock text={pretty(entry.argsParsed)} aria-label={`Arguments of ${entry.name}`} />
+          ) : (
+            <CodeBlock text={entry.argsText} format="raw" aria-label={`Arguments of ${entry.name}, as streamed`} />
+          )}
+          {entry.argsError !== undefined && (
+            <Finding variant="err" kind="Arguments">
+              {entry.argsError}
+            </Finding>
+          )}
+          <Deltas deltas={entry.argsDeltas} frames={frames} label={`Argument fragments of ${entry.toolCallId}`} />
+        </div>
+        {entry.result && (
+          <div>
+            <Label>Result{entry.result.origin === 'entered' ? ' · entered by you' : ''}</Label>
+            <Payload text={entry.result.content} label={`Result of ${entry.name}`} />
+          </div>
+        )}
+      </CardBody>
+      {(entry.pending || entry.result?.carriedBy !== undefined) && (
+        <CardFooter>
+          {entry.pending && 'Waiting for the application to supply a result in the next run.'}
+          {entry.result?.carriedBy !== undefined && <>Carried by run <span className="agui-conv-mono">{entry.result.carriedBy}</span></>}
+        </CardFooter>
+      )}
+    </Card>
+  );
+}
+
+// ---- steps, subagents, activities, markers ----
+
+function StepBlock({ entry, frames, extras }: { entry: StepEntry; frames: Frames; extras: ConversationViewExtras }): ReactElement {
+  return (
+    <div className="agui-conv-step" data-entry="step">
+      <Disclosure
+        defaultOpen
+        summary={
+          <>
+            <span>Step</span>
+            <b className="agui-conv-mono">{entry.stepName}</b>
+            {entry.live ? <Tag variant="accent" pulse>Running</Tag> : entry.durationMs !== undefined && <span className="agui-conv-mono agui-conv-muted" title={DERIVED_NOTE}>{formatMs(entry.durationMs)}</span>}
+          </>
+        }
+      >
+        <div className="agui-conv-stepbody">
+          <Entries list={entry.children} frames={frames} extras={extras} />
+        </div>
+      </Disclosure>
+    </div>
+  );
+}
+
+const PHASE: Record<SubagentEntry['lines'][number]['phase'], { label: string; variant: TagVariant }> = {
+  started: { label: 'started', variant: 'neutral' },
+  finished: { label: 'finished', variant: 'ok' },
+  error: { label: 'error', variant: 'err' },
+};
+
+function SubagentBlock({ entry, frames }: { entry: SubagentEntry; frames: Frames }): ReactElement {
+  return (
+    <div className="agui-conv-nest" data-entry="subagent" data-subagent={entry.subagentRunId}>
+      <div className="agui-conv-who">
+        <Icon name="branch" size={14} />
+        <b>Subagent</b>
+        {entry.name !== undefined && <span className="agui-conv-mono">{entry.name}</span>}
+        <Tag variant="neutral">{entry.subagentRunId}</Tag>
+        {entry.parentRunId !== undefined && <span className="agui-conv-muted">under run <span className="agui-conv-mono">{entry.parentRunId}</span></span>}
+        {entry.parentToolCallId !== undefined && <span className="agui-conv-muted">via tool call <span className="agui-conv-mono">{entry.parentToolCallId}</span></span>}
+      </div>
+      {entry.description !== undefined && <div className="agui-conv-muted">{entry.description}</div>}
+      <ul className="agui-conv-lines">
+        {entry.lines.map((line, i) => (
+          <li key={i}>
+            <Tag variant={PHASE[line.phase].variant}>{PHASE[line.phase].label}</Tag>
+            <span className="agui-conv-mono agui-conv-faint">{formatOffset(line.offsetMs)}</span>
+            {line.outcome !== undefined && <Tag variant="line">{line.outcome}</Tag>}
+            {line.code !== undefined && <Tag variant="line">{line.code}</Tag>}
+            {line.detail !== undefined && <span className="agui-conv-value">{line.detail}</span>}
+            <FrameRef frameId={line.frameId} frames={frames} />
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function ActivityBlock({ entry, extras }: { entry: ActivityEntry; extras: ConversationViewExtras }): ReactElement {
+  const rendered = extras.renderActivity?.(entry);
+  const [mode, setMode] = useState<'rendered' | 'json'>('rendered');
+  const showRendered = rendered !== undefined && rendered !== null && mode === 'rendered';
+  return (
+    <Card data-entry="activity" data-activity={entry.messageId}>
+      <CardHeader>
+        <FamilyDot family="activity" />
+        <b>Activity</b>
+        <Tag variant="neutral">{entry.activityType}</Tag>
+        <Tag variant="neutral">{entry.messageId}</Tag>
+        {entry.patches > 0 && <Tag variant="line">{entry.patches} {entry.patches === 1 ? 'patch' : 'patches'}</Tag>}
+        {rendered !== undefined && rendered !== null && (
+          <SegmentedControl label="Activity display" value={mode} options={[{ value: 'rendered', label: 'Rendered' }, { value: 'json', label: 'JSON' }]} onChange={(value) => setMode(value as 'rendered' | 'json')} />
+        )}
+      </CardHeader>
+      <CardBody>
+        {showRendered ? rendered : <CodeBlock text={pretty(entry.content)} aria-label={`Content of ${entry.messageId}`} />}
+        {entry.error !== undefined && (
+          <Finding variant="err" kind="Activity patch">
+            {entry.error}. The content shown is the last valid one.
+          </Finding>
+        )}
+      </CardBody>
+    </Card>
+  );
+}
+
+function Entries({ list, frames, extras }: { list: readonly ConversationEntry[]; frames: Frames; extras: ConversationViewExtras }): ReactElement {
+  return (
+    <>
+      {list.map((entry) => {
+        switch (entry.kind) {
+          case 'run':
+            return <RunHeader key={entry.id} run={entry} />;
+          case 'message':
+            return <MessageBlock key={entry.id} entry={entry} frames={frames} />;
+          case 'reasoning':
+            return <ReasoningBlock key={entry.id} entry={entry} frames={frames} />;
+          case 'encrypted':
+            return <EncryptedMarker key={entry.id} entry={entry} frames={frames} />;
+          case 'tool':
+            return <ToolBlock key={entry.id} entry={entry} frames={frames} />;
+          case 'step':
+            return <StepBlock key={entry.id} entry={entry} frames={frames} extras={extras} />;
+          case 'subagent':
+            return <SubagentBlock key={entry.id} entry={entry} frames={frames} />;
+          case 'activity':
+            return <ActivityBlock key={entry.id} entry={entry} extras={extras} />;
+          case 'snapshot':
+            return <SnapshotMarker key={entry.id} entry={entry} frames={frames} />;
+          case 'custom':
+            return (
+              <div key={entry.id} className="agui-conv-marker" data-entry="custom">
+                <FamilyDot family="neutral" hollow />
+                <b className="agui-conv-mono">CUSTOM</b>
+                <span className="agui-conv-mono">{entry.name}</span>
+                <span className="agui-conv-mono agui-conv-muted agui-conv-value">{JSON.stringify(entry.value)}</span>
+                <FrameRef frameId={entry.frames[0] as FrameId} frames={frames} />
+              </div>
+            );
+          case 'raw':
+            return (
+              <div key={entry.id} className="agui-conv-marker" data-entry="raw">
+                <FamilyDot family="neutral" hollow />
+                <b className="agui-conv-mono">RAW</b>
+                {entry.source !== undefined && <span className="agui-conv-mono">{entry.source}</span>}
+                <span className="agui-conv-mono agui-conv-muted agui-conv-value">{JSON.stringify(entry.value)}</span>
+                <FrameRef frameId={entry.frames[0] as FrameId} frames={frames} />
+              </div>
+            );
+        }
+      })}
+    </>
+  );
+}
+
+/** The transcript of the current thread, built from the store and live as frames arrive. */
+export function ConversationView({ store, renderActivity }: ConversationViewProps & ConversationViewExtras): ReactElement {
+  const { model, frames } = useProjection(store);
+  const extras: ConversationViewExtras = { ...(renderActivity && { renderActivity }) };
+  return (
+    <section aria-labelledby="conversation-heading" data-view="conversation" className="agui-conv">
       <h2 id="conversation-heading">Conversation</h2>
-      <p role="status">Not implemented: there is no transcript, state view or reply editor yet.</p>
-      <button type="button" disabled>
-        Continue run
-      </button>
+      {model.entries.length === 0 ? (
+        <p className="agui-conv-empty">No conversation yet. Runs and messages appear here as events arrive.</p>
+      ) : (
+        <Entries list={model.entries} frames={frames} extras={extras} />
+      )}
+      {model.issues.length > 0 && (
+        <ul className="agui-conv-issues" aria-label="Projection issues">
+          {model.issues.map((issue, i) => (
+            <li key={i}>
+              <Finding variant="warn" kind="Not shown">
+                {issue.message} {issue.frameId !== undefined && <FrameRef frameId={issue.frameId} frames={frames} />}. The frame is still in the frames list.
+              </Finding>
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }
