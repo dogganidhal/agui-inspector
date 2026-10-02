@@ -18,6 +18,8 @@ its [requirements checklist](specs/001-inspector-mvp/checklists/requirements.md)
 - Manual interrupt and tool replies, plus A2UI v0.9 surfaces and action round trips.
 - Agent configuration, presets, and client profiles with browser persistence and JSON import/export.
 - Raw JSON submissions, including schema-invalid inputs, and session export/import for inspection.
+- Views styled through documented theme properties, so adopters can restyle the inspector without
+  rebuilding it. The [UI design](specs/001-inspector-mvp/design/design.md) defines the properties.
 
 Release criteria remain in the feature spec. The workload target is 5,000 retained frames, with at
 least 95% of filter changes and frame expansions finishing visibly within 200 ms during capture.
@@ -76,3 +78,5 @@ is selected for implementation. No delivery order or dates are assigned below.
   establish a transport contract.
 - In-app element: decide how element isolation works with A2UI styles injected into the document.
   Shadow-root integration remains unresolved.
+- Theme delivery: decide how hosts supply `--agui-*` overrides: a file next to `config.json`, a
+  configuration field, or host-page CSS. 0.1.0 fixes the properties only.

@@ -66,6 +66,7 @@ hashes and reports timing; release threshold certification also requires the nam
 | US5 recordings / SC-007 | Export after warning, import, compare raw strings/order/timing/input; attempt corrupt/header-bearing file | Round trip exact; zero headers; no auth state; import sends zero requests; failed import visible and preserves old session |
 | Privacy / SC-008 | Observe all requests during config/capability/preparation/run/rendering; attempt disallowed URLs/redirects and blocked CORS | Only explicit targets and own origin; zero telemetry/third-party assets; hosted no cookies; denied requests visible; CSP active before boot/no eval |
 | Performance / SC-009 | Production build, fixed 5,000-frame profile, one warm-up plus three measured runs | Exact retained counts/hashes; each measured class >=95% within 200 ms; complete asset totals <=2,000,000 and <=600,000 gzip bytes |
+| Theming / SC-010 | Open the F06 fixture page and the assembled app with default tokens, then with a stylesheet that overrides only `--agui-*`, in light and dark | Every view and primitive uses the overrides; no colors, radii or fonts outside the tokens; zero font or other third-party requests |
 
 Tests use synthetic payloads and entered synthetic credentials; do not upload recordings or
 request bodies to external tools. Authentication echo acceptance remains blocked on G-07; the

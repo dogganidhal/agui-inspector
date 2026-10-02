@@ -102,15 +102,31 @@ Date: 2026-10-02. Scope and authority: [spec](spec.md), [constitution](../../.sp
   integrity and records timing; only the specified physical runner can certify responsiveness.
 - **Alternatives considered:** fabricated DOM timers, schema-only frame counts, a renderer-excluded
   budget, and throttled generic CI pretending to be the hardware profile do not prove SC-009.
-- **Decision:** five chained W1 PRs and seven disjoint W2 PRs. W2 modules exercise their own public
+- **Decision:** six chained W1 PRs and seven disjoint W2 PRs. W2 modules exercise their own public
   seams using scripted collaborators and frame fixtures; full-product acceptance runs on integrated
   main without adding W2 branch dependencies.
 - **Unresolved:** a possible subsequent integration PR is [G-08](plan.md#open-decision-and-approval-gates),
   not an authorized third wave. All roadmap decisions remain named gates, not research choices.
 
+## Views and theming
+
+- **Decision:** style every view through plain CSS custom properties: ten public `--agui-*`
+  properties that adopters override, and internal tokens derived from them with `color-mix()` and
+  `oklch()`. F06 ships the tokens and a small set of React primitives built on native elements.
+  Default fonts are system stacks. The full contract is in [design/design.md](design/design.md).
+- **Rationale:** adopters can restyle a prebuilt bundle without a build step, which embedded and
+  static hosts need. Custom properties inherit through shadow roots, so the 1.0.0 in-app element can
+  reuse them. Nothing is added to the bundle budget or the dependency list. Building the primitives
+  once, before W2, keeps seven parallel lanes from producing seven interfaces.
+- **Alternatives considered:** a utility CSS framework or component library adds a build-time or
+  runtime dependency for markup that native elements already cover. CSS-in-JS adds runtime cost and
+  can conflict with the page's content security policy. Per-lane styling cannot stay consistent
+  across disjoint owners. Loading fonts from a font CDN breaks FR-037.
+- **Unresolved:** how hosts deliver overrides is [G-09](plan.md#open-decision-and-approval-gates).
+
 ## Phase 0 closure
 
 Technical implementation choices are resolved above, subject to the concrete F01 compatibility
-checks. G-01 through G-06 are intentionally unchosen product decisions; G-07 and G-08 require the
+checks. G-01 through G-06 and G-09 are intentionally unchosen product decisions; G-07 and G-08 require the
 user's G1 review before they can authorize conflicting behavior or extra work. This is a gated
 design proposal, not a declaration that every implementation/release gate has passed.

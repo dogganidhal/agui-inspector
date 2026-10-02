@@ -29,6 +29,9 @@ their priorities set implementation order, not optional release scope.
 - Q: What defines responsiveness with 5,000 frames? A: At least 95% of filter changes and frame
   expansions must finish visibly within 200 ms during capture. The implementation plan fixes the
   benchmark browser, hardware, event mix, payload sizes, and arrival rate before implementation.
+- Q: Must adopters be able to brand the inspector? A: Yes. Views take their colors, radii, spacing,
+  and fonts from documented theme properties that a host can override without rebuilding (FR-041).
+  How a host supplies its overrides is not decided for 0.1.0; the roadmap tracks it.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -82,6 +85,9 @@ service or advanced conversation scenarios.
    inspector is enabled, **Then** its bundled assets are ready to serve without a frontend build.
 4. **Given** another server can serve static files and adjacent configuration, **When** it serves the
    npm distribution's assets, **Then** the same inspector can connect to its configured agent.
+5. **Given** a host stylesheet that overrides only the documented theme properties, **When** its
+   developer opens the inspector in light or dark mode, **Then** every view uses the overridden
+   colors, radii, spacing, and fonts.
 
 ---
 
@@ -330,6 +336,15 @@ Its section 10 supplies the release baseline; the recorded clarifications resolv
   publishing safeguards in section 9. The implementation plan MUST retain those safeguards.
   (Sources: 9, 12.)
 
+#### Presentation
+
+- **FR-041**: Views MUST take every color, radius, spacing step, and font from documented theme
+  properties (CSS custom properties named `--agui-*`), with light and dark defaults that follow the
+  browser's color-scheme preference. A stylesheet that overrides only those properties MUST restyle
+  every view without rebuilding the bundle. Default fonts MUST be system font stacks or font files
+  shipped in the bundle. How hosts supply overrides is an open decision.
+  (Source: clarification 2026-10-02; [UI design](design/design.md).)
+
 ### Key Entities *(include if feature involves data)*
 
 - **Agent configuration**: Agent id, optional name, endpoint, optional declared capabilities, and
@@ -357,8 +372,8 @@ Its section 10 supplies the release baseline; the recorded clarifications resolv
 
 ### Measurable Outcomes
 
-These nine outcomes preserve the numbered acceptance criteria in the original product brief's
-section 10, with the recorded clarifications.
+SC-001 to SC-009 preserve the nine numbered acceptance criteria in the original product brief's
+section 10, with the recorded clarifications. SC-010 comes from the 2026-10-02 theming clarification.
 
 - **SC-001**: Against an accessible, origin-permitting streaming endpoint, a developer can start a
   run, inspect every received frame with its offset and schema verdict, and see the transcript.
@@ -383,6 +398,9 @@ section 10, with the recorded clarifications.
   until the filtered list or expanded frame content is rendered. The implementation plan MUST fix
   the benchmark browser, hardware, event mix, payload sizes, and arrival rate before implementation.
   The complete production client bundle MUST be at most 2 MB minified and 600 KB gzipped.
+- **SC-010**: With only the documented theme properties overridden, every view renders with the
+  overrides in light and dark modes, and the default build requests no fonts or other assets from
+  outside its own origin.
 
 ## Assumptions
 
@@ -414,6 +432,8 @@ section 10, with the recorded clarifications.
   A2UI versions, and catalog aliases are deferred.
 - Stable version-1 formats, the 50,000-frame target, on-demand A2UI loading, and the WCAG 2.2 AA
   release audit belong to 1.0.0. They do not replace the MVP's current acceptance criteria.
+- How hosts supply theme overrides (a file next to the configuration, a configuration field, or
+  host-page CSS) is undecided; the roadmap tracks it. FR-041 fixes only the properties.
 - Final license and package-name decisions remain dependencies before publication. The
   [roadmap](../../ROADMAP.md#open-decisions) tracks these and the unresolved upstream placement,
   protocol discovery, and transport decisions originally recorded in section 13.
@@ -434,3 +454,4 @@ Story references use `USn.m` for story `n`, scenario `m`.
 | S10-AC7: session round trip | FR-034, FR-035, FR-039 | US5.3, US5.4 | SC-007 |
 | S10-AC8: privacy and network bounds | FR-004, FR-007, FR-036 to FR-039 | US2.1, US5.3; network checks in SC-008 | SC-008 |
 | S10-AC9: responsiveness and bundle budget | FR-008; SC-009 defines release limits | US1.5 | SC-009 |
+| Clarification 2026-10-02: adopter theming (not in section 10) | FR-037, FR-041 | US2.5 | SC-010 |
