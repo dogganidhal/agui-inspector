@@ -11,18 +11,17 @@ import {
   NO_REPLIES,
   answerInterrupt,
   checkA2uiAction,
-  checkAgainstSchema,
   draftInterrupt,
   draftToolResult,
   isBlocked,
   remaining,
   repliesFor,
   resumeEntries,
-  seedFromSchema,
   submitToolResult,
   toolMessages,
   waitingNotice,
 } from '../../src/core/runtime/replies.ts';
+import { checkAgainstSchema, seedFromSchema } from '../../src/core/runtime/schema.ts';
 import { AGENT, bodyOf, eventStream, ok200, replyRoute, rig, sse, type Route } from './support.ts';
 
 // ---------------------------------------------------------------------------------------------

@@ -34,7 +34,7 @@ import type {
   VolatileAuth,
   VolatileConnectionState,
 } from '../../contracts.ts';
-import { describeError, fail, isJsonValue, ok, type Result } from '../config/validation.ts';
+import { describeError, fail, isJsonValue, type Result } from '../config/validation.ts';
 import { createFrameSink } from '../frames/index.ts';
 import { preparePreset } from '../presets/index.ts';
 import { composeRunInput } from '../profiles/index.ts';
@@ -57,7 +57,8 @@ import {
 } from './replies.ts';
 import { createGuardedTransport, headerNameProblem, recordedPath, resolveTarget, type AbortableTransport } from './transport.ts';
 
-export { checkAgainstSchema, seedFromSchema, waitingNotice } from './replies.ts';
+export { waitingNotice } from './replies.ts';
+export { checkAgainstSchema, seedFromSchema } from './schema.ts';
 export { createGuardedTransport, guardedFetchText, headerNameProblem, resolveTarget, type AbortableTransport } from './transport.ts';
 
 /** What the runtime reads from the settings at the moment a run is built; the host owns both. */
@@ -233,6 +234,14 @@ export function createRuntime(options: RuntimeOptions): Runtime {
     return resolved.ok ? undefined : resolved.error;
   }
 
+  /** Where a request may go right now: the target, and a token header name the browser will accept. */
+  function sendable(): Result<URL> {
+    const targetError = targetProblem(targetUrl);
+    if (targetError !== undefined) return fail(targetError);
+    const headerError = auth !== undefined && auth.token !== '' ? headerNameProblem(auth.headerName) : undefined;
+    return headerError !== undefined ? fail(headerError) : resolveTarget(targetUrl as string, policy);
+  }
+
   function changeTarget(nextAgent: AgentConfig | undefined, url: string): boolean {
     const changed = nextAgent?.id !== agent?.id || url !== targetUrl;
     agent = nextAgent;
@@ -262,14 +271,8 @@ export function createRuntime(options: RuntimeOptions): Runtime {
   async function dispatch(turn: Turn): Promise<void> {
     if (running) return problem('A run is already in progress. Stop it or wait for it to end');
     if (isBlocked(replies)) return problem(waitingNotice(replies) ?? 'Answer what is waiting first');
-    const targetError = targetProblem(targetUrl);
-    if (targetError !== undefined) return problem(targetError);
-    const target = resolveTarget(targetUrl as string, policy);
+    const target = sendable();
     if (!target.ok) return problem(target.error);
-    if (auth !== undefined && auth.token !== '') {
-      const headerError = headerNameProblem(auth.headerName);
-      if (headerError !== undefined) return problem(headerError);
-    }
 
     running = true;
     error = undefined;
@@ -508,14 +511,8 @@ export function createRuntime(options: RuntimeOptions): Runtime {
       } catch (failure) {
         return problem(`Not valid JSON, so it was not sent: ${describeError(failure)}`);
       }
-      const targetError = targetProblem(targetUrl);
-      if (targetError !== undefined) return problem(targetError);
-      const target = resolveTarget(targetUrl as string, policy);
+      const target = sendable();
       if (!target.ok) return problem(target.error);
-      if (auth !== undefined && auth.token !== '') {
-        const headerError = headerNameProblem(auth.headerName);
-        if (headerError !== undefined) return problem(headerError);
-      }
       error = undefined;
       const controller = new AbortController();
       controllers.add(controller);
