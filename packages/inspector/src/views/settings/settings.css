@@ -1,0 +1,137 @@
+/* Settings layout. Spacing is a multiple of --u and every color, radius and font comes from the
+   theme tokens, so overriding --agui-* restyles it. Loaded next to the theme's stylesheets. */
+
+.agui-settings {
+  display: grid;
+  gap: calc(var(--u) * 4);
+  padding: calc(var(--u) * 4) 16px;
+  max-width: 820px;
+  color: var(--fg);
+  font: 400 13px/1.5 var(--agui-font-sans);
+}
+.agui-settings > h2 {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.agui-settings h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.agui-settings-group {
+  display: grid;
+  gap: calc(var(--u) * 2);
+  min-width: 0;
+}
+.agui-settings-head {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 2);
+}
+.agui-settings-note,
+.agui-settings-muted {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.agui-settings-note { max-width: 64ch; }
+.agui-settings-mono { font: 12px var(--agui-font-mono); }
+.agui-settings-strong { font-weight: 600; }
+.agui-settings-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Agent picker */
+.agui-settings-picker { display: flex; }
+.agui-settings-agents {
+  display: grid;
+  gap: calc(var(--u) * 0.5);
+  margin: calc(var(--u) * 1) 0 0;
+  padding: 0;
+  list-style: none;
+}
+.agui-settings-agents .agui-btn {
+  width: 100%;
+  height: auto;
+  justify-content: space-between;
+  padding: calc(var(--u) * 2) calc(var(--u) * 2.75);
+  text-align: left;
+  white-space: normal;
+}
+.agui-settings-agent { display: grid; gap: calc(var(--u) * 0.5); min-width: 0; }
+.agui-settings-agent small {
+  color: var(--muted);
+  font: 400 11.5px var(--agui-font-mono);
+  overflow-wrap: anywhere;
+}
+
+/* Capabilities */
+.agui-settings-grid {
+  display: grid;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  overflow: hidden;
+}
+.agui-settings-grid-row {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  border-top: 1px solid var(--line);
+}
+.agui-settings-grid-row:first-child { border-top: 0; }
+.agui-settings-grid-row > div { padding: calc(var(--u) * 2.25) calc(var(--u) * 3); min-width: 0; }
+.agui-settings-key {
+  background: var(--sunk);
+  color: var(--muted);
+  font: 12px var(--agui-font-mono);
+}
+.agui-settings-vals { display: flex; flex-wrap: wrap; gap: calc(var(--u) * 1.5); }
+.agui-settings-off .agui-tag { text-decoration: line-through; }
+
+/* Profile settings */
+.agui-settings-box {
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  overflow: hidden;
+}
+.agui-settings-row {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 3);
+  padding: calc(var(--u) * 2.5) calc(var(--u) * 3);
+  border-top: 1px solid var(--line);
+}
+.agui-settings-row:first-child { border-top: 0; }
+.agui-settings-row-t { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.agui-settings-row-t small { display: block; color: var(--muted); font-size: 12px; }
+.agui-settings-ctl { display: grid; gap: calc(var(--u) * 1.5); min-width: 0; }
+.agui-settings-row > .agui-settings-ctl { flex: 1.4; }
+.agui-settings-form {
+  display: grid;
+  gap: calc(var(--u) * 1.5);
+  padding: calc(var(--u) * 3);
+  border: 1px dashed var(--line-2);
+  border-radius: var(--r);
+}
+.agui-settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: calc(var(--u) * 2);
+}
+
+@media (max-width: 720px) {
+  .agui-settings-grid-row { grid-template-columns: minmax(0, 1fr); }
+  .agui-settings-row { flex-wrap: wrap; }
+  .agui-settings-row > .agui-settings-ctl,
+  .agui-settings-row > .agui-seg { flex-basis: 100%; }
+}
