@@ -85,7 +85,13 @@ function agent(pageOrigin: string, received: Received[], extra?: (path: string, 
 }
 
 const listen = (server: Server) => new Promise<string>((resolve) => server.listen(0, '127.0.0.1', () => resolve(`http://127.0.0.1:${(server.address() as AddressInfo).port}`)));
-const close = (server: Server) => new Promise((resolve) => server.close(resolve));
+// close() alone waits for a connection that is mid-request, such as one the browser still has open
+// when the test ends; dropping the connections lets the teardown finish at once.
+const close = (server: Server) =>
+  new Promise((resolve) => {
+    server.close(resolve);
+    server.closeAllConnections();
+  });
 
 export const PAGE_CSP = "script-src 'self'; object-src 'none'; base-uri 'none'";
 

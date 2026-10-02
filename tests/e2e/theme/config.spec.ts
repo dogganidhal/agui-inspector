@@ -409,7 +409,12 @@ async function startStatic(dist: string, config: string): Promise<{ origin: stri
     response.writeHead(200, { 'content-type': types[path.extname(name)] ?? 'text/html' }).end(body);
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-  return { origin: `http://127.0.0.1:${(server.address() as AddressInfo).port}`, requested, close: () => new Promise((resolve) => server.close(() => resolve())) };
+  return { origin: `http://127.0.0.1:${(server.address() as AddressInfo).port}`, requested, close: () =>
+      new Promise((resolve) => {
+        server.close(() => resolve());
+        server.closeAllConnections();
+      }),
+  };
 }
 
 test.describe('the Python helper', () => {

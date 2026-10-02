@@ -63,7 +63,10 @@ const test = base.extend<{ requests: Array<{ url: string; method: string; header
 
       await use({ page, agent, served });
       child.kill();
-      await new Promise((resolve) => pageServer.close(resolve));
+      await new Promise((resolve) => {
+        pageServer.close(resolve);
+        pageServer.closeAllConnections();
+      });
       rmSync(dist, { recursive: true, force: true });
     },
     { scope: 'worker' },

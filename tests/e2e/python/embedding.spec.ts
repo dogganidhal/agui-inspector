@@ -67,7 +67,12 @@ async function startStaticServer(): Promise<{ origin: string; close(): Promise<v
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const { port } = server.address() as AddressInfo;
-  return { origin: `http://127.0.0.1:${port}`, close: () => new Promise((resolve) => server.close(() => resolve())) };
+  return { origin: `http://127.0.0.1:${port}`, close: () =>
+      new Promise((resolve) => {
+        server.close(() => resolve());
+        server.closeAllConnections();
+      }),
+  };
 }
 
 function readAsset(relative: string): Buffer | undefined {

@@ -67,7 +67,10 @@ const test = base.extend<object, { site: Site }>({
       });
       await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
       await use({ origin: `http://127.0.0.1:${(server.address() as AddressInfo).port}` });
-      await new Promise((resolve) => server.close(resolve));
+      await new Promise((resolve) => {
+        server.close(resolve);
+        server.closeAllConnections();
+      });
       rmSync(outdir, { recursive: true, force: true });
     },
     { scope: 'worker' },
