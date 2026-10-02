@@ -10,6 +10,8 @@ and planning input.
 Status: implemented on main (W1/W2, PRs #3-#18). Release verification pending: SC-009 on the
 physical runner, a manual smoke run in all MVP distribution modes, and publishing (not authorized).
 Three approved W3 follow-ups remain in [tasks](specs/001-inspector-mvp/tasks.md#wave-w3-release-decision-follow-ups).
+The public-demo companion is planned in [feature 002](specs/002-public-demo/spec.md); its
+implementation waits for all three W3 slices to merge and does not authorize package publication.
 
 The [MVP specification](specs/001-inspector-mvp/spec.md) defines the accepted scope;
 its [requirements checklist](specs/001-inspector-mvp/checklists/requirements.md) records the review.
@@ -52,6 +54,37 @@ bundle is limited to 2 MB minified and 600 KB gzipped.
 
 Each W3 slice is one PR depending only on main after the decision-recording PR, with disjoint
 ownership. Manifests remain private: no publishing, tags or releases are authorized. FR-040 remains.
+
+### Public demo companion (2026-10-02)
+
+Status: specification, [implementation plan](specs/002-public-demo/plan.md) and
+[three slices](specs/002-public-demo/tasks.md) drafted for review; not implemented or deployed.
+The demo accompanies 0.1.0 without adding npm/PyPI publishing, tags, the release workflow,
+JS server helpers or CLI to this feature.
+
+- GitHub Pages serves the existing hosted app under `/agui-inspector/`. Demo-only same-origin
+  service-worker endpoints reuse deterministic reference scenarios and return real HTTP/SSE
+  through the ordinary transport/recorder/frame reader; no model or external example service.
+- Example agents/presets/quick messages cover plain, interrupt, tools, slow, state, broken,
+  A2UI surfaces/actions and all 31 baseline event types. First-page readiness, unavailable
+  browser fallback and Pages sub-path routing are explicit acceptance requirements.
+- Constitution 1.1.0 MINOR permits explicit default-off hosted startup opt-in for visitor-selected
+  HTTPS and browser-supported HTTP loopback targets without inspector endpoint approval prompts.
+  The page discloses the boundary; defaults, embedded auth, no telemetry/automatic third-party
+  traffic, no hosted cookies, local scripts/no eval and memory-only credentials stay unchanged.
+  Use `http://localhost:<port>` locally; Chromium IPv4 must be re-proven, other browsers checked
+  manually, and IPv6 support is not claimed without exact CSP proof. No all-HTTP CSP fallback.
+- Demo worker/bootstrap/config stay outside ordinary static/npm/Python artifacts; both complete
+  asset sets retain the 2 MB/600 KB budgets and inherited 5,000-frame acceptance.
+- P01 **visitor-policy** and P02 **shared-demo-endpoints** have disjoint paths and depend on
+  main after W3 D01/D02/D03; P03 **demo-pages-delivery** depends on both, with at most one unmerged
+  direct parent. It supplies integrated browser/package checks, docs/embedding link and the
+  SHA-pinned least-privilege main-only Pages workflow.
+
+Open gates are [G-D01 through G-D05](specs/002-public-demo/plan.md#open-gates): W3 merges, exact
+numeric-loopback CSP evidence, native worker byte/Stop proof, separate maintainer Pages
+authorization, and integrated budgets/package-isolation/CI evidence. Physical M2 certification
+and MVP release/publishing decisions remain separate; planning does not enable Pages or deploy.
 
 ## 1.0.0 stable target
 
