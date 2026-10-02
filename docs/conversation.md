@@ -1,6 +1,7 @@
 # Connecting and driving runs
 
-`agui-inspector` is a working name. This page describes how the inspector reaches an agent, sends
+`agui-inspector` is the approved package name. Nothing is published yet (see [distribution](distribution.md)).
+This page describes how the inspector reaches an agent, sends
 conversation runs, and handles the two things a finished run can wait for: answers to interrupts and
 results for client tool calls. It also covers the controls around a run (Stop, New thread, quick
 messages) and what the next run carries. How the events a run streams back appear in the transcript is
@@ -43,11 +44,11 @@ defaults to `Authorization`. The value is sent as-is, so type `Bearer …` if th
 Don't put the token in the endpoint URL, forwarded properties, context or tool schemas. Those are
 recorded and exported.
 
-The open question about a target that echoes the token back in a response body
-([G-07](../specs/001-inspector-mvp/plan.md#open-decision-and-approval-gates)) is not decided here.
-The inspector keeps received frames exactly as they arrived and does not redact them, and it does not
-record the token itself. If a server echoes your token, it will be in that frame. The export warning
-about sensitive payloads applies.
+A target can echo the token back in a response body. That case is settled by
+[G-07](../specs/001-inspector-mvp/plan.md#open-decision-and-approval-gates), resolved in constitution 1.0.3:
+the inspector never writes the token it holds, and it keeps received frames exactly as they arrived, with
+no redaction. If a server echoes your token, it will be in that frame. The export warning about sensitive
+payloads applies. [Recordings](recordings.md#a-token-you-entered-and-a-server-that-repeats-it) has the detail.
 
 ## Sending a run
 

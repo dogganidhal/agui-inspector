@@ -1,6 +1,7 @@
 # Theming
 
-`agui-inspector` is a working name. This page is the contract between the inspector's views and
+`agui-inspector` is the approved package name. Nothing is published yet (see [distribution](distribution.md)).
+This page is the contract between the inspector's views and
 anyone who restyles them. The tokens and primitives live in `packages/inspector/src/views/theme`.
 
 ## Overview

@@ -1,6 +1,7 @@
 # Configuration, presets and client profiles
 
-`agui-inspector` is a working name. This page describes the version-0 formats the inspector reads
+`agui-inspector` is the approved package name. Nothing is published yet (see [distribution](distribution.md)).
+This page describes the version-0 formats the inspector reads
 and writes for agent configuration, presets and the client profile. All three are pre-stable: they
 may change before 1.0.0, and every change that breaks an existing file is recorded under
 [Migrations](#migrations). Version 1 and its published JSON Schemas wait for the stable release.
