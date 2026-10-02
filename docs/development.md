@@ -23,6 +23,7 @@ Run from the repository root.
 | `npm run check:bundle:renderer` | Builds a representative bundle (scaffold app plus the pinned A2UI v0.9 renderer) into `.build/representative` and reports the headroom left. |
 | `npm run test:benchmark` | Checks the 5,000-frame fixture against its manifest and reports UI responsiveness as pending. `-- --strict` fails while it is pending. |
 | `npm run test:e2e` | Runs Playwright against `tests/e2e`. |
+| `npm run package:python` | Builds the assets, stages them into `packages/python`, checksums them and runs `uv build`. See [embedding](embedding.md) and [build provenance](build-provenance.md). |
 | `npm run check:ci` | Runs the pull request gate locally (see below). |
 | `npm run check:ci -- --strict` | The same gate, but suites that are not introduced yet fail it. |
 
@@ -126,7 +127,7 @@ This is the F01 scaffold, the F02 gate and the F03 budget and benchmark fixture.
 | 5,000-frame benchmark fixture and manifest | Present (slice F03). |
 | 5,000-frame responsiveness measurement | Pending until the benchmark UI (slice L04) and the physical runner exist. |
 | End-to-end tests and network-allowlist checks | Missing; only the configuration exists. |
-| Python package and tests | Missing (slice L06). |
+| Python package and tests | Present (slice L06). Packaging and tests run through `npm run package:python` and the uv commands in [embedding](embedding.md). |
 
 The foundation tests prove that the pinned baseline works together: the 31 event types, the fetch
 hook, sequence-error reporting while the recording branch keeps draining, resume and cancel entries,

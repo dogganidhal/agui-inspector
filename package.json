@@ -18,7 +18,8 @@
     "check:bundle:renderer": "node scripts/bundle-budget.mjs --representative",
     "test:e2e": "playwright test",
     "test:benchmark": "node scripts/benchmark.mjs",
-    "check:ci": "node scripts/ci.mjs"
+    "check:ci": "node scripts/ci.mjs",
+    "package:python": "node scripts/package-python.mjs"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0",

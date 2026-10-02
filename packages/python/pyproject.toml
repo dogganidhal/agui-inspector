@@ -1,0 +1,17 @@
+[project]
+name = "agui-inspector"
+version = "0.0.0"
+description = "Working-name AG-UI inspector: prebuilt static assets and an opt-in Starlette/FastAPI mount helper. Not published."
+requires-python = ">=3.10"
+dependencies = []
+classifiers = ["Private :: Do Not Upload"]
+
+[project.optional-dependencies]
+embedded = ["starlette==1.7.0"]
+
+[dependency-groups]
+test = ["fastapi==0.142.2", "httpx2==2.13.1", "uvicorn==0.54.0"]
+
+[build-system]
+requires = ["uv_build==0.12.22"]
+build-backend = "uv_build"

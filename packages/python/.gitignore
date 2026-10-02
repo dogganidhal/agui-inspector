@@ -1,0 +1,6 @@
+# Build outputs: the staged copy of packages/inspector/dist, its checksum list, and uv builds.
+src/agui_inspector/static/
+src/agui_inspector/static.sha256
+dist/
+.venv/
+__pycache__/
