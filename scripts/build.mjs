@@ -1,5 +1,5 @@
 // Builds the one static asset set: index.html plus external JS. Usage: npm run build [-- --outdir <dir>]
-import { copyFileSync, mkdirSync, rmSync } from 'node:fs';
+import { copyFileSync, cpSync, existsSync, mkdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { build } from 'esbuild';
 
@@ -49,6 +49,9 @@ export async function buildApp(/** @type {string} */ outdir = defaultOutdir) {
     metafile: true,
   });
   copyFileSync(path.join(packageDir, 'src', 'app', 'index.html'), path.join(outdir, 'index.html'));
+  // Deployment files that sit beside the page, such as hosting-config.json, ship unchanged.
+  const publicDir = path.join(packageDir, 'public');
+  if (existsSync(publicDir)) cpSync(publicDir, outdir, { recursive: true });
   return result;
 }
 

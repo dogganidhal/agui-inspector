@@ -1,0 +1,187 @@
+/* The application shell (design.md: Layout, Footer). Spacing is a multiple of --u and every color,
+   radius and font comes from the theme tokens, so overriding --agui-* restyles it. The views carry
+   their own stylesheets; this one only places them. Classes use the agui-app- prefix. */
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font: 400 13px/1.5 var(--agui-font-sans);
+}
+[hidden] {
+  display: none !important;
+}
+
+/* A fixed shell: a top bar, then two panes that scroll on their own. The page never scrolls. The pane
+   switch has a row of its own so the panes keep theirs while it is hidden. */
+.agui-app {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  height: 100dvh;
+  overflow: hidden;
+}
+.agui-app-bar {
+  grid-row: 1;
+}
+.agui-app-switch {
+  grid-row: 2;
+}
+.agui-app-panes {
+  grid-row: 3;
+}
+
+.agui-app-bar {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 3);
+  padding: calc(var(--u) * 2) 16px;
+  border-bottom: 1px solid var(--line);
+}
+.agui-app-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--u) * 2);
+}
+.agui-app-brand h1 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+.agui-app-mark {
+  display: inline-grid;
+  place-items: center;
+  width: calc(var(--u) * 7);
+  height: calc(var(--u) * 7);
+  border-radius: var(--r-sm);
+  background: var(--acc);
+  color: var(--acc-fg);
+}
+.agui-app-target {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+/* The theme switch is the bar's last item and keeps the right edge when the bar wraps. */
+.agui-app-bar > button {
+  margin-inline-start: auto;
+}
+
+/* The pane switch exists only where one pane fits. */
+.agui-app-switch {
+  display: none;
+  padding: calc(var(--u) * 2) 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.agui-app-panes {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.22fr);
+  min-height: 0;
+}
+.agui-app-pane {
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Conversation: no scrollbar on the split; wheel, touch and keyboard still scroll. */
+.agui-app-conversation {
+  overflow-y: auto;
+  border-right: 1px solid var(--line);
+  scrollbar-width: none;
+}
+.agui-app-conversation::-webkit-scrollbar {
+  display: none;
+}
+.agui-app-column {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  max-width: 780px;
+  margin-inline: auto;
+  padding-inline: 16px;
+  box-sizing: border-box;
+}
+.agui-app-transcript {
+  flex: 1 1 auto;
+  display: grid;
+  align-content: start;
+  gap: calc(var(--u) * 4);
+  padding-block: calc(var(--u) * 4);
+}
+.agui-app-composer {
+  position: sticky;
+  bottom: 0;
+  padding-block: calc(var(--u) * 3);
+  background: var(--bg);
+  border-top: 1px solid var(--line);
+}
+
+/* Inspection: tabs, the chosen view, and the closing line. The platform scrollbar stays. */
+.agui-app-inspection {
+  display: flex;
+  flex-direction: column;
+}
+.agui-app-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: calc(var(--u) * 3);
+  padding: calc(var(--u) * 2) 16px;
+  border-bottom: 1px solid var(--line);
+}
+.agui-app-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+.agui-app-footer {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 2);
+  padding: calc(var(--u) * 2) 16px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font: 400 11.5px/1.4 var(--agui-font-mono);
+}
+.agui-app-footer > svg {
+  flex: none;
+}
+
+/* The page could not start: one message, nothing else. */
+.agui-app-failure {
+  display: grid;
+  gap: calc(var(--u) * 3);
+  max-width: 640px;
+  margin: calc(var(--u) * 12) auto;
+  padding-inline: 16px;
+}
+
+/* Under 960 px one pane shows at a time. */
+@media (max-width: 959px) {
+  .agui-app-switch {
+    display: block;
+  }
+  .agui-app-panes {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .agui-app-conversation {
+    border-right: 0;
+  }
+  .agui-app[data-pane='conversation'] .agui-app-inspection,
+  .agui-app[data-pane='inspection'] .agui-app-conversation {
+    display: none;
+  }
+  .agui-app-bar {
+    flex-wrap: wrap;
+  }
+  .agui-app-target {
+    order: 3;
+    flex-basis: 100%;
+  }
+}
