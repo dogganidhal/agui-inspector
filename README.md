@@ -13,8 +13,10 @@ It is designed to work with any AG-UI server, with four distribution modes:
 
 ## Status
 
-The [0.1.0 MVP specification](specs/001-inspector-mvp/spec.md) is written; planning and implementation
-have not started. [ROADMAP.md](ROADMAP.md) tracks release goals, dependencies, and open decisions.
+The 0.1.0 MVP is implemented on `main` (see the [specification](specs/001-inspector-mvp/spec.md)). Release
+verification is not finished: the headed Mac mini M2 benchmark run (SC-009) is pending with the maintainer, and
+nothing is published. The packages are private, and the names were unregistered on 2026-10-02. [ROADMAP.md](ROADMAP.md) tracks release goals,
+dependencies and open decisions.
 
 The [original product brief](docs/reference/product-brief.md) preserves protocol details and
 architecture inputs for planning.

@@ -1,8 +1,10 @@
 [project]
 name = "agui-inspector"
 version = "0.0.0"
-description = "Working-name AG-UI inspector: prebuilt static assets and an opt-in Starlette/FastAPI mount helper. Not published."
+description = "AG-UI inspector: prebuilt static assets and an opt-in Starlette/FastAPI mount helper. Private and not published."
 requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE", "THIRD_PARTY_NOTICES.txt"]
 dependencies = []
 classifiers = ["Private :: Do Not Upload"]
 

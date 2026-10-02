@@ -4,10 +4,32 @@ This is the measurement protocol for SC-009. It restates the fixed profile in
 [plan.md](../../specs/001-inspector-mvp/plan.md#fixed-5000-frame-benchmark); if the two ever differ, the
 plan wins. Changing anything here needs explicit plan review before a measurement is taken.
 
-**Status: pending.** The fixture and the bundle budget exist (slice F03). The browser measurement does
-not: the benchmark UI and the Playwright interaction test arrive with slice L04. Until a run on the
-runner below passes every rule in [Verdicts](#verdicts), SC-009 is not passed. `npm run test:benchmark`
-says so explicitly and `-- --strict` exits non-zero while it holds.
+**Status: SC-009 is not certified.** The fixture, the bundle budget, the benchmark UI and the Playwright
+measurement all exist (slices F03 and L04). The measurements recorded so far come from an Apple M4 Pro with
+headless Chromium, which is not the required runner below, so they are development evidence only. The headed
+Mac mini M2 certification run is still pending with the maintainer. Until a run on that runner passes every
+rule in [Verdicts](#verdicts), SC-009 is not passed. `npm run test:benchmark` verifies the fixture and the
+schedule and says so explicitly, and `-- --strict` exits non-zero while it holds. `npm run test:benchmark -- --measure`
+runs the browser measurement (about seven minutes) and reports the verdict as pending on any other machine.
+
+## Recorded measurements
+
+Measured on a development machine, not the required runner. Both records used Apple M4 Pro (12 cores, 48 GiB),
+macOS 26.7.1, headless Chromium 153.0.8010.12 and Playwright 1.63.0, with one discarded warm-up and three
+measured runs of `npm run test:benchmark -- --measure`.
+
+| Record | What it shows |
+| --- | --- |
+| PR #14 (slice L04) | Every measured run retained exactly 5,000 data frames in 10 exchanges with matching hashes and executed 200 of 200 planned interactions. 100 of 100 filter changes and 100 of 100 expansions finished within 200 ms. p95 was 31.0 to 32.6 ms; interaction lateness against the plan was p95 40 to 66 ms. |
+| Integrated-main verification report, 2026-10-02, on `main` at `3876313` (kept outside the repository) | The same counts, hashes and 200 of 200 interactions. Filter p95 was 30.7 to 31.4 ms (maximum 32.0 to 32.7 ms) and expansion p95 was 31.7 to 32.4 ms (maximum 33.3 to 33.4 ms). Schedule p95 lateness was 43.1, 43.1 and 39.3 ms. The report notes that other verification work briefly overlapped the run. |
+
+The measured interval is bound by the two nested `requestAnimationFrame` callbacks at 60 Hz. Samples were not
+removed. The benchmark reports the 200 ms thresholds as met on that machine, but its own verdict stays
+`SC-009: PENDING` because the CPU, core count, memory, macOS version and headed foreground window all differ
+from the required runner. These numbers do not certify SC-009 and must not be quoted as if they did.
+
+**Still pending:** the three headed runs on the dedicated Mac mini M2 (8 cores, 16 GB, macOS 15.7), run and
+recorded by the maintainer. A passing result there is the only thing that changes the status above.
 
 ## What counts as a measurement
 

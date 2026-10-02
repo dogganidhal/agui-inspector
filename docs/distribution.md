@@ -1,24 +1,31 @@
 # Distribution
 
-`agui-inspector` is a working name. Nothing is published today. There is no publishing workflow, no
-tag, no release, no `LICENSE` file, and both package manifests are private. This page keeps the
-requirements from FR-040 and the constitution so they are not lost, and lists what has to be true
-before any of them is acted on.
+`agui-inspector` is the approved package name on npm and PyPI (gate G-02). On 2026-10-02 it was unregistered on
+both registries. Nothing is published today: there is no publishing workflow, no tag, no release, both package
+manifests are private, and registering a name or publishing remains unauthorized. This page keeps the
+requirements from FR-040 and the constitution so they are not lost, and lists what has to be true before any
+of them is acted on.
 
 ## Current state
 
-- `.github/workflows/ci.yml` runs on pull requests with read-only access. It builds and tests only.
-- Both the workspace and `packages/inspector` are `"private": true` and carry no `license` value.
-- The planned Python package will be private in the same way until the gates below are cleared.
+- `.github/workflows/ci.yml` runs on pull requests with read-only access. It builds and tests only, on Python
+  3.10 and 3.14.
+- The repository is MIT licensed, `Copyright (c) 2026 Nidhal Dogga` (`LICENSE`), and ships
+  `THIRD_PARTY_NOTICES.txt` for the bundled dependencies. See [dependencies](dependencies.md).
+- The npm manifests carry `"license": "MIT"` and `"private": true`. The npm `files` list and the Python
+  `license-files` include `LICENSE` and `THIRD_PARTY_NOTICES.txt`, so the npm tarball, the wheel and the sdist all
+  contain them. `packages/python/tests/test_distribution.py` asserts it.
+- The Python package carries `License-Expression: MIT` and keeps the `Private :: Do Not Upload` classifier.
 - Local packaging and checks of the inputs a provenance statement would cover are allowed.
-  Publishing, creating a license, tagging and releasing are not.
+  Publishing, registering a name, tagging and releasing are not.
 
-## Gates that block publication
+## Gates
 
-| Gate | What it decides | Owner |
+| Gate | Status | What it decides |
 | --- | --- | --- |
-| G-01 license | The final license and the obligations of the dependencies. The MIT candidate from the original brief is not adopted. A `LICENSE` file and a `license` field wait for this decision. | Project maintainer, with dependency and legal review. |
-| G-02 package names | Whether the working name is free on npm and PyPI, and whether an upstream namespace is involved. Until then no public package identity exists. | Project maintainer, and the upstream namespace owner if relevant. |
+| G-01 license | Closed 2026-10-02: MIT. | `LICENSE` and third-party notices ship in every distribution. Publication is still unauthorized under FR-040. |
+| G-02 package names | Closed 2026-10-02: `agui-inspector` on npm and PyPI, both unregistered that day. | The identity in both manifests. It does not authorize registering or publishing the name. |
+| G-03 upstream placement | Open. | Whether upstream accepts the inspector under `apps/inspector`, and when. `@ag-ui/inspector` is a conditional name that applies only if upstream adopts the project; nothing registers or reserves it. |
 
 Publication also needs every item in the next section. If a gate is unresolved, the answer is to
 stop and ask, not to pick a default.
@@ -43,8 +50,9 @@ section. Each one has to be built, reviewed and exercised before a release. None
    assets, checked by comparing checksums. The Python package needs no Node toolchain on the host.
 6. **Passing integrated gate.** `npm run check:ci -- --strict` passes on the integrated main branch
    (see `docs/development.md`), and the hardware benchmark has been run on the physical runner.
-7. **License and name gates.** G-01 and G-02 are resolved, and the dependency license obligations
-   are met.
+7. **License and name gates.** G-01 and G-02 are closed, and the dependency license obligations
+   are met by `LICENSE` and `THIRD_PARTY_NOTICES.txt`. G-03 stays open: moving to `@ag-ui/inspector` needs
+   upstream adoption first.
 
-Adding a publishing workflow, a tag, a release or a `LICENSE` file is outside slice F02. It needs the
-gates above and an explicit decision.
+Adding a publishing workflow, a tag, a release or a registry registration is outside the 0.1.0 MVP slices,
+including release hygiene (D01). It needs the gates above and an explicit decision.

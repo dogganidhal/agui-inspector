@@ -9,8 +9,16 @@ permissions:
 
 jobs:
   check:
+    name: check (python ${{ matrix.python-version }})
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.14"]
+    env:
+      # uv reads this for `uv sync` and `uv run` in scripts/ci.mjs, so the Python tests run on each version.
+      UV_PYTHON: ${{ matrix.python-version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

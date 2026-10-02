@@ -31,14 +31,32 @@ Tooling: npm workspaces, Node 24 LTS (`engines.node` is `>=24`).
 | `@types/react` | 19.3.0 | Types for React 19.3. | None. |
 | `@types/react-dom` | 19.3.0 | Types for React DOM 19.3. | None. |
 
+## License and notices
+
+The project is MIT, `Copyright (c) 2026 Nidhal Dogga` (`LICENSE`). `THIRD_PARTY_NOTICES.txt` lists every
+non-development package in `package-lock.json` (42 at the time of writing) with its license, says which of them
+`dist/app.js` bundles, and reproduces the full license texts. It includes the Apache-2.0 text for `@a2ui/react`,
+`@a2ui/web_core` and `@a2ui/markdown-it`; none of the three, and no other listed package, ships a `NOTICE` file.
+Packages whose tarball has no license file (`@bufbuild/protobuf`, `@lit-labs/ssr-dom-shim`,
+`@protobuf-ts/protoc`) use the text from their upstream repository, and the file says so. The notices were written
+from the license files in the installed packages. Regenerate them when a dependency changes: a Python test fails
+when a runtime package in the lockfile is missing from the file, or when a `NOTICE` file appears upstream and is not
+reproduced. Both package directories carry byte-identical copies of `LICENSE` and `THIRD_PARTY_NOTICES.txt`, because
+npm and `uv_build` cannot pack files from outside the package; a test compares them.
+
 ## Known upstream findings
 
 These come from the pinned baseline and are recorded here rather than worked around by changing it.
 
-- `npm audit` reports a moderate DOMPurify advisory reached through `@a2ui/react` 0.12.0 and
-  `@a2ui/markdown-it`. The baseline is pinned, so this PR does not change it. Markdown rendering of
-  conversation text is out of scope; whether the renderer's own Markdown path is reachable is for
-  the A2UI slice to check.
+- **DOMPurify override (D01).** `@a2ui/react` 0.12.0 depends on `@a2ui/markdown-it` 0.2.0, which pins DOMPurify
+  3.4.11. That version is affected by [GHSA-c2j3-45gr-mqc4](https://github.com/advisories/GHSA-c2j3-45gr-mqc4) and
+  [GHSA-55q2-fjhq-7xh7](https://github.com/advisories/GHSA-55q2-fjhq-7xh7). The root `package.json` sets
+  `"overrides": { "dompurify": "3.4.16" }` and the committed lockfile resolves exactly 3.4.16; check it with
+  `npm ls dompurify --all`. The override changes neither the required renderer nor the direct dependency list.
+  The production bundle does not currently include DOMPurify or `@a2ui/markdown-it` (conversation Markdown is out of
+  scope), so the override protects the installed tree and any future use of the renderer's Markdown path. Remove
+  it when A2UI ships a fixed pin, and review the lockfile in the same change. The lockfile was updated with
+  `npm update dompurify --ignore-scripts`; no lifecycle script ran.
 - `@ag-ui/a2ui-middleware` imports Node's `crypto` at module scope. `scripts/build.mjs` resolves that
   import to a small browser stand-in (`randomUUID` from Web Crypto; `createHash` throws).
 - `clarinet`, which the middleware depends on, calls `require("stream")` inside a try/catch. The
