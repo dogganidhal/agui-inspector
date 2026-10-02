@@ -117,11 +117,11 @@ test('every workflow action is pinned to a full commit SHA', () => {
   for (const ref of uses) assert.match(ref, /^[\w.-]+\/[\w./-]+@[0-9a-f]{40}$/, ref);
 });
 
-test('the root exposes check:ci, stays private, and carries no license or publish script', () => {
+test('the root exposes check:ci, stays private and MIT, and carries no publish script', () => {
   const pkg = JSON.parse(readFileSync(path.join(repo, 'package.json'), 'utf8'));
   assert.equal(pkg.scripts['check:ci'], 'node scripts/ci.mjs');
   assert.equal(pkg.private, true);
-  assert.equal('license' in pkg, false);
+  assert.equal(pkg.license, 'MIT');
   assert.equal(Object.keys(pkg.scripts).some((name) => /publish|release|version/.test(name)), false);
-  assert.equal(existsSync(path.join(repo, 'LICENSE')), false);
+  assert.match(readFileSync(path.join(repo, 'LICENSE'), 'utf8'), /^MIT License\n\nCopyright \(c\) 2026 Nidhal Dogga\n/);
 });

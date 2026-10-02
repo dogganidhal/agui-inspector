@@ -1,4 +1,6 @@
 """L06 T046 (US2.3, FR-001, FR-040): the wheel and sdist carry the npm assets, and the wheel runs without Node.
+D01 T055-T058 (G-01, G-02): MIT license and third-party notices ship in the npm tarball, wheel and sdist, the
+manifests stay private, the DOMPurify override resolves exactly, and CI covers Python 3.10 and 3.14.
 
 setUpClass runs the real packaging script on the already built ``packages/inspector/dist``
 (``npm run build``), so these tests need Node and a build; a missing one is a failure, not a skip.
@@ -23,6 +25,9 @@ DIST = REPO / "packages" / "inspector" / "dist"
 PACKAGE = REPO / "packages" / "python" / "src" / "agui_inspector"
 STATIC = "agui_inspector/static/"
 MANIFEST = "agui_inspector/static.sha256"
+LICENSE_FILES = ("LICENSE", "THIRD_PARTY_NOTICES.txt")
+COPYRIGHT = "Copyright (c) 2026 Nidhal Dogga"
+A2UI_PACKAGES = ("@a2ui/react", "@a2ui/web_core", "@a2ui/markdown-it")
 
 
 def sha256(data: bytes) -> str:
@@ -56,6 +61,13 @@ class DistributionTest(unittest.TestCase):
             raise AssertionError(f"package-python failed:\n{run.stdout}\n{run.stderr}")
         cls.wheel = next(cls.out.glob("*.whl"))
         cls.sdist = next(cls.out.glob("*.tar.gz"))
+        pack = subprocess.run(
+            ["npm", "pack", "--workspace", "packages/inspector", "--pack-destination", str(cls.out)],
+            cwd=REPO, capture_output=True, text=True,
+        )
+        if pack.returncode != 0:
+            raise AssertionError(f"npm pack failed:\n{pack.stdout}\n{pack.stderr}")
+        cls.npm_tarball = next(cls.out.glob("*.tgz"))
         cls.expected = tree(DIST)
         cls.tmp = Path(tmp.name)
 
@@ -93,11 +105,83 @@ class DistributionTest(unittest.TestCase):
             requires = [re.sub(r"[ '\"]", "", r) for r in meta.get_all("Requires-Dist")]  # quoting differs by backend
             self.assertEqual(["starlette==1.7.0;extra==embedded"], requires)
             self.assertIn("Private :: Do Not Upload", meta.get_all("Classifier"))
-            # License, name and publication are undecided: no license value, no license file.
-            for header in ("License", "License-Expression", "License-File"):
-                self.assertIsNone(meta[header], header)
-            self.assertFalse([n for n in wheel.namelist() if "LICEN" in n.upper()])
+            self.assertEqual("MIT", meta["License-Expression"])
+            self.assertEqual(list(LICENSE_FILES), meta.get_all("License-File"))
             self.assertFalse([n for n in wheel.namelist() if n.endswith(".dist-info/entry_points.txt")])  # no CLI
+
+    def test_license_is_mit_with_the_exact_copyright_line(self):
+        text = (REPO / "LICENSE").read_text()
+        self.assertTrue(text.startswith("MIT License\n"))
+        self.assertEqual([COPYRIGHT], [line for line in text.splitlines() if line.startswith("Copyright")])
+        self.assertIn("Permission is hereby granted, free of charge", text)
+        self.assertIn('THE SOFTWARE IS PROVIDED "AS IS"', text)
+
+    def test_notices_hold_apache_text_and_every_installed_runtime_package(self):
+        notices = (REPO / "THIRD_PARTY_NOTICES.txt").read_text()
+        self.assertIn("Apache License\n", notices)
+        self.assertIn("TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION", notices)
+        lock = json.loads((REPO / "package-lock.json").read_text())["packages"]
+        runtime = {
+            (key.split("node_modules/")[-1], meta["version"])
+            for key, meta in lock.items()
+            if key.startswith("node_modules/") and not meta.get("link") and not meta.get("dev") and not meta.get("devOptional")
+        }
+        self.assertTrue({name for name, _ in runtime} >= set(A2UI_PACKAGES))
+        for name, version in sorted(runtime):
+            self.assertIn(f"{name}@{version}", notices)
+            # Upstream NOTICE files, if a package carries one, must be reproduced.
+            for upstream in (REPO / "node_modules" / name).glob("NOTICE*"):
+                self.assertIn(upstream.read_text().strip(), notices, f"{name} {upstream.name}")
+
+    def test_license_files_are_identical_in_the_root_npm_and_python_packages(self):
+        for name in LICENSE_FILES:
+            root = (REPO / name).read_bytes()
+            self.assertTrue(root, name)
+            self.assertEqual(root, (REPO / "packages" / "inspector" / name).read_bytes(), f"inspector {name}")
+            self.assertEqual(root, (REPO / "packages" / "python" / name).read_bytes(), f"python {name}")
+
+    def test_wheel_and_sdist_ship_the_license_and_notices(self):
+        with zipfile.ZipFile(self.wheel) as wheel:
+            licenses = next(n for n in wheel.namelist() if n.endswith(".dist-info/licenses/LICENSE"))[: -len("LICENSE")]
+            for name in LICENSE_FILES:
+                self.assertEqual((REPO / name).read_bytes(), wheel.read(licenses + name), name)
+        with tarfile.open(self.sdist) as sdist:
+            root = sdist.getnames()[0].split("/")[0]
+            for name in LICENSE_FILES:
+                self.assertEqual((REPO / name).read_bytes(), sdist.extractfile(f"{root}/{name}").read(), name)
+
+    def test_npm_tarball_ships_the_license_and_notices(self):
+        with tarfile.open(self.npm_tarball) as tarball:
+            for name in LICENSE_FILES:
+                self.assertEqual((REPO / name).read_bytes(), tarball.extractfile(f"package/{name}").read(), name)
+            self.assertIn("package/dist/index.html", tarball.getnames())
+
+    def test_npm_manifests_are_private_mit_and_pin_dompurify(self):
+        root = json.loads((REPO / "package.json").read_text())
+        package = json.loads((REPO / "packages" / "inspector" / "package.json").read_text())
+        self.assertIs(True, root["private"])
+        self.assertIs(True, package["private"])
+        self.assertEqual("agui-inspector", package["name"])
+        self.assertEqual("MIT", package["license"])
+        self.assertTrue(set(LICENSE_FILES) <= set(package["files"]))
+        self.assertEqual({"dompurify": "3.4.16"}, root["overrides"])
+        lock = json.loads((REPO / "package-lock.json").read_text())["packages"]
+        found = {key: meta["version"] for key, meta in lock.items() if key.split("node_modules/")[-1] == "dompurify"}
+        self.assertEqual({"node_modules/dompurify": "3.4.16"}, found)
+
+    def test_pyproject_is_private_mit_with_the_license_files(self):
+        text = (REPO / "packages" / "python" / "pyproject.toml").read_text()
+        self.assertIn('license = "MIT"', text)
+        self.assertIn('license-files = ["LICENSE", "THIRD_PARTY_NOTICES.txt"]', text)
+        self.assertIn('"Private :: Do Not Upload"', text)
+
+    def test_ci_runs_python_310_and_314_and_never_publishes(self):
+        text = (REPO / ".github" / "workflows" / "ci.yml").read_text()
+        self.assertRegex(text, r'python-version: \["3\.10", "3\.14"\]')
+        self.assertIn("UV_PYTHON: ${{ matrix.python-version }}", text)
+        self.assertIsNone(re.search(r"^\s*(tags|release|workflow_dispatch|push):", text, re.M))
+        self.assertIsNone(re.search(r"\bpublish\b|pypi|npm publish|gh release", text, re.I))
+        self.assertTrue(list((REPO / ".github" / "workflows").glob("*.yml")) == [REPO / ".github" / "workflows" / "ci.yml"])
 
     def test_installed_wheel_serves_without_node_or_network(self):
         site = self.tmp / "site"

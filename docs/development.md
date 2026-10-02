@@ -1,6 +1,7 @@
 # Development
 
-`agui-inspector` is a working name. Nothing here publishes, tags or releases anything.
+`agui-inspector` is the approved package name on npm and PyPI, unregistered on 2026-10-02. Both manifests are
+private. Nothing here publishes, tags or releases anything.
 
 ## Prerequisites
 
@@ -21,22 +22,24 @@ Run from the repository root.
 | `npm run build` | Writes `packages/inspector/dist` (`index.html` and `app.js`). `-- --outdir <dir>` builds elsewhere. |
 | `npm run check:bundle` | Fails when the files in `packages/inspector/dist` exceed 2,000,000 minified bytes or 600,000 gzip bytes. Run `npm run build` first. |
 | `npm run check:bundle:renderer` | Builds a representative bundle (scaffold app plus the pinned A2UI v0.9 renderer) into `.build/representative` and reports the headroom left. |
-| `npm run test:benchmark` | Checks the 5,000-frame fixture against its manifest and reports UI responsiveness as pending. `-- --strict` fails while it is pending. |
+| `npm run test:benchmark` | Checks the 5,000-frame fixture and its schedule and reports UI responsiveness as pending. `-- --strict` fails while it is pending. `-- --measure` runs the browser benchmark (about seven minutes). |
 | `npm run test:e2e` | Runs Playwright against `tests/e2e`. |
 | `npm run package:python` | Builds the assets, stages them into `packages/python`, checksums them and runs `uv build`. See [embedding](embedding.md) and [build provenance](build-provenance.md). |
 | `npm run check:ci` | Runs the pull request gate locally (see below). |
 | `npm run check:ci -- --strict` | The same gate, but suites that are not introduced yet fail it. |
 
 Playwright needs a browser: `npx playwright install chromium`. That is an explicit download, not part
-of `npm ci`. There are no end-to-end tests yet, so `npm run test:e2e` currently fails with "No tests
-found". That is correct: a missing suite must not count as passing.
+of `npm ci`. A missing suite must not count as passing: with no spec, `npm run test:e2e` fails with
+"No tests found".
 
 ## Reference agent
 
 `node examples/reference-agent/server.ts --port 0 --allow-origin http://127.0.0.1:4173` starts a
 model-free fixture server on 127.0.0.1 only and prints `{"url": ...}`. `POST /agent` streams one
-deterministic run. It grants CORS to the single allowed origin, never sets credentials headers and
-never echoes request headers. It needs no network and no model. Node strips the TypeScript types
+deterministic run. It grants CORS to the single allowed origin and never sets credentials headers.
+`/agent` never echoes request headers. `POST /credential-echo` is the one exception, on purpose: it repeats
+the token it received in one known frame of an otherwise valid run, so the end-to-end test can check
+that the inspector keeps target-sent bytes unchanged (`docs/recordings.md`). It needs no network and no model. Node strips the TypeScript types
 itself, so the file uses only erasable syntax.
 
 ## npm static assets
@@ -73,17 +76,24 @@ schema, checks each event lifecycle and runs every exchange through the pinned p
 The manifest is frozen. After a reviewed profile change, regenerate it with
 `node tests/benchmarks/generate.ts --write` and review the diff.
 
-`npm run test:benchmark` repeats the manifest check and then prints the responsiveness status. There is
-no UI timing yet, so the status is `PENDING` and `SC-009 NOT PASSED`; a timer that does not drive the UI
-is never accepted instead. The runner, browser, interaction schedule, warm-up and three measured runs,
-and the pass rules (at least 95 of 100 filters and 95 of 100 expansions within 200 ms, plus exact frame
-count and hashes) are in `tests/benchmarks/profile.md`. Slice L04 supplies the measurements.
+`npm run test:benchmark` repeats the manifest check and the planned schedule and then prints the responsiveness
+status, which is `PENDING` and `SC-009 NOT PASSED` unless the machine matches the plan. `npm run test:benchmark -- --measure`
+runs the browser benchmark: one warm-up and three measured runs, about seven minutes. It was run on an Apple M4 Pro
+with headless Chromium 153.0.8010.12 (PR #14, and again on integrated `main` on 2026-10-02): each run retained exactly
+5,000 frames with matching hashes and finished 200 of 200 interactions, with 100 of 100 filter changes and 100 of 100
+expansions within 200 ms. That machine is not the required runner, so this is development evidence only. The headed
+Mac mini M2 certification run is still pending with the maintainer, and SC-009 stays not passed until it passes.
+The recorded numbers, the runner requirements, the interaction schedule and the pass rules (at least 95 of 100 filters
+and 95 of 100 expansions within 200 ms, plus exact frame count and hashes) are in `tests/benchmarks/profile.md`.
 
 ## Pull request checks
 
 `.github/workflows/ci.yml` runs on `pull_request` only, with read-only repository access. It installs
 with `npm ci --ignore-scripts`, then runs `npm run check:ci`, the same command you run locally. It
-never publishes, tags or releases anything, and it uses no secrets. Every action is pinned to a full
+never publishes, tags or releases anything, and it uses no secrets. The job is a matrix over Python 3.10 and 3.14
+(`UV_PYTHON`), so every step runs once per version and the Python tests run on both; the required-check names are
+`check (python 3.10)` and `check (python 3.14)`. To repeat one version locally, set `UV_PYTHON=3.14` before the
+uv commands. Every action is pinned to a full
 commit SHA; bump a pin only after reading the new release.
 
 `scripts/ci.mjs` runs these steps in order and stops at the first failure, which fails the gate:
@@ -111,23 +121,23 @@ integrated main branch. Run `npm run check:ci -- --strict` there: it behaves lik
 but exits non-zero while any suite is pending, so an absent bundle-budget check, an absent
 end-to-end suite or an absent Python package blocks the release instead of being skipped. The
 5,000-frame responsiveness check is not part of this gate. It needs the physical runner described in
-the benchmark profile (slices F03 and L04), and the portable CI run cannot certify it. Publishing is
+the benchmark profile, and the portable CI run cannot certify it. Publishing is
 a separate, blocked step; see `docs/distribution.md`.
 
 ## What exists and what is still missing
 
-This is the F01 scaffold, the F02 gate and the F03 budget and benchmark fixture. The views render
-"Not implemented" and every control is disabled.
+The MVP is implemented on `main`. Release verification is not complete; the table separates what is
+checked by the gate from what is still open.
 
 | Check | Status |
 | --- | --- |
-| Typecheck, foundation unit tests, build | Present. |
-| CI workflow and `npm run check:ci` | Present (slice F02). Reports the suites below as pending. |
-| Bundle-budget check (2 MB minified, 600 KB gzipped) | Present (slice F03). Counts the scaffold build; the final app repeats it. |
-| 5,000-frame benchmark fixture and manifest | Present (slice F03). |
-| 5,000-frame responsiveness measurement | Pending until the benchmark UI (slice L04) and the physical runner exist. |
-| End-to-end tests and network-allowlist checks | Missing; only the configuration exists. |
+| Typecheck, unit tests, build | Present; run by `npm run check:ci`. |
+| CI workflow and `npm run check:ci` | Present (slice F02). The workflow runs the whole gate on Python 3.10 and 3.14. |
+| Bundle-budget check (2 MB minified, 600 KB gzipped) | Present (slice F03). Counts the complete build. |
+| End-to-end tests and network-allowlist checks | Present under `tests/e2e`. |
 | Python package and tests | Present (slice L06). Packaging and tests run through `npm run package:python` and the uv commands in [embedding](embedding.md). |
+| 5,000-frame benchmark fixture, manifest and browser measurement | Present (slices F03 and L04). |
+| 5,000-frame responsiveness certification (SC-009) | Pending: measured on an Apple M4 Pro with headless Chromium (development evidence only); the headed Mac mini M2 run is pending with the maintainer. |
 
 The foundation tests prove that the pinned baseline works together: the 31 event types, the fetch
 hook, sequence-error reporting while the recording branch keeps draining, resume and cancel entries,

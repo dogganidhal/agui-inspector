@@ -21,11 +21,12 @@ function directDependencies(): Array<[name: string, version: string, manifest: s
   });
 }
 
-test('manifests are private working-name packages with no license, bin, publish config or lifecycle scripts', () => {
+test('manifests are private MIT packages with no bin, publish config or lifecycle scripts', () => {
   for (const manifest of manifests) {
     const pkg = json(manifest);
     assert.equal(pkg.private, true, `${manifest} is private`);
-    for (const forbidden of ['license', 'licenses', 'publishConfig', 'bin']) {
+    assert.equal(pkg.license, 'MIT', `${manifest} is MIT licensed`);
+    for (const forbidden of ['licenses', 'publishConfig', 'bin']) {
       assert.equal(forbidden in pkg, false, `${manifest} has no ${forbidden}`);
     }
     for (const script of lifecycle) assert.equal(script in (pkg.scripts ?? {}), false, `${manifest} has no ${script} script`);
@@ -34,11 +35,14 @@ test('manifests are private working-name packages with no license, bin, publish 
   assert.deepEqual(json('package.json').workspaces, ['packages/inspector']);
 });
 
-test('no LICENSE file exists', () => {
-  const found = ['.', 'packages/inspector'].flatMap((dir) =>
-    readdirSync(path.join(root, dir)).filter((name) => /^(licen[sc]e|copying)(\.|$)/i.test(name)),
-  );
-  assert.deepEqual(found, []);
+test('LICENSE is MIT with the exact copyright line and the package copies equal the root files', () => {
+  const license = read('LICENSE');
+  assert.match(license, /^MIT License\n/);
+  assert.deepEqual(license.split('\n').filter((line) => line.startsWith('Copyright')), ['Copyright (c) 2026 Nidhal Dogga']);
+  for (const file of ['LICENSE', 'THIRD_PARTY_NOTICES.txt']) {
+    assert.equal(read(`packages/inspector/${file}`), read(file), `packages/inspector/${file} equals the root copy`);
+    assert.equal(read(`packages/python/${file}`), read(file), `packages/python/${file} equals the root copy`);
+  }
 });
 
 test('every direct dependency is pinned to an exact version', () => {

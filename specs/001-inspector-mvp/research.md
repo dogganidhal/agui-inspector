@@ -28,14 +28,16 @@ on 2026-10-02. Approval does not authorize registration or publishing.
   `https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json`. Add only that built-in alias
   beside the bundled catalog factory in `packages/inspector/src/views/a2ui/catalog.tsx`.
   Do not rewrite recorded operations or fetch catalogs. General aliases remain 1.0.0 scope.
-- **Documented upstream-pin exception (D01):** `@a2ui/markdown-it@0.2.0`, bundled transitively,
-  pins DOMPurify 3.4.11, affected by
+- **Documented upstream-pin exception (D01):** `@a2ui/markdown-it@0.2.0`, installed transitively through
+  `@a2ui/react` (the current `app.js` bundle does not include it), pins DOMPurify 3.4.11, affected by
   [GHSA-c2j3-45gr-mqc4](https://github.com/advisories/GHSA-c2j3-45gr-mqc4) and
   [GHSA-55q2-fjhq-7xh7](https://github.com/advisories/GHSA-55q2-fjhq-7xh7).
   Root `package.json` MUST contain npm `"overrides": { "dompurify": "3.4.16" }` with the committed
   lockfile resolving exactly 3.4.16. This avoids changing the required renderer or adding a direct
   Markdown dependency. Remove the override when A2UI ships a fixed pin; document that change and
   review the lockfile. Principle V remains satisfied: exact pin, committed lock, demonstrated need.
+  Implemented in D01: the override and lock resolve exactly 3.4.16, and `npm audit` no longer reports the
+  advisories (checked 2026-10-02 after `npm update dompurify --ignore-scripts`).
 - **Sources:** [core registry](https://registry.npmjs.org/@ag-ui/core/1.0.1),
   [client registry](https://registry.npmjs.org/@ag-ui/client/1.0.1),
   [middleware registry](https://registry.npmjs.org/@ag-ui/a2ui-middleware/0.0.11),
