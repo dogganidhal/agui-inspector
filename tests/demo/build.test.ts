@@ -460,12 +460,12 @@ test('the Pages workflow validates and uploads only the isolated demo directory,
   });
   assert.deepEqual(order, [...order].sort((a, b) => a - b), 'install, site settings, build, budget, checks, then upload');
   // The origin and base path come from the site's own settings, so a fork deploys with its own; no literal host.
-  assert.match(build, /uses: actions\/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5\n\s+id: pages\n(?!\s+with:)/, 'pinned, and no input: it cannot enable Pages');
+  assert.match(build, /uses: actions\/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0\n\s+id: pages\n(?!\s+with:)/, 'pinned, and no input: it cannot enable Pages');
   assert.match(build, /node scripts\/build-demo\.mjs --outdir \.build\/public-demo --origin "\$PAGES_ORIGIN" --base-path "\$PAGES_BASE_PATH\/"/);
   assert.match(build, /PAGES_ORIGIN: \$\{\{ steps\.pages\.outputs\.origin \}\}\n\s+PAGES_BASE_PATH: \$\{\{ steps\.pages\.outputs\.base_path \}\}/);
   assert.doesNotMatch(text, /dogganidhal|github\.io/, 'no literal host in the workflow');
-  assert.match(build, /uses: actions\/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4\n\s+with:\n\s+path: \.build\/public-demo\n/);
-  assert.match(text, /uses: actions\/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4\n/);
+  assert.match(build, /uses: actions\/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0\n\s+with:\n\s+path: \.build\/public-demo\n/);
+  assert.match(text, /uses: actions\/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1\n/);
   assert.match(build, /persist-credentials: false/);
   assert.doesNotMatch(text, /npm (?:ci|install)(?![^\n]*--ignore-scripts)/);
   // The same checkout and setup-node pins as the pull request workflow.

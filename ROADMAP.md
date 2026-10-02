@@ -57,8 +57,10 @@ ownership. Manifests remain private: no publishing, tags or releases are authori
 
 ### Public demo companion (2026-10-02)
 
-Status: specification, [implementation plan](specs/002-public-demo/plan.md) and
-[three slices](specs/002-public-demo/tasks.md) drafted for review; not implemented or deployed.
+Status: live at <https://dogganidhal.github.io/agui-inspector/> since 2026-10-02. The
+[specification](specs/002-public-demo/spec.md), [implementation plan](specs/002-public-demo/plan.md) and
+[three slices](specs/002-public-demo/tasks.md) (T001 to T017) are implemented and merged; the Pages workflow
+deployed the demo from `main`.
 The demo accompanies 0.1.0 without adding npm/PyPI publishing, tags, the release workflow,
 JS server helpers or CLI to this feature.
 

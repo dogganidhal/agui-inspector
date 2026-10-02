@@ -46,7 +46,7 @@ metadata or version bump.
 | Protocol baseline | __demo__/agent/protocol/baseline | Baseline producer with input IDs. |
 | Protocol run error | __demo__/agent/protocol/run-error | Existing error producer; completes all-31 coverage. |
 
-Build prefixes only these source URL/preparation references with the deployment base, preserving
+Build prefixes only these source URL/preparation references with the deployment origin and base (absolute URLs), preserving
 literal threadId/runId template variables; ordinary config/user URLs never rebased.
 
 ## DemoReadiness

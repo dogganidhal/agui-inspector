@@ -104,7 +104,7 @@ Ordinary static/npm/Python default paths stay unchanged.
 duplicates runtime/renderer and budget; global URL rebasing changes integrations.
 
 **URL trap**: Existing agent/preparation references resolve against origin, not document.baseURI.
-Prefix only checked-in demo paths at build time; config/worker sit beside page. Preserve normal
+Prefix only checked-in demo paths at build time, as absolute URLs (hosted mode refuses relative endpoints); config/worker sit beside page. Preserve normal
 config/user URL semantics. No required root manifest dependency edit.
 
 ## R6: Pages workflow / reviewed pins
@@ -120,12 +120,14 @@ widens credentials/unreviewed code; publishing/tags/releases expressly deferred.
 
 | Action | Reference | Commit SHA |
 | --- | --- | --- |
-| actions/upload-pages-artifact | v4 | 7b1f4a764d45c48632c6b24a0339c27f5614fb0b |
-| actions/deploy-pages | v4 | d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e |
+| actions/configure-pages | v6.0.0 | 45bfe0192ca1faeb007ade9deae92b16b8254a0d |
+| actions/upload-pages-artifact | v5.0.0 | fc324d3547104276b827a68afc52ff2a11cc49c9 |
+| actions/deploy-pages | v5.0.1 | 368f82528645a54fb793d4d04e342629a3f51346 |
 
 Reuse existing SHA checkout/setup-node. Implementation reviews pinned action metadata/permissions;
-pin changes require recorded review, never substituting a tag. configure-pages is unnecessary for
-fixed base path; if introduced later it also needs SHA pin and must not auto-enable Pages.
+pin changes require recorded review, never substituting a tag. configure-pages reads the site's `origin`
+and `base_path` for the build; it takes no input, so it cannot enable Pages. Pins moved to these majors
+on 2026-10-02 (FX5) to leave Node 20; the releases changed no inputs or outputs the workflow uses.
 
 **Source**: [GitHub custom Pages workflows](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages).
 

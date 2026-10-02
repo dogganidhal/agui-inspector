@@ -161,8 +161,8 @@ export async function createInteractiveServer(options: InteractiveOptions = {}):
     openStreams: () => open,
     close: () =>
       new Promise((resolve) => {
-        server.closeAllConnections();
         server.close(() => resolve());
+        server.closeAllConnections();
       }),
   };
 }
