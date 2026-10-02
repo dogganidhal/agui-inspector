@@ -50,4 +50,8 @@ satisfied. It does not mean implementation or runtime testing is complete.
   scenarios, and success criteria. Source sections are preserved in the
   [original product brief](../../../docs/reference/product-brief.md); the feature specification
   and its recorded clarifications define current MVP requirements.
+- The user asked on 2026-10-02 for an interface that adopters can brand. FR-041, US2.5 and SC-010
+  cover the theme-property contract. The delivery mechanism for overrides is an open roadmap
+  decision rather than a clarification marker, so CHK005 still holds. The theme properties are the
+  adopter-facing interface, which keeps CHK001 and CHK016 satisfied.
 - Application implementation and runtime testing have not started.

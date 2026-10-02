@@ -8,7 +8,7 @@ No task chooses a license/name/upstream/discovery/transport/element decision, re
 frames, permits credential recording, publishes, creates LICENSE/tags/releases, or edits agent
 context. `agui-inspector` remains a working name.
 
-**G-07 hold:** G1 implementation approval is blocked for every F01-F05 and L01-L07 slice.
+**G-07 hold:** G1 implementation approval is blocked for every F01-F06 and L01-L07 slice.
 The conflicting raw/privacy acceptance in F04/F05 and L02/L03/L04/L05/L06/L07, full
 FR-008/FR-036 sign-off and integrated SC-008 credential-exclusion check cannot pass for a
 server-echoed token until the user resolves the guarantees. Non-conflicting header isolation,
@@ -25,7 +25,7 @@ below. Tests are required by the spec/constitution, not optional polish.
 
 ## Wave W1: sequential setup and foundation
 
-Exactly five one-PR slices. Direct prerequisites form the chain F01 -> F02 -> F03 -> F04 -> F05.
+Exactly six one-PR slices. Direct prerequisites form the chain F01 -> F02 -> F03 -> F04 -> F05 -> F06.
 An unmerged stack is at most one slice plus its direct successor: merge that pair before starting
 the next pair. A slice inherits previously merged work but names only its immediate predecessor.
 All W1 must be merged to main before any W2 lane starts.
@@ -123,14 +123,35 @@ packages/inspector/tests/frames tests/benchmarks`. Exactly 5,000 original frames
 validation/client exceptions do not discard malformed evidence; a missing terminal produces a
 finding, not an invented outcome. No React imports occur in core.
 
+### F06 design-foundation
+
+**Refs:** FR-012, FR-037, FR-041; US1, US2.5, US3, US4, US5 (shared foundation); SC-010.
+**Depends on:** F05 only. **Goal:** one theme and one set of view primitives that every W2 lane builds
+from, so seven parallel lanes produce one consistent interface.
+**Owned paths:** `packages/inspector/src/views/theme/**`, `packages/inspector/tests/theme/**`,
+`tests/e2e/theme/**`, `docs/theming.md`.
+
+- [ ] T052 Port the public `--agui-*` properties, their light/dark definitions and the derived tokens from [design.md](design/design.md#theme-tokens) and the `:root` block of [prototype.html](design/prototype.html) into `packages/inspector/src/views/theme/tokens.css`; default fonts are system stacks, and no rule loads fonts or other assets from outside the bundle.
+- [ ] T053 Build the primitives in [design.md](design/design.md#components) as React components with their CSS in `packages/inspector/src/views/theme/`, using native elements, visible focus and reduced-motion handling; add no component, icon or CSS framework dependency, and take every color, radius, spacing step and font from the tokens.
+- [ ] T054 Render every primitive and state in a fixture page in light, dark and one override set; check in `tests/e2e/theme/theme.spec.ts` that overriding only `--agui-*` restyles all of them and that the page makes zero third-party requests, cover component logic in `packages/inspector/tests/theme/primitives.test.ts`, and document the property contract and dark-mode rules in `docs/theming.md`.
+
+**Acceptance:** `npm run typecheck`, `npm run test:unit -- packages/inspector/tests/theme`,
+`npm run test:e2e -- tests/e2e/theme`, `npm run build && npm run check:bundle`. Overrides restyle every
+primitive in both modes; the default build requests no third-party fonts or assets. The override
+delivery mechanism stays undecided (G-09); tests load overrides as a stylesheet after the inspector's own.
+
 ## Wave W2: disjoint user-story lanes
 
 Seven one-PR lanes. All start from **merged W1 main**. L02 has exactly one additional prerequisite,
 L01; L01 has no W2 prerequisite, so that stack is at most one level. Every other lane has no W2
 prerequisite. Frozen F01 contracts and scripted collaborators permit scoped browser tests before
 unrelated lanes finish; no lane must wait for another's internal implementation or edit its files.
-Root manifests, lockfiles, CI, shared contracts and W1 fixtures are frozen during W2; a required
-change is a coordinator blocker, not an undeclared shared-file edit.
+Root manifests, lockfiles, CI, shared contracts, W1 fixtures and F06 theme files are frozen during
+W2; a required change is a coordinator blocker, not an undeclared shared-file edit.
+
+Every view lane composes F06 primitives and tokens and matches [design.md](design/design.md) for its
+views; its task map names the sections per lane. [prototype.html](design/prototype.html) and
+[screens/](design/screens/) are visual references, not code to port.
 
 ### L01 config-presets-profiles
 
@@ -293,7 +314,7 @@ integration PR rather than disguising it as a deeper W2 prerequisite.
 
 ## Requirement and story coverage
 
-All 40 FRs have implementation or explicit retained/deferred coverage. No user story is deferred.
+All 41 FRs have implementation or explicit retained/deferred coverage. No user story is deferred.
 
 | Requirement | Slices |
 | --- | --- |
@@ -308,7 +329,7 @@ All 40 FRs have implementation or explicit retained/deferred coverage. No user s
 | FR-009 | F04, F05, L02, L04 |
 | FR-010 | L04, L07 |
 | FR-011 | L02 |
-| FR-012 | F01, F02, F03, F05, L03, L04, L05 |
+| FR-012 | F01, F02, F03, F05, F06, L03, L04, L05 |
 | FR-013 | L03, L07 |
 | FR-014 | F05, L02, L03 |
 | FR-015 | L03 |
@@ -333,28 +354,29 @@ All 40 FRs have implementation or explicit retained/deferred coverage. No user s
 | FR-034 | F05, L04 |
 | FR-035 | F05, L04 |
 | FR-036 | F01, F02, F04, L01, L02, L04, L06; auth-echo guarantee blocked on G-07 |
-| FR-037 | F02, L02, L05, L07 |
+| FR-037 | F02, F06, L02, L05, L07 |
 | FR-038 | L06, L07 |
 | FR-039 | L04, L07 |
 | FR-040 | F01, F02, L06 retain local build/provenance checks and publishing safeguards; actual publication deferred by explicit no-publishing constraint and G-01/G-02 |
+| FR-041 | F06 defines tokens and primitives; L01, L02, L03, L04, L05, L07 build views only from them; override delivery deferred to G-09 |
 
 | Story/acceptance refs | Completion slices | Independent criterion |
 | --- | --- | --- |
 | US1 P1: US1.1-US1.6 | F04/F05, L02/L03/L04/L07 | Scripted live stream, malformed retention, all event views, controls and exact hardware benchmark |
-| US2 P1: US2.1-US2.4 | L02/L06/L07 | Enabled/disabled Starlette/FastAPI plus Node-free wheel and static-assets serving |
+| US2 P1: US2.1-US2.5 | F06, L02/L06/L07 | Enabled/disabled Starlette/FastAPI plus Node-free wheel and static-assets serving; theme overrides restyle every view |
 | US3 P2: US3.1-US3.4 | L02/L03/L05 | All-interrupt/tool barriers, streamed arguments/results and surface action callback/input |
 | US4 P2: US4.1-US4.6 | L01/L02/L07 | Config/variables/preparation failures, every profile switch, reload and credential-free JSON exchange |
 | US5 P2: US5.1-US5.4 | L03/L04/L07 | Current state, exact schema-invalid raw send, warning/round-trip/header absence and visible invalid import |
 
 Success criteria: SC-001 L02/L03/L04/L07; SC-002 L06; SC-003 F05/L03/L04/L05;
 SC-004 L02/L05; SC-005 L01/L02; SC-006 L04; SC-007 L04; SC-008 L02/L04/L05/L06/L07;
-SC-009 F03/F05/L04 plus final complete-build budget. A matrix entry is traceability, not evidence
+SC-009 F03/F05/L04 plus final complete-build budget; SC-010 F06 plus every view lane. A matrix entry is traceability, not evidence
 that the currently unbuilt requirement has passed.
 
 ## Dependencies and parallel execution
 
 ```text
-W1: F01 -> F02 -> F03 -> F04 -> F05 -> merged-main checkpoint
+W1: F01 -> F02 -> F03 -> F04 -> F05 -> F06 -> merged-main checkpoint
 W2 roots: L01, L03, L04, L05, L06, L07
 W2 stack: L01 -> L02
 All W2 merged -> integrated-main validation (no new slice; G-08 if gaps)
@@ -396,6 +418,6 @@ Publication/license/name decisions, all excluded modes/transports/tools, stable-
 documented release boundaries. Accessibility basics, error handling, trust-boundary validation
 and privacy are not deferred.
 
-**Count:** 12 PR slices (W1: 5, W2: 7), 51 checklist tasks. Story-tag counts: US1 11, US2 6,
-US3 6, US4 6, US5 4; foundation 18. Shared story coverage is recorded in slice refs/matrices
+**Count:** 13 PR slices (W1: 6, W2: 7), 54 checklist tasks. Story-tag counts: US1 11, US2 6,
+US3 6, US4 6, US5 4; foundation 21. Shared story coverage is recorded in slice refs/matrices
 rather than counting a task multiple times.

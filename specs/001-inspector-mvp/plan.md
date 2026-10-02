@@ -49,7 +49,7 @@ architecture satisfies the principle; it does not certify unbuilt runtime behavi
 | II. Protocol, not framework | PASS | PASS | Required upstream packages; framework-free core; React only in views; explicit raw/expanded/client-derived separation; A2UI `/v0_9`. |
 | III. Generic core/presets | PASS | PASS | L01 templates/preparation/input composition; no server-specific branches; preparation errors prevent run dispatch. Plugins excluded. |
 | IV. Local/privacy | PASS except G-07 | UNRESOLVED G-07 | Memory-only auth, no recorder header access, no export headers, explicit allowlist/CSP, hosted no cookies, no server-side sessions. Raw-preservation versus server-echoed auth requires user decision. CLI clauses N/A. |
-| V. Small/auditable | PASS | PASS | Exact pins/locks, no lifecycle installs, dependency rationale, native primitives, no speculative plugin/service layers. |
+| V. Small/auditable | PASS | PASS | Exact pins/locks, no lifecycle installs, dependency rationale, native primitives, no speculative plugin/service layers. F06 theming is plain CSS custom properties with no added dependency. |
 | VI. Every event view | PASS | PASS | 31 named fixture cases; L03/L04/L05 frame/conversation mapping, original chunks plus derived expansions; encrypted values never decoded. |
 | Architecture/distribution | PASS | PASS | Same bundle in static/npm/wheel; explicit Python enable switch/warning; strict TS/React/esbuild/node tests/Playwright/uv; optional Starlette; no excluded modes. |
 | Workflow/quality | INCOMPLETE: 50,000-frame criteria were missing | PASS planning criteria, execution pending | Measurable 5,000- and 50,000-frame profiles/thresholds/methods are now defined below; only 5,000-frame implementation/testing belongs to MVP tasks. F02 establishes required CI; absent infrastructure and unrun workloads are not counted as passed. |
@@ -72,8 +72,9 @@ Every roadmap Open decisions item appears once; none has a chosen answer.
 | G-04 capability-discovery | Whether/when the protocol defines discovery | Any discovery beyond inline/configured URL | AG-UI protocol maintainers define mechanism; project maintainer selects future scope |
 | G-05 websocket-push | Protocol-defined WebSocket/push semantics | These transports and notifications; no inferred contract from capability names | AG-UI protocol maintainers, then project maintainer for a later release |
 | G-06 in-app-isolation | Element isolation with document-injected A2UI styles; unresolved shadow-root integration | In-app element/style architecture | Project maintainer/user after renderer integration research |
-| G-07 echoed-credentials | FR-008/principle I unchanged evidence versus FR-036/principle IV no recorded authentication credentials when a target echoes the entered token | G1 implementation approval for all F01-F05/L01-L07 slices; contradictory raw/privacy checks and full FR-008/FR-036/SC-008 sign-off | User/project maintainer via explicit spec clarification or constitution amendment |
+| G-07 echoed-credentials | FR-008/principle I unchanged evidence versus FR-036/principle IV no recorded authentication credentials when a target echoes the entered token | G1 implementation approval for all F01-F06/L01-L07 slices; contradictory raw/privacy checks and full FR-008/FR-036/SC-008 sign-off | User/project maintainer via explicit spec clarification or constitution amendment |
 | G-08 post-W2 integration acceptance | Whether an extra integrated-main integration/acceptance PR is needed after independently owned lane PRs | Authorization for that extra PR and final acceptance sign-off if integration gaps remain | User/project maintainer at G1 |
+| G-09 theme-delivery | How hosts supply `--agui-*` overrides: a file next to the configuration, a configuration field, or host-page CSS only | Any product mechanism that loads adopter overrides; not F06 or the W2 views, which test overrides with a stylesheet loaded after the inspector's | Project maintainer/user |
 
 G-07 **candidate only**: interpret credential privacy as prohibiting inspector-originated recording
 of transport credentials, while preserving server-supplied echo payloads with the export warning.
@@ -118,7 +119,8 @@ tag-triggered CI builds, npm provenance and PyPI trusted publishing; FR-040 is n
    Resume waits for every interrupt answer; tool continuation waits for every result.
 7. React entry modules assemble settings, run controls, frames/raw/session views, conversation,
    capabilities/state, and the v0.9 renderer. Native editors/buttons and accessible names/keyboard
-   focus suffice; no theme/framework dependency is required.
+   focus suffice; no theme/framework dependency is required. Views style only through F06's plain-CSS
+   `--agui-*` tokens and shared primitives, specified in [design/design.md](design/design.md).
 
 Public contracts are in [contracts/mvp.md](contracts/mvp.md); entities and provenance distinctions
 are in [data-model.md](data-model.md). F01 defines the concrete shared TypeScript boundary types
@@ -277,22 +279,23 @@ checklist task to [tasks.md](tasks.md).
 specs/001-inspector-mvp/
   plan.md  research.md  data-model.md  quickstart.md  tasks.md
   contracts/mvp.md
+  design/{design.md,prototype.html,screens/}
 packages/inspector/
   src/contracts.ts
   src/core/{recorder,frames,store,config,presets,profiles,runtime,projection,a2ui,session-files}/
-  src/views/{settings,connection,conversation,inspection,a2ui}/
+  src/views/{settings,connection,conversation,inspection,a2ui,theme}/
   src/app/
   public/
-  tests/{foundation,recorder,frames,config,runtime,conversation,inspection,a2ui,hosted}/
+  tests/{foundation,recorder,frames,config,runtime,conversation,inspection,a2ui,hosted,theme}/
 packages/python/
   pyproject.toml  uv.lock
   src/agui_inspector/
   tests/
 examples/{reference-agent,fastapi}/
-tests/e2e/{config,runtime,conversation,inspection,a2ui,python,hosted}/
+tests/e2e/{config,runtime,conversation,inspection,a2ui,python,hosted,theme}/
 tests/benchmarks/
 scripts/{build,test-build,bundle-budget,benchmark,package-python}.mjs
-docs/{dependencies,development,distribution,configuration,conversation,inspection,a2ui,hosted}.md
+docs/{dependencies,development,distribution,configuration,conversation,inspection,a2ui,hosted,theming}.md
 .github/workflows/ci.yml
 ```
 
@@ -302,7 +305,8 @@ and acceptance; [quickstart](quickstart.md) distinguishes current planning check
 
 ## Delivery and validation
 
-W1: F01 scaffold/contracts, F02 CI, F03 full bundle budget/benchmark fixture, F04 recorder, F05 reader/store.
+W1: F01 scaffold/contracts, F02 CI, F03 full bundle budget/benchmark fixture, F04 recorder, F05 reader/store,
+F06 design foundation (tokens and view primitives).
 Each depends only on its immediate predecessor and can be reviewed as an unstacked slice plus at
 most its direct successor. Merge the current pair before opening another stacked pair.
 
