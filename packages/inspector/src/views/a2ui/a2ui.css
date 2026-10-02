@@ -1,0 +1,90 @@
+/* A2UI surfaces (design.md: Conversation, activity). The activity card around a surface is drawn with the
+   theme tokens. The renderer's own variables are mapped onto the same tokens, so a host that overrides
+   --agui-* restyles surfaces too. The official @a2ui/react 0.12.0 ships its component stylesheet with
+   unresolved CSS-module class names, so it is not loaded; elements are styled by tag inside .agui-a2ui.
+   Classes use the agui-a2ui prefix. */
+
+.agui-a2ui {
+  --a2ui-color-background: var(--bg);
+  --a2ui-color-on-background: var(--fg);
+  --a2ui-color-surface: var(--bg);
+  --a2ui-color-on-surface: var(--fg);
+  --a2ui-color-primary: var(--acc);
+  --a2ui-color-on-primary: var(--acc-fg);
+  --a2ui-color-secondary: var(--sunk);
+  --a2ui-color-on-secondary: var(--fg);
+  --a2ui-color-input: var(--bg);
+  --a2ui-color-on-input: var(--fg);
+  --a2ui-color-border: var(--line-2);
+  --a2ui-border-width: 1px;
+  --a2ui-border: 1px solid var(--line-2);
+  --a2ui-border-radius: var(--r-sm);
+  --a2ui-text-caption-color: var(--muted);
+  --a2ui-checkbox-color-error: var(--err);
+  --a2ui-spacing-xs: var(--u);
+  --a2ui-spacing-s: calc(var(--u) * 1.5);
+  --a2ui-spacing-m: calc(var(--u) * 2);
+  --a2ui-spacing-l: calc(var(--u) * 4);
+  --a2ui-spacing-xl: calc(var(--u) * 8);
+  --a2ui-font-size-xs: 11px;
+  --a2ui-font-size-s: 12px;
+  --a2ui-font-size-m: 13px;
+  --a2ui-font-size-l: 16px;
+  --a2ui-font-size-xl: 20px;
+  --a2ui-font-size-2xl: 24px;
+  --a2ui-font-family-title: var(--agui-font-sans);
+  --a2ui-font-family-monospace: var(--agui-font-mono);
+  display: grid;
+  gap: calc(var(--u) * 3);
+  color: var(--fg);
+  font: 400 13px/1.5 var(--agui-font-sans);
+}
+
+.agui-a2ui > h2 {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.agui-a2ui-note { margin: 0; color: var(--muted); }
+.agui-a2ui-issues { display: grid; gap: calc(var(--u) * 2); }
+.agui-a2ui-received > summary { color: var(--muted); font-size: 12px; cursor: pointer; }
+.agui-a2ui-surface { min-width: 0; overflow-wrap: anywhere; }
+
+/* What replaces a media component: its address as plain text, nothing loaded. */
+.agui-a2ui-blocked {
+  display: inline-block;
+  padding: calc(var(--u) * 1) calc(var(--u) * 2);
+  border: 1px dashed var(--line-2);
+  border-radius: var(--r-xs);
+  color: var(--muted);
+  font: 400 12px/1.4 var(--agui-font-mono);
+}
+
+.agui-a2ui-surface :focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--acc) 55%, transparent);
+  outline-offset: 1px;
+}
+.agui-a2ui-surface button {
+  padding: calc(var(--u) * 1.5) calc(var(--u) * 3);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  background: var(--sunk);
+  color: var(--fg);
+  font: 500 12.5px/1.2 var(--agui-font-sans);
+  cursor: pointer;
+}
+.agui-a2ui-surface button:hover { background: var(--hover); }
+.agui-a2ui-surface button:disabled { opacity: 0.42; cursor: not-allowed; }
+.agui-a2ui-surface :is(input:not([type="checkbox"], [type="radio"], [type="range"]), select, textarea) {
+  min-width: 0;
+  padding: calc(var(--u) * 1.5) calc(var(--u) * 2.5);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  background: var(--bg);
+  color: var(--fg);
+  font: 13px var(--agui-font-sans);
+}
