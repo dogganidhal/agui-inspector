@@ -36,8 +36,10 @@ of `npm ci`. A missing suite must not count as passing: with no spec, `npm run t
 
 `node examples/reference-agent/server.ts --port 0 --allow-origin http://127.0.0.1:4173` starts a
 model-free fixture server on 127.0.0.1 only and prints `{"url": ...}`. `POST /agent` streams one
-deterministic run. It grants CORS to the single allowed origin, never sets credentials headers and
-never echoes request headers. It needs no network and no model. Node strips the TypeScript types
+deterministic run. It grants CORS to the single allowed origin and never sets credentials headers.
+`/agent` never echoes request headers. `POST /credential-echo` is the one exception, on purpose: it repeats
+the token it received in one known frame of an otherwise valid run, so the end-to-end test can check
+that the inspector keeps target-sent bytes unchanged (`docs/recordings.md`). It needs no network and no model. Node strips the TypeScript types
 itself, so the file uses only erasable syntax.
 
 ## npm static assets

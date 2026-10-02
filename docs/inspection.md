@@ -33,9 +33,10 @@ never copies one, so nothing about authentication can enter an exchange through 
 announces the wrong type changes nothing. The status is the one thing that matters beyond that. A
 non-2xx answer to a run request is an error body, so it is kept as text and not read as events.
 
-This does not decide how to treat a server that echoes a credential back in its body. That
-conflict (G-07) is open, so response bytes are neither redacted nor singled out. Header isolation,
-no header export and the export warning are required either way and are not affected.
+A server can still echo a credential back in its body. G-07 is resolved by constitution 1.0.3: the
+inspector never writes a credential it holds, and the bytes the target sent are kept unchanged, with
+the export warning and no redaction. Response bytes are therefore neither redacted nor singled out.
+[Recordings](recordings.md#a-token-you-entered-and-a-server-that-repeats-it) explains the policy.
 
 ## Captured, transport and derived evidence
 
@@ -214,6 +215,7 @@ come out, that each exchange's envelopes and data text hash to the manifest, tha
 type and byte sizes match its manifest row, that offsets match the chunk each frame ended in, and
 that only the 100 invalid frames have findings.
 
-G-07 (a server that echoes a credential in its body) is still open. Nothing here redacts, hashes or
-singles out frame text, and the reader copies none of it into summaries or findings beyond an
-identifier such as a message id.
+A server that echoes a credential in its body falls under G-07, resolved by constitution 1.0.3 (see
+[recordings](recordings.md#a-token-you-entered-and-a-server-that-repeats-it)). Nothing here redacts,
+hashes or singles out frame text, and the reader copies none of it into summaries or findings beyond
+an identifier such as a message id.
