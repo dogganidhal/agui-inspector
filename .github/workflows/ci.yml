@@ -36,4 +36,7 @@ jobs:
         with:
           version: 0.12.22
           enable-cache: false
+      # Everything the gate runs, including the public demo's typechecks, build, bundle budget and the
+      # package isolation checks in the Python suite. This workflow only checks: the demo is deployed by
+      # pages.yml from main, and nothing here uploads or deploys it.
       - run: npm run check:ci

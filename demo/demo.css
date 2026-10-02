@@ -1,0 +1,31 @@
+/* The demo page only. A native notice strip and the shared app share the viewport: the app shell is
+   100dvh on its own, so here it fills what the strip leaves. Colors and fonts are the public --agui-*
+   properties, so the strip follows the theme. */
+body {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  background: var(--agui-bg);
+  color: var(--agui-fg);
+  font: 400 13px/1.5 var(--agui-font-sans);
+}
+.demo-strip {
+  flex: none;
+  padding: 8px 16px;
+  border-bottom: 1px solid color-mix(in oklab, var(--agui-fg) 10%, var(--agui-bg));
+}
+.demo-strip p {
+  margin: 0;
+}
+.demo-strip a {
+  color: inherit;
+}
+#demo-mount,
+#root {
+  flex: 1 1 0;
+  min-height: 0;
+  height: auto;
+}
+#root > .agui-app {
+  height: 100%;
+}
