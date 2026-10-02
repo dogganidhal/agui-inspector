@@ -2,8 +2,8 @@
 
 `agui-inspector` is a working name. This page says what the inspector records from the wire and how
 that differs from what it derives or reports about the transport. It covers the recorder
-(`packages/inspector/src/core/recorder`). The frame reader and the store add their own sections
-when they land.
+(`packages/inspector/src/core/recorder`), the frame reader (`src/core/frames`) and the session
+store (`src/core/store`).
 
 ## What the recorder keeps
 
@@ -100,3 +100,120 @@ network. Each names the request the recorder is told about and the response byte
 
 The tests in `packages/inspector/tests/recorder` run these through the recorder, trap header access
 on the request and the response, and drive the protocol client through the failing streams.
+
+## From bytes to frames
+
+The recorder hands the frame reader the response bytes as they arrive. The reader decodes them as
+streaming UTF-8 and splits them into blocks at blank lines. LF, CRLF and CR all end a line, in any
+mix, and a CR at the very end of a chunk waits for the next byte to see whether an LF follows. Chunk
+boundaries can fall anywhere, including inside a delimiter or a multibyte character; the frames come
+out the same either way.
+
+Each block becomes one frame, kept in arrival order with a zero-based `index` that counts every
+frame in the exchange:
+
+| Classification | What it is | Counts as an AG-UI frame |
+| --- | --- | --- |
+| `data` | A block with at least one `data` field. Several `data` lines are joined with a line feed. | Yes, even when the data is not JSON or not a valid event. |
+| `control` | A comment (`: keepalive`), `event`, `id` or `retry` fields with no data, or a stray blank line. | No. |
+| `partial` | Text left over when the stream ended before a closing blank line. SSE never dispatches it. | No. |
+
+Every frame keeps `envelope`, the original text including every delimiter, so joining the envelopes
+of an exchange gives back the decoded stream. `data` frames also keep `data`, the extracted value.
+`offsetMs` is the offset of the chunk in which the envelope's last character arrived. A frame that
+had to wait for a possible LF keeps the offset of the chunk that carried its final CR. Offsets never
+decrease within an exchange, and a partial frame at the end carries the offset of the last chunk.
+The retained-frame count in the 5,000-frame benchmark is the number of `data` frames.
+
+Two limits of the text model: bytes that are not valid UTF-8 appear as U+FFFD in the envelope, since
+a string cannot hold them, and a leading byte order mark stays in the envelope but is ignored when
+the first field is read.
+
+Control and partial frames are evidence of what the server sent. They get no event type, no parsed
+value and no verdict, and the reader never turns them into an event.
+
+## Verdicts and findings
+
+For each `data` frame the reader first tries `JSON.parse`, then checks the parsed value with the
+upstream `EventSchemas`. The result is two verdicts on the frame (`jsonVerdict`, `schemaVerdict`) and,
+when something is wrong, one finding beside it:
+
+| Case | `jsonVerdict` | `schemaVerdict` | Finding |
+| --- | --- | --- | --- |
+| Valid event | `valid` | `valid` | None. |
+| Not JSON, including empty data | `invalid` | `not-applicable` | `json` |
+| JSON object whose `type` is not one of the 31 baseline types | `valid` | `unknown-type` | `schema` |
+| Known type with a wrong or missing field, or JSON that is not an object | `valid` | `invalid` | `schema` |
+
+Findings are additive. The frame, its envelope, its data text and its parsed value are never
+changed, repaired or dropped, and the parsed value keeps fields the schema does not know about.
+Finding messages name the failing field and the kind of problem, not the received values. If the
+validator itself throws, the frame is kept, marked `invalid`, and a finding says validation failed.
+
+Sequence violations, such as a text message that never started, are not the reader's concern: the
+events are individually valid, so the frames carry no finding. The protocol client reports them,
+and the conversation layer attaches them to the run as `sequence` findings. They never stop the
+reader or the recorder.
+
+## Missing terminal events
+
+When the stream ends, the reader checks whether it saw a `RUN_FINISHED` or `RUN_ERROR` frame that
+passed the schema. If not, it adds one `terminal` finding. Things that do not satisfy it: a lookalike
+that fails the schema (a `RUN_FINISHED` with no `runId`), text that mentions `RUN_FINISHED` but is not
+JSON, and a valid `RUN_FINISHED` cut off before its closing blank line. This holds however the stream
+ended: a clean close, a dropped connection or a user stop.
+
+The finding attaches to the exchange's run when that run is already in the store, otherwise to the
+exchange. The finding is all the reader produces. It writes no run outcome, so the outcome stays
+`unknown` until something observes one, and it invents no `RUN_ERROR` or cancellation.
+
+## The session store
+
+`createSessionStore` holds exchanges, raw frames, runs, findings and derived entries for one capture,
+in memory. Appends take effect at once. Subscribers are notified at most once per animation frame
+(`requestAnimationFrame`, or a scheduler passed in) however many appends happened in between, so a
+busy stream never waits for a view. The core imports no React; a test checks that.
+
+Raw frames, findings and derived entries are separate records. A finding points at a frame, a run or
+an exchange by id and changes none of them. A derived entry, such as an expanded chunk, lists the
+raw frames it came from, is labeled `derived`, and never has a frame index; when the source cannot
+be identified it says `ambiguous` instead of guessing. An exchange's transport state and a run's
+observed outcome are stored and updated independently: a `completed` exchange can hold a run that
+ended in `RUN_ERROR`, and a `user-stopped` one can hold a run that never reached a terminal event.
+
+The store refuses a call that would break an invariant a later export or import relies on, and
+changes nothing when it does: duplicate ids, a frame index that is not the next one in its exchange,
+an offset that goes backwards, references to things that do not exist. The recorder reports such a
+refusal as a `capture` finding, and the reader for that exchange stops so it does not add a
+misleading terminal finding on top.
+
+`createFrameSink(store)` connects the recorder to the store. Exchange updates and findings go
+straight in, chunks go through a frame reader, and an exchange's reader ends before the store hears
+that the exchange is over. Finding ids from the reader are derived from frame and exchange ids, so
+they cannot collide with the recorder's `finding-N` ids.
+
+## Protocol fixtures
+
+`examples/reference-agent/protocol-fixtures.ts` holds the F05 scenarios, deterministic and offline.
+They use the recorder's scenario shape, so the same bytes go through recorder, reader and store.
+
+| Fixture | What it exercises |
+| --- | --- |
+| `eventFixtures` | One schema-valid event for each of the 31 baseline types. |
+| `invalidCases` | Non-JSON, unknown type and schema-invalid data, with the verdicts expected. |
+| `baselineRun` | Thirty of the types in one run, with LF, CRLF and CR delimiters, cut into 1, 7, 64 and 4096 byte chunks. |
+| `runError` | The 31st type, `RUN_ERROR`, as a valid terminal. |
+| `invalidFrames` | Valid frames around every invalid class, ending correctly. |
+| `sequenceViolations` | Valid events in an invalid order, ending in `RUN_FINISHED`. |
+| `controlEvidence` | Comments, field-only blocks and blank lines, between and inside data frames. |
+| `missingTerminalScenarios` | A close after content, an empty stream, two lookalike terminals, a cut-off `RUN_FINISHED` and a cut inside a multibyte character. |
+
+The 5,000-frame fixture from `tests/benchmarks` is played through recorder, reader and store in
+`packages/inspector/tests/frames/workload.test.ts`. The test checks that exactly 5,000 `data` frames
+come out, that each exchange's envelopes and data text hash to the manifest, that every frame's
+type and byte sizes match its manifest row, that offsets match the chunk each frame ended in, and
+that only the 100 invalid frames have findings.
+
+G-07 (a server that echoes a credential in its body) is still open. Nothing here redacts, hashes or
+singles out frame text, and the reader copies none of it into summaries or findings beyond an
+identifier such as a message id.
