@@ -1,7 +1,7 @@
 // F03 T009: the bundle budget accounts for every shipped asset and fails above either limit.
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { gzipSync } from 'node:zlib';
@@ -174,11 +174,38 @@ test('the command fails when the asset directory is missing or empty', () => {
   assert.equal(run(assets('cli-empty', {})).status, 1);
 });
 
-test('the real scaffold build is counted completely: html and script, nothing skipped', () => {
+test('an emitted app.css is counted by the budget, in the table and in both totals', () => {
+  const css = ':root{--c:#000}'.repeat(100);
+  const dir = assets('with-css', { 'index.html': '<html/>', 'app.js': 'a'.repeat(1000), 'app.css': css });
+  const result = measure(dir);
+  assert.deepEqual(result.files.map((file) => file.path), ['app.css', 'app.js', 'index.html']);
+  const counted = result.files.find((file) => file.path === 'app.css')!;
+  assert.equal(counted.bytes, css.length);
+  assert.equal(counted.gzipBytes, gzipSize(Buffer.from(css)));
+  assert.equal(result.bytes, 7 + 1000 + css.length);
+  const { status, out } = run(dir);
+  assert.equal(status, 0, out);
+  assert.ok(out.includes('app.css'), 'the table lists app.css');
+  assert.match(out, new RegExp(`total +${(7 + 1000 + css.length).toLocaleString('en-US')} `));
+});
+
+test('app.css pushes a build over the limit when it is what crosses it', () => {
+  const dir = assets('css-over', { 'app.js': Buffer.alloc(1_999_999, 0x61), 'app.css': 'bb' });
+  const { status, out, failures } = run(dir);
+  assert.equal(status, 1, out);
+  assert.match(failures[0] ?? '', /minified total 2,000,001/);
+});
+
+test('the real scaffold build is counted completely: every emitted file, nothing skipped', () => {
   const dir = path.join(scratch, 'scaffold');
   execFileSync(process.execPath, [path.join(root, 'scripts', 'build.mjs'), '--outdir', dir], { cwd: root, stdio: 'pipe' });
   const result = measure(dir);
-  assert.deepEqual(result.files.map((file) => file.path), ['app.js', 'index.html']);
+  const paths = result.files.map((file) => file.path);
+  assert.deepEqual(paths, readdirSync(dir).sort(), 'the budget counts exactly what the build emitted');
+  assert.ok(
+    ['app.js,index.html', 'app.css,app.js,index.html'].includes(paths.join(',')),
+    `unexpected build output: ${paths.join(', ')}`,
+  );
   assert.equal(evaluate(result).ok, true);
   const { status, out } = run(dir);
   assert.equal(status, 0, out);
