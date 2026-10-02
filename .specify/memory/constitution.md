@@ -1,15 +1,17 @@
 <!--
 Sync Impact Report
-Version: 1.0.2 -> 1.0.3 (PATCH clarification).
+Version: 1.0.3 -> 1.1.0 (MINOR expanded hosting guidance).
 Approval: project maintainer, 2026-10-02.
 Modified principle: IV. Local-only operation and credential privacy (title unchanged).
-Affected sections: principle IV; principle I remains unchanged.
+Affected sections: principle IV; hosted connect-src architecture constraint.
 Added/removed sections: none.
-Rationale: distinguish credentials held by the inspector from evidence supplied by a target.
-Compatibility impact: no wire, saved-format or API change; no redaction or migration.
-Dependent artifacts: FR-036, SC-008, plan G-07 and checks, research, data model, contracts,
-quickstart, design and roadmap synchronized in this decision-recording PR.
-Follow-up: W3 D03 adds the credential-echo end-to-end regression.
+Rationale: explicit hosted-deployer opt-in permits visitor-selected HTTPS and loopback HTTP targets.
+Compatibility impact: restrictive default and embedded behavior unchanged; no credential persistence,
+wire changes, redaction, proxy, automatic third-party traffic or package publishing.
+Dependent artifacts: specs/002-public-demo; MVP FR-037/FR-038 cross-references; ROADMAP synchronized.
+Historical MVP design/plan/contracts are not rewritten; feature 002 governs the opt-in extension.
+Follow-up: W4 implementation after W3; exact loopback CSP browser proof and Pages enablement gates
+are tracked in specs/002-public-demo/plan.md. IPv6 support is not claimed without browser proof.
 Deferred governance placeholders: none.
 -->
 # agui-inspector Constitution
@@ -44,10 +46,20 @@ add server-specific core branches.
 
 ### IV. Local-only operation and credential privacy
 
-The inspector MUST NOT send telemetry, analytics, or third-party requests. Page requests MUST go
-only to configured targets and the page's own origin for assets and configuration. CLI mode MUST
-reach targets through its local proxy. Authentication credentials MUST stay in memory only and
-MUST NOT be written by the inspector into configuration files, browser storage, recordings,
+The inspector MUST NOT send telemetry, analytics, or third-party requests on its own initiative.
+Page requests MUST go only to configured targets and the page's own origin for assets and
+configuration by default. A hosted deployment MAY explicitly opt in, through deployer-controlled
+startup configuration, to visitor-selected targets at any HTTPS origin and HTTP loopback origins
+(localhost, 127.0.0.1, [::1], any port), subject to browser enforcement. This option MUST be off by
+default, MUST NOT apply in embedded mode, and MUST be visibly disclosed on the page. Agent
+configuration, imported profiles and target input MUST NOT enable it or widen startup policy.
+The opt-in authorizes target requests initiated by visitor actions, including declared preparation
+and capability requests; it MUST NOT authorize automatic external discovery or asset loads.
+Scripts MUST remain same-origin only, dynamic code evaluation MUST remain forbidden, and hosted
+target requests MUST NOT send cookies. Browser CORS, mixed-content and local-network restrictions
+MUST NOT be bypassed; unsupported loopback forms MUST be documented without claiming support.
+CLI mode MUST reach targets through its local proxy. Authentication credentials MUST stay in
+memory only and MUST NOT be written by the inspector into configuration files, browser storage, recordings,
 inspection views, logs, or exports. This guarantee covers credentials the inspector holds.
 Bytes supplied by a target are evidence under principle I and MUST be retained unchanged, even
 when they echo an entered credential; no redaction is permitted. Entered tokens
@@ -80,7 +92,9 @@ raw inspection.
   Python packages MUST support Python 3.10 or newer, build with uv, and keep Starlette optional.
 - Embedded helpers MUST mount nothing unless explicitly enabled. When enabled, they MUST log a
   startup warning with the mount path. The page's content security policy MUST allow scripts only
-  from its own origin and forbid `eval`. Hosted mode MUST restrict `connect-src` to allowed targets.
+  from its own origin and forbid `eval`. Hosted mode MUST restrict `connect-src` to configured targets by
+  default, or to the explicitly opted-in HTTPS and HTTP loopback boundary defined in principle IV.
+  Browser limitations MUST NOT be worked around by permitting all HTTP destinations.
 - Embedded requests MUST use the host's same-origin authentication; other modes MUST NOT send
   cookies. The CLI MUST bind only to localhost, proxy only to explicitly configured targets, and pass
   target bytes unchanged. In-app mode MUST observe the host's `AbstractAgent` without requests of
@@ -140,4 +154,4 @@ approval, reviewers MUST check applicable protocol, privacy, dependency, coverag
 and identify unresolved violations. Requirement changes MUST update acceptance criteria and
 documentation in the same change.
 
-**Version**: 1.0.3 | **Ratified**: 2026-10-01 | **Last Amended**: 2026-10-02
+**Version**: 1.1.0 | **Ratified**: 2026-10-01 | **Last Amended**: 2026-10-02

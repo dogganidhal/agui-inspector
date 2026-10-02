@@ -358,10 +358,15 @@ Its section 10 supplies the release baseline; the recorded clarifications resolv
   constitution 1.0.3 clarification 2026-10-02.)
 - **FR-037**: The inspector MUST send no telemetry, analytics, or third-party requests. Page
   requests MUST be limited to allowed targets and its own origin for assets and configuration.
-  (Sources: 2, 9.)
+  (Sources: 2, 9.) The explicit hosted-only, default-off visitor-target extension is defined in
+  [public-demo FR-007 to FR-011](../002-public-demo/spec.md#functional-requirements) under
+  constitution 1.1.0; this default remains unchanged.
 - **FR-038**: The page MUST apply a content security policy allowing scripts only from its own
   origin and forbidding dynamic code evaluation. Hosted connection restrictions MUST be active at
   startup and limit connections to permitted destinations. (Sources: 5, 9.)
+  See [public-demo FR-007 to FR-011](../002-public-demo/spec.md#functional-requirements) for the
+  deployer-chosen hosted startup boundary and documented loopback browser limitations; scripts
+  remain same-origin and dynamic code evaluation remains forbidden.
 - **FR-039**: Session export MUST warn that raw frames can hold sensitive data. Captured sessions
   MUST NOT be stored server-side. (Sources: 8.4, 9.)
 - **FR-040**: Published distributions MUST have verifiable build provenance and follow the
