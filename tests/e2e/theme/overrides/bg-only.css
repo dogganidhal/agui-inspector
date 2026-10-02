@@ -1,0 +1,4 @@
+/* Overrides the page background in :root alone: dark mode ignores it, which docs/theming.md warns about. */
+:root {
+  --agui-bg: oklch(0.98 0.012 150);
+}

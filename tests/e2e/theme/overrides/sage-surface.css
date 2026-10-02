@@ -1,0 +1,15 @@
+/* Background and text colors need dark values in the same two rules the inspector uses. */
+:root {
+  --agui-bg: oklch(0.98 0.012 150);
+  --agui-fg: oklch(0.25 0.03 150);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --agui-bg: oklch(0.21 0.03 150);
+    --agui-fg: oklch(0.92 0.02 150);
+  }
+}
+:root[data-theme="dark"] {
+  --agui-bg: oklch(0.21 0.03 150);
+  --agui-fg: oklch(0.92 0.02 150);
+}

@@ -1,0 +1,11 @@
+/* An adopter stylesheet that overrides only --agui-* properties and works in light and dark. */
+:root {
+  --agui-accent: oklch(0.52 0.19 262);
+  --agui-accent-contrast: oklch(0.99 0 0);
+  --agui-tint-hue: 262;
+  --agui-tint-chroma: 0.02;
+  --agui-radius: 2px;
+  --agui-density: 0.85;
+  --agui-font-sans: Georgia, serif;
+  --agui-font-mono: "Courier New", monospace;
+}
