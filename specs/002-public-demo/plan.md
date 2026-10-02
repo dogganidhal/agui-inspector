@@ -179,8 +179,10 @@ No remount/retry machinery: visitors can reload to retry setup after saving any 
 ### Demo configuration, build and Pages
 
 `build-demo.mjs` calls existing `buildApp(outdir)` into `.build/public-demo`, adds demo-only assets
-and replaces HTML/config only there. Validate base path, `/agui-inspector/` by default. Prefix only
-checked-in demo endpoint/preparation references into root-relative paths; preserve preparation
+and replaces HTML/config only there. Validate base path, `/agui-inspector/` by default, and `--origin` (the Pages site by default; the Pages
+workflow passes the configure-pages `origin` and `base_path` outputs). Prefix only
+checked-in demo endpoint/preparation references into absolute URLs (origin, base path, path), because hosted
+mode refuses a non-absolute endpoint; preserve preparation
 templates and ordinary URL semantics. `config.json` lists interactive/A2UI/baseline/run-error agents,
 capabilities, presets and quick messages. Bootstrap uses the same built app module as an external
 import, avoiding duplicate renderer/app bundles. Worker and DOM bootstrap get separate strict

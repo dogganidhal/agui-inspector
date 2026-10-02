@@ -81,16 +81,21 @@ Existing version 0, agents/capabilities/presets only. Interactive messages cover
 A2UI/baseline/run-error have their own quick messages. Interactive preset demonstrates ordered
 session/warm preparations using threadId/runId built-ins. A2UI actions use existing forwardedProps
 envelope in a new run, not an auxiliary fake transport. Source references are relative; build
-prefixes B without altering ordinary loader/config/user URL semantics.
+writes each as an absolute URL, origin plus B plus the path (a hosted page refuses an endpoint that is not
+absolute), without altering ordinary loader/config/user URL semantics.
 
 ## Build / Pages
 
-- node scripts/build-demo.mjs --outdir .build/public-demo --base-path /agui-inspector/ builds only
-  isolated demo assets using shared helpers; ordinary package dist untouched.
-- Validate base path absolute/trailing slash, no origin/userinfo/query/fragment/traversal; invalid
-  output/base options fail explicitly, not silent fallback.
+- node scripts/build-demo.mjs --outdir .build/public-demo --origin https://dogganidhal.github.io --base-path /agui-inspector/ builds only
+  isolated demo assets using shared helpers; ordinary package dist untouched. --origin defaults to the
+  authorized Pages site; it must match the origin that serves the page, because the worker answers only
+  same-origin requests.
+- Validate base path absolute/trailing slash, no origin/userinfo/query/fragment/traversal; validate origin as one
+  HTTPS origin (HTTP only for localhost/127.0.0.1) with no path/userinfo/query/fragment; invalid
+  output/base/origin options fail explicitly, not silent fallback.
 - Existing budget --dir .build/public-demo counts all assets under unchanged limits; normal
   npm run build/check:bundle stays separate.
-- Pages main-only upload/deploy uses researched SHA pins; build contents-read, deploy pages-write/
+- Pages main-only workflow passes the configure-pages origin and base_path outputs to the build, so a fork
+  deploys under its own address; upload/deploy use researched SHA pins; build contents-read, deploy pages-write/
   id-token-write. PR CI has no deployment permissions/trigger.
 - Standard static/npm/wheel contain no worker/bootstrap/demo configs; verify archive contents.

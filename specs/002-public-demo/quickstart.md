@@ -53,7 +53,7 @@ network forwarding/storage/header reads. Pure tests do not claim a browser contr
 ```sh
 npm exec -- tsc -p demo/tsconfig.json
 npm exec -- tsc -p demo/tsconfig.worker.json
-node scripts/build-demo.mjs --outdir .build/public-demo --base-path /agui-inspector/
+node scripts/build-demo.mjs --outdir .build/public-demo --origin https://dogganidhal.github.io --base-path /agui-inspector/
 node scripts/bundle-budget.mjs --dir .build/public-demo
 npm run test:unit -- tests/demo
 npm run test:e2e -- tests/e2e/public-demo tests/e2e/visitor-policy

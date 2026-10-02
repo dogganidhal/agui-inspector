@@ -133,6 +133,11 @@ export async function createScenarioServer(assets: Readonly<Record<string, reado
       recorded.length = 0;
       seen.length = 0;
     },
-    close: () => new Promise((resolve) => server.close(() => resolve())),
+    // close() alone waits for a connection a browser still holds open; drop them so teardown finishes at once.
+    close: () =>
+      new Promise((resolve) => {
+        server.close(() => resolve());
+        server.closeAllConnections();
+      }),
   };
 }

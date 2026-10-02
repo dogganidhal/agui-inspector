@@ -4,7 +4,7 @@ The public demo is the hosted inspector on GitHub Pages, at <https://dogganidhal
 try it two ways: run one of the scripted examples that ship with the page, or type the URL of their own server. It is a
 companion to the 0.1.0 MVP. Nothing is published to npm or PyPI, and no tag or release is involved.
 
-The page goes live when `.github/workflows/pages.yml` first runs on `main`. Until then the address above does not answer.
+The page is deployed by `.github/workflows/pages.yml` on every push to `main`.
 
 ## The examples run in your browser
 
