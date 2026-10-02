@@ -14,7 +14,10 @@
     "typecheck": "tsc -p tsconfig.json && tsc -p packages/inspector/tsconfig.json",
     "test:unit": "node scripts/test-build.mjs",
     "build": "node scripts/build.mjs",
+    "check:bundle": "node scripts/bundle-budget.mjs",
+    "check:bundle:renderer": "node scripts/bundle-budget.mjs --representative",
     "test:e2e": "playwright test",
+    "test:benchmark": "node scripts/benchmark.mjs",
     "check:ci": "node scripts/ci.mjs"
   },
   "devDependencies": {
