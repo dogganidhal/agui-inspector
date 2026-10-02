@@ -84,8 +84,10 @@ const views = [
 
 for (const [name, markup] of views) {
   test(`${name} view is a labelled section`, () => {
-    assert.match(markup, new RegExp(`<section aria-labelledby="${name}-heading" data-view="${name}"`));
-    assert.match(markup, new RegExp(`<h2 id="${name}-heading">`));
+    // An A2UI view appears once per activity card, so its heading id carries the activity id.
+    const headingId = name === 'a2ui' ? 'a2ui-heading-a1' : `${name}-heading`;
+    assert.match(markup, new RegExp(`<section aria-labelledby="${headingId}" data-view="${name}"`));
+    assert.match(markup, new RegExp(`<h2 id="${headingId}"`));
   });
 
   test(`${name} view: if it is still a scaffold it says so, disables every control and claims nothing`, () => {

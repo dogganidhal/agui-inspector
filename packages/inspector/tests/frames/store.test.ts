@@ -419,7 +419,9 @@ test('no module under src/core imports React, a renderer or any view code', () =
     const source = readFileSync(path.join(core, file), 'utf8');
     const specifiers = [...source.matchAll(/(?:from|import)\s*\(?\s*['"]([^'"]+)['"]/g)].map((match) => match[1]!);
     for (const specifier of specifiers) {
-      assert.ok(!/^(react|react-dom|@a2ui\/)/.test(specifier), `${file} imports ${specifier}`);
+      // The framework-free A2UI core may use the renderer's core package, and nothing else from @a2ui/.
+      const rendererCore = file.startsWith('a2ui/') && /^@a2ui\/web_core(\/|$)/.test(specifier);
+      assert.ok(rendererCore || !/^(react|react-dom|@a2ui\/)/.test(specifier), `${file} imports ${specifier}`);
       assert.ok(!/\/(views|app)\//.test(specifier), `${file} imports view code: ${specifier}`);
     }
     assert.ok(!/\bdocument\.|\bwindow\./.test(source), `${file} touches the DOM`);
