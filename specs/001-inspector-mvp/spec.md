@@ -31,7 +31,20 @@ their priorities set implementation order, not optional release scope.
   benchmark browser, hardware, event mix, payload sizes, and arrival rate before implementation.
 - Q: Must adopters be able to brand the inspector? A: Yes. Views take their colors, radii, spacing,
   and fonts from documented theme properties that a host can override without rebuilding (FR-041).
-  How a host supplies its overrides is not decided for 0.1.0; the roadmap tracks it.
+  Hosts supply a `theme` field in `config.json`, with optional `light` and `dark` maps of documented
+  public property names to values. Invalid names or unsafe values produce visible configuration
+  warnings, not fatal errors; the CSP is unchanged.
+- Q: What happens when a target echoes an entered token? A: Constitution 1.0.3 clarifies that
+  credentials held by the inspector remain memory-only and are never written by it; target bytes
+  are unchanged evidence, including echoes. Export keeps its sensitive-data warning. No redaction.
+- Q: Does `renderA2ui` change the next input? A: No. It is display-only, persisted and exported
+  with the profile; `injectA2uiTool` changes the next input's tool declaration.
+- Q: Which A2UI catalog aliases are in 0.1.0? A: Only middleware 0.0.11's default
+  `https://a2ui.org/specification/v0_9/basic_catalog.json` aliases the renderer's bundled
+  `https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json`. General aliases wait for 1.0.0.
+- Q: Which release decisions are approved? A: MIT, copyright "Copyright (c) 2026 Nidhal Dogga",
+  bundled third-party license/NOTICE obligations in both distributions, and `agui-inspector` on
+  npm and PyPI (both unregistered on 2026-10-02). Publishing remains unauthorized.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -85,9 +98,12 @@ service or advanced conversation scenarios.
    inspector is enabled, **Then** its bundled assets are ready to serve without a frontend build.
 4. **Given** another server can serve static files and adjacent configuration, **When** it serves the
    npm distribution's assets, **Then** the same inspector can connect to its configured agent.
-5. **Given** a host stylesheet that overrides only the documented theme properties, **When** its
+5. **Given** `config.json` theme maps that override only the documented public properties, **When** its
    developer opens the inspector in light or dark mode, **Then** every view uses the overridden
    colors, radii, spacing, and fonts.
+6. **Given** unknown/private theme names or values containing request/declaration escape syntax,
+   **When** configuration loads, **Then** a visible warning rejects those overrides, valid agent
+   configuration remains usable, no request starts, and the CSP remains unchanged.
 
 ---
 
@@ -112,7 +128,9 @@ connection. Inspect continuation inputs without presets, embedding, or session i
    completes, **Then** arguments are shown during streaming, parsed once complete, and shown with
    the result when received.
 4. **Given** an enabled A2UI v0.9 surface, **When** the developer activates a control, **Then** a new
-   run carries the documented action envelope and the recording exposes that input.
+   run carries the documented action envelope and the recording exposes that input. Both the
+   middleware 0.0.11 default catalog id and renderer basic catalog id render using the bundled
+   catalog without requests or changes to recorded operations; other aliases remain unsupported.
 
 ---
 
@@ -135,13 +153,14 @@ observed inputs against preset values and profile settings without interactive r
    forwarded properties.
 3. **Given** ordered preparation requests, **When** a run begins, **Then** each preparation exchange
    is recorded in order. If one fails, the run fails visibly and the agent run request is not sent.
-4. **Given** a client profile, **When** each setting changes, **Then** the next conversation run's
+4. **Given** a client profile, **When** each input-affecting setting changes, **Then** the next conversation run's
    recorded input reflects the selected protocol version, tools, context, A2UI options, message
-   mode, and forwarded properties.
+   mode, and forwarded properties. Changing `renderA2ui` changes display only and leaves input
+   unchanged; A2UI tool injection remains input-affecting.
 5. **Given** saved profile settings and an entered authentication token, **When** the page reloads,
    **Then** the profile settings remain available and the token has been cleared.
 6. **Given** an exported profile, **When** it is imported, **Then** its settings are restored and
-   govern the next conversation run; authentication credentials are absent from the file and
+   govern the next conversation run except display-only `renderA2ui`; authentication credentials are absent from the file and
    browser-persisted profile.
 
 ---
@@ -169,6 +188,10 @@ responses. Check state, raw submission, and export/import without presets or int
    Export warns that payloads can contain sensitive data.
 4. **Given** an invalid session file, **When** import is attempted, **Then** a visible error replaces
    any claim of successful import.
+5. **Given** a target echoes the entered synthetic token in a frame, **When** the run is captured
+   and exported, **Then** that frame remains byte-identical, the sensitive-data warning appears,
+   and the inspector's configuration, browser storage, exported headers and request recordings
+   contain no token copied from its authentication state.
 
 ---
 
@@ -269,7 +292,10 @@ Its section 10 supplies the release baseline; the recorded clarifications resolv
   and removed messages inspectable. Historical state navigation is outside the MVP. (Sources: 8.3, 10.)
 - **FR-020**: Activity views MUST update with received deltas. Enabled A2UI v0.9 surfaces MUST
   render; other activity types and surfaces with rendering disabled MUST remain inspectable as
-  JSON. (Sources: 4, 8.3, 8.5, 10.)
+  JSON. The built-in middleware 0.0.11 default catalog id
+  `https://a2ui.org/specification/v0_9/basic_catalog.json` MUST resolve to the bundled renderer basic
+  catalog `https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json` without a fetch.
+  General catalog aliases remain deferred to 1.0.0. (Sources: 4, 8.3, 8.5, 10; clarification 2026-10-02.)
 - **FR-021**: Subagent starts, finishes, and errors MUST appear as nested markers under the parent
   run, linked through parent and subagent run identifiers. Dedicated lanes are outside the MVP.
   (Sources: 8.3, 10.)
@@ -302,11 +328,13 @@ Its section 10 supplies the release baseline; the recorded clarifications resolv
   Schemas, context entries, A2UI rendering versus JSON-only inspection, optional injection of the
   A2UI rendering tool, message mode, and forwarded properties. Tool replies remain manual.
   (Sources: 8.5, 10.)
-- **FR-031**: Each client-profile control MUST change the next conversation run's input as
+- **FR-031**: Each input-affecting client-profile control MUST change the next conversation run's input as
   described, and that input MUST be inspectable in its recorded exchange. Conversation inputs MUST
   follow the documented run-input contract, including thread/run identifiers, any parent link,
   current state, selected messages, tools, context, forwarded properties, and applicable resume
-  answers. (Sources: 4, 8.5, 10.)
+  answers. `renderA2ui` is the explicit exception: it MUST affect display only, persist/export with
+  the profile, and MUST NOT change the next run's input. `injectA2uiTool` remains the input-affecting
+  A2UI control. (Sources: 4, 8.5, 10; clarification 2026-10-02.)
 - **FR-032**: Users MUST be able to save profile settings in the browser across reloads and
   export/import them as JSON in 0.1.0. Both forms MUST preserve the settings and exclude
   authentication credentials. The format remains pre-stable; version-1 stability is deferred.
@@ -322,8 +350,12 @@ Its section 10 supplies the release baseline; the recorded clarifications resolv
   Import MUST only open a recording for inspection, not execute its requests. (Sources: 8.4, 10.)
 - **FR-035**: Invalid session files MUST produce visible import errors and MUST NOT be presented
   as successfully loaded recordings. (Source: 8.4; assumption A-003.)
-- **FR-036**: Authentication credentials MUST remain in memory only and MUST NOT enter
-  configuration, recordings, inspection views, logs, or exports. (Sources: 2, 6, 8.1, 9.)
+- **FR-036**: Authentication credentials held by the inspector MUST remain in memory only.
+  The inspector MUST NOT write them into configuration, browser storage, recordings, inspection
+  views, logs, or exports; the recorder MUST NOT read headers. Target-supplied bytes MUST remain
+  unchanged evidence under FR-008, including credential echoes. No redaction is permitted, and
+  session export MUST retain its sensitive-data warning. (Sources: 2, 6, 8.1, 9;
+  constitution 1.0.3 clarification 2026-10-02.)
 - **FR-037**: The inspector MUST send no telemetry, analytics, or third-party requests. Page
   requests MUST be limited to allowed targets and its own origin for assets and configuration.
   (Sources: 2, 9.)
@@ -342,7 +374,13 @@ Its section 10 supplies the release baseline; the recorded clarifications resolv
   properties (CSS custom properties named `--agui-*`), with light and dark defaults that follow the
   browser's color-scheme preference. A stylesheet that overrides only those properties MUST restyle
   every view without rebuilding the bundle. Default fonts MUST be system font stacks or font files
-  shipped in the bundle. How hosts supply overrides is an open decision.
+  shipped in the bundle. `config.json` MUST accept a `theme` field with optional `light` and `dark`
+  maps from the ten documented public `--agui-*` names to string values, in every MVP mode.
+  The Python helper MUST accept the same field. Unknown/non-public names and unsafe values MUST
+  be rejected with a visible configuration warning, not a fatal error. Values MUST NOT start a
+  request or escape their declaration: at minimum reject `url(`, `image-set(` (case-insensitive,
+  including whitespace before `(`), `@`, `;`, `{`, `}` and backslash escapes. The CSP MUST remain
+  unchanged. Generic derived tokens MUST NOT collide with host CSS.
   (Source: clarification 2026-10-02; [UI design](design/design.md).)
 
 ### Key Entities *(include if feature involves data)*
@@ -384,15 +422,20 @@ section 10, with the recorded clarifications. SC-010 comes from the 2026-10-02 t
   end-to-end scenarios.
 - **SC-004**: Reference scenarios complete an interrupt resolution, interrupt cancellation, pending
   tool reply, and A2UI action, with each continuation carrying the required next-run input.
-- **SC-005**: Every MVP client-profile switch produces its specified change in the next run input,
-  verified through the recording. Profile settings are preserved after reload and JSON export/import,
+- **SC-005**: Every input-affecting MVP client-profile switch produces its specified change in the next
+  run input, verified through the recording. Display-only `renderA2ui` leaves that input unchanged;
+  `injectA2uiTool` changes the tools. Both switches persist after reload and JSON export/import.
+  Profile settings are preserved after reload and JSON export/import,
   with no authentication credentials in persistent data.
 - **SC-006**: A schema-invalid JSON run input is flagged, sent unchanged from the raw editor, and
   followed by an inspectable server response.
 - **SC-007**: Exporting and importing a session preserves its exchanges, frames, and run inputs,
   including order and timing, with zero headers in the exported file.
 - **SC-008**: End-to-end scenarios make zero requests outside permitted targets and the page's own
-  origin, emit no telemetry or analytics, and export no headers or authentication credentials.
+  origin, emit no telemetry or analytics, and export no headers or credentials copied from the
+  inspector's authentication state. A target-echoed synthetic token remains byte-identical in its
+  frame, with the export warning shown, while absent from configuration, browser storage, exported
+  headers and request recordings written from authentication state.
 - **SC-009**: Across the fixed 5,000-frame capture workload, every frame is retained and at least
   95% of filter changes and frame expansions finish visibly within 200 ms. Measure from user input
   until the filtered list or expanded frame content is rendered. The implementation plan MUST fix
@@ -400,7 +443,10 @@ section 10, with the recorded clarifications. SC-010 comes from the 2026-10-02 t
   The complete production client bundle MUST be at most 2 MB minified and 600 KB gzipped.
 - **SC-010**: With only the documented theme properties overridden, every view renders with the
   overrides in light and dark modes, and the default build requests no fonts or other assets from
-  outside its own origin.
+  outside its own origin. `config.json` light/dark maps work in hosted, embedded and generic static
+  serving, including the Python helper. Unknown/private names and unsafe-value fixtures each show
+  a nonfatal warning, apply no rejected override, start no request and leave the CSP unchanged.
+  Host generic custom properties do not alter inspector-derived tokens or get overwritten by them.
 
 ## Assumptions
 
@@ -429,13 +475,15 @@ section 10, with the recorded clarifications. SC-010 comes from the 2026-10-02 t
 - Plugins, capability discovery beyond configured sources, capability-consistency checks, automatic
   replies, the conformance CLI, replay, and the full rule catalogue are deferred.
 - Subagent lanes, state history, waterfalls, optional Markdown for conversation text, additional
-  A2UI versions, and catalog aliases are deferred.
+  A2UI versions, and general catalog aliases are deferred to 1.0.0. The single middleware-default
+  to renderer-basic catalog alias in FR-020 is included in 0.1.0.
 - Stable version-1 formats, the 50,000-frame target, on-demand A2UI loading, and the WCAG 2.2 AA
   release audit belong to 1.0.0. They do not replace the MVP's current acceptance criteria.
-- How hosts supply theme overrides (a file next to the configuration, a configuration field, or
-  host-page CSS) is undecided; the roadmap tracks it. FR-041 fixes only the properties.
-- Final license and package-name decisions remain dependencies before publication. The
-  [roadmap](../../ROADMAP.md#open-decisions) tracks these and the unresolved upstream placement,
+- Theme delivery is decided: `config.json` carries optional light/dark maps (FR-041); no separate
+  override file or host-page stylesheet is required.
+- MIT and `agui-inspector` on npm/PyPI are approved; license/notices packaging is W3 D01 work.
+  Publication is still unauthorized and FR-040 remains unchanged. The
+  [roadmap](../../ROADMAP.md#open-decisions) tracks the unresolved upstream placement,
   protocol discovery, and transport decisions originally recorded in section 13.
 
 ### Source traceability
@@ -452,6 +500,8 @@ Story references use `USn.m` for story `n`, scenario `m`.
 | S10-AC5: client-profile controls | FR-026 to FR-032 | US4.1 to US4.6 | SC-005 |
 | S10-AC6: invalid raw input | FR-007, FR-033 | US5.2 | SC-006 |
 | S10-AC7: session round trip | FR-034, FR-035, FR-039 | US5.3, US5.4 | SC-007 |
-| S10-AC8: privacy and network bounds | FR-004, FR-007, FR-036 to FR-039 | US2.1, US5.3; network checks in SC-008 | SC-008 |
+| S10-AC8: privacy and network bounds | FR-004, FR-007, FR-008, FR-036 to FR-039 | US2.1, US5.3, US5.5; credential echo and network checks in SC-008 | SC-008 |
 | S10-AC9: responsiveness and bundle budget | FR-008; SC-009 defines release limits | US1.5 | SC-009 |
-| Clarification 2026-10-02: adopter theming (not in section 10) | FR-037, FR-041 | US2.5 | SC-010 |
+| Clarification 2026-10-02: adopter theming and config delivery (not in section 10) | FR-006, FR-037, FR-038, FR-041 | US2.5, US2.6 | SC-010 |
+| Clarification 2026-10-02: built-in catalog alias | FR-020, FR-025, FR-037 | US3.4 | SC-003, SC-004 |
+| Clarification 2026-10-02: display-only render switch | FR-030 to FR-032 | US4.4 to US4.6 | SC-005 |

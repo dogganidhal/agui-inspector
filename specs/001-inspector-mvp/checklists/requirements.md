@@ -50,8 +50,12 @@ satisfied. It does not mean implementation or runtime testing is complete.
   scenarios, and success criteria. Source sections are preserved in the
   [original product brief](../../../docs/reference/product-brief.md); the feature specification
   and its recorded clarifications define current MVP requirements.
-- The user asked on 2026-10-02 for an interface that adopters can brand. FR-041, US2.5 and SC-010
-  cover the theme-property contract. The delivery mechanism for overrides is an open roadmap
-  decision rather than a clarification marker, so CHK005 still holds. The theme properties are the
-  adopter-facing interface, which keeps CHK001 and CHK016 satisfied.
-- Application implementation and runtime testing have not started.
+- The user asked on 2026-10-02 for an interface that adopters can brand. FR-041, US2.5-US2.6 and
+  SC-010 cover public properties, config.json light/dark delivery, nonfatal invalid-override warnings
+  and host-token isolation. G-09 is closed; D02 implements the approved delivery.
+- Constitution 1.0.3 clarifies FR-036/SC-008: inspector-held credentials stay memory-only, target
+  bytes (including echoes) stay unchanged, no redaction, and export warns. US5.5/D03 verify it.
+- FR-031/SC-005 explicitly distinguish display-only renderA2ui (persisted/exported) from input-affecting
+  tool injection. FR-020/US3.4 cover only the built-in middleware-default catalog alias.
+- W1/W2 are implemented on main; W3 follow-ups and final release verification remain pending.
+  Checklist marks assess requirements quality, not a release/runtime pass.

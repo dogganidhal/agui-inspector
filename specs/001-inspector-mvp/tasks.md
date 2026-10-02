@@ -3,19 +3,17 @@
 **Input:** [plan](plan.md), [spec](spec.md), [research](research.md), [data model](data-model.md),
 [contracts](contracts/mvp.md), [validation guide](quickstart.md).
 
-**Approval:** G1 must review the plan and resolve or explicitly disposition G-07/G-08.
-No task chooses a license/name/upstream/discovery/transport/element decision, redacts received
-frames, permits credential recording, publishes, creates LICENSE/tags/releases, or edits agent
-context. `agui-inspector` remains a working name.
+**Approval:** maintainer decisions of 2026-10-02 close G-01/G-02/G-07/G-08/G-09.
+W1/W2 below are preserved historical slices, merged on main in PRs #3-#18; their original
+undecided/blocked wording and unchecked task boxes are not current gate status.
+W3 implements only the approved decisions, not publishing/tags/releases, agent-context edits,
+or G-03 through G-06. `agui-inspector` is the approved npm/PyPI name; manifests remain private.
 
-**G-07 hold:** G1 implementation approval is blocked for every F01-F06 and L01-L07 slice.
-The conflicting raw/privacy acceptance in F04/F05 and L02/L03/L04/L05/L06/L07, full
-FR-008/FR-036 sign-off and integrated SC-008 credential-exclusion check cannot pass for a
-server-echoed token until the user resolves the guarantees. Non-conflicting header isolation,
-no-header recording/export, volatile-token clearing, credential-free settings and export warnings
-remain required; passing them does not clear the gate. Do not adopt the candidate interpretation
-or implement redaction. The plan's 50,000-frame criteria define future 1.0.0 acceptance only and
-add no implementation or test task here.
+**G-07 resolution:** constitution 1.0.3 clarifies inspector-held credentials remain memory-only
+and are never written by the inspector; target-supplied evidence is unchanged even when it echoes
+them. Recorder header reads and export headers remain prohibited, warnings remain mandatory, and
+no redaction is permitted. D03 completes the pending SC-008 credential regression.
+The plan's 50,000-frame criteria remain future 1.0.0 acceptance only.
 
 **Format:** Fxx/Lxx identifies a one-PR slice; Txxx identifies its executable checklist tasks.
 `[USn]` identifies the story; `[P]` marks an independent task within an available slice, not permission
@@ -323,9 +321,9 @@ All 41 FRs have implementation or explicit retained/deferred coverage. No user s
 | FR-003 | L02, L07 |
 | FR-004 | F04, L02, L06, L07 |
 | FR-005 | F04, L02, L07 |
-| FR-006 | L01, L06, L07 |
+| FR-006 | L01, L06, L07, D02 |
 | FR-007 | F04, L02, L04 |
-| FR-008 | F03, F04, F05, L04 |
+| FR-008 | F03, F04, F05, L04, D03 |
 | FR-009 | F04, F05, L02, L04 |
 | FR-010 | L04, L07 |
 | FR-011 | L02 |
@@ -337,7 +335,7 @@ All 41 FRs have implementation or explicit retained/deferred coverage. No user s
 | FR-017 | F05, L03, L04 |
 | FR-018 | L03 |
 | FR-019 | F05, L03 |
-| FR-020 | F03, L05, L07 |
+| FR-020 | F03, L05, L07, D03 |
 | FR-021 | L03 |
 | FR-022 | L03 |
 | FR-023 | L02 |
@@ -353,25 +351,27 @@ All 41 FRs have implementation or explicit retained/deferred coverage. No user s
 | FR-033 | F04, L04, L07 |
 | FR-034 | F05, L04 |
 | FR-035 | F05, L04 |
-| FR-036 | F01, F02, F04, L01, L02, L04, L06; auth-echo guarantee blocked on G-07 |
-| FR-037 | F02, F06, L02, L05, L07 |
-| FR-038 | L06, L07 |
-| FR-039 | L04, L07 |
-| FR-040 | F01, F02, L06 retain local build/provenance checks and publishing safeguards; actual publication deferred by explicit no-publishing constraint and G-01/G-02 |
-| FR-041 | F06 defines tokens and primitives; L01, L02, L03, L04, L05, L07 build views only from them; override delivery deferred to G-09 |
+| FR-036 | F01, F02, F04, L01, L02, L04, L06; D03 proves resolved inspector-held credential isolation and unchanged echoes |
+| FR-037 | F02, F06, L02, L05, L07, D02, D03 |
+| FR-038 | L06, L07, D02 |
+| FR-039 | L04, L07, D03 |
+| FR-040 | F01, F02, L06 retain build/provenance safeguards; D01 implements approved license/notices and private metadata; actual publication still unauthorized |
+| FR-041 | F06 and all view lanes; D02 implements config delivery and derived-token collision fix |
 
 | Story/acceptance refs | Completion slices | Independent criterion |
 | --- | --- | --- |
 | US1 P1: US1.1-US1.6 | F04/F05, L02/L03/L04/L07 | Scripted live stream, malformed retention, all event views, controls and exact hardware benchmark |
-| US2 P1: US2.1-US2.5 | F06, L02/L06/L07 | Enabled/disabled Starlette/FastAPI plus Node-free wheel and static-assets serving; theme overrides restyle every view |
-| US3 P2: US3.1-US3.4 | L02/L03/L05 | All-interrupt/tool barriers, streamed arguments/results and surface action callback/input |
-| US4 P2: US4.1-US4.6 | L01/L02/L07 | Config/variables/preparation failures, every profile switch, reload and credential-free JSON exchange |
-| US5 P2: US5.1-US5.4 | L03/L04/L07 | Current state, exact schema-invalid raw send, warning/round-trip/header absence and visible invalid import |
+| US2 P1: US2.1-US2.6 | F06, L02/L06/L07, D01/D02 | Enabled/disabled hosts, Node-free wheel/static serving, packaged notices, valid theme maps and nonfatal invalid-override warnings |
+| US3 P2: US3.1-US3.4 | L02/L03/L05, D03 | All-interrupt/tool barriers, arguments/results, action callback/input and middleware-default catalog compatibility |
+| US4 P2: US4.1-US4.6 | L01/L02/L07 | Input-affecting switches change input; persisted/exported renderA2ui is display-only; credential-free settings |
+| US5 P2: US5.1-US5.5 | L03/L04/L07, D03 | Current state, raw send, warning/round-trip/header absence, invalid import and unchanged credential echo |
 
 Success criteria: SC-001 L02/L03/L04/L07; SC-002 L06; SC-003 F05/L03/L04/L05;
-SC-004 L02/L05; SC-005 L01/L02; SC-006 L04; SC-007 L04; SC-008 L02/L04/L05/L06/L07;
-SC-009 F03/F05/L04 plus final complete-build budget; SC-010 F06 plus every view lane. A matrix entry is traceability, not evidence
-that the currently unbuilt requirement has passed.
+SC-004 L02/L05/D03; SC-005 L01/L02 (renderA2ui display-only exception); SC-006 L04; SC-007 L04/D03;
+SC-008 L02/L04/L05/L06/L07/D03; SC-009 F03/F05/L04 plus complete-build budget, D01 benchmark-doc
+cleanup and maintainer's physical runner; SC-010 F06/every view lane/D02.
+D01 also traces to principle V and distribution/CI governance (MIT/notices, exact override/lock,
+Python 3.10/3.14). A matrix entry is traceability, not a passing release claim.
 
 ## Dependencies and parallel execution
 
@@ -379,7 +379,10 @@ that the currently unbuilt requirement has passed.
 W1: F01 -> F02 -> F03 -> F04 -> F05 -> F06 -> merged-main checkpoint
 W2 roots: L01, L03, L04, L05, L06, L07
 W2 stack: L01 -> L02
-All W2 merged -> integrated-main validation (no new slice; G-08 if gaps)
+All W2 merged -> integrated-main validation -> F-01 fixed by #18; G-08 closed
+Decision-recording PR merged on main -> D01
+Decision-recording PR merged on main -> D02
+Decision-recording PR merged on main -> D03
 ```
 
 The only W2-to-W2 edge is L01 -> L02. No root lane depends on another W2 lane. Ownership prefixes
@@ -388,6 +391,11 @@ files transfer to their named W2 owner. No global CSS/schema/index/barrel file i
 multiple lanes. L07 alone owns app assembly; its scripted collaborator tests certify wiring, not
 unimplemented external features. Contracts/stubs prevent compile-order dependencies, not runtime
 acceptance requirements.
+
+W3 has no inter-slice edges or stacks: D01, D02 and D03 each depend only on main after this
+decision-recording PR. Exact ownership below is disjoint, including the Python files (D01 metadata/
+distribution tests; D02 helper/embedding tests) and A2UI versus theme/browser tests. Any required
+change outside a slice's paths is a coordinator blocker, not permission to edit another slice.
 
 Parallel examples by story after W1 merges:
 
@@ -410,10 +418,11 @@ After all seven lanes merge, run every quickstart scenario on integrated main wi
 or unimplemented-feature skips. Check complete bundle bytes, all 31 dedicated fixtures/views,
 actual next-run/profile/preparation inputs, interruptions/tool/A2UI round trips, exact raw sends,
 profile/session exchange, host wheel without Node, network allowlist and physical 5,000-frame
-benchmark. Record failures and the G-07 policy block explicitly; user decides at G-08 whether
-an additional integration PR is required. This checkpoint is verification, not an authorized W3.
+benchmark. The completed checkpoint recorded 13 pass, 1 fail (F-01 fixed by #18), 2 pending:
+SC-008 credential part (D03) and SC-009 physical M2 runner (maintainer). G-07/G-08 are closed;
+there is no extra integration PR. W3 below is explicitly approved release follow-up work.
 
-Publication/license/name decisions, all excluded modes/transports/tools, stable-v1 formats,
+Publication (still unauthorized), all excluded modes/transports/tools, stable-v1 formats,
 50,000-frame/on-demand-renderer acceptance and the stable WCAG audit remain deferred for their
 documented release boundaries. Accessibility basics, error handling, trust-boundary validation
 and privacy are not deferred.
@@ -421,3 +430,90 @@ and privacy are not deferred.
 **Count:** 13 PR slices (W1: 6, W2: 7), 54 checklist tasks. Story-tag counts: US1 11, US2 6,
 US3 6, US4 6, US5 4; foundation 21. Shared story coverage is recorded in slice refs/matrices
 rather than counting a task multiple times.
+
+## Wave W3: release decision follow-ups
+
+Exactly three one-PR slices. Each depends only on **main after this decision-recording PR merges**;
+none depends on another W3 slice. W1/W2 slices above are unchanged historical work.
+All keep manifests private, FR-040 unchanged, and prohibit publishing, tags, releases and merges.
+
+### D01 release-hygiene
+
+**Refs:** FR-001, FR-040; SC-002, SC-009; principle V, distribution and CI governance; G-01/G-02.
+**Depends on:** main after this decision-recording PR only.
+**Owned paths:** `LICENSE`, `THIRD_PARTY_NOTICES.txt`, `package.json`, `package-lock.json`,
+`packages/inspector/package.json`, `packages/python/pyproject.toml`, `packages/python/uv.lock`,
+`packages/python/tests/test_distribution.py`, `scripts/package-python.mjs`,
+`.github/workflows/ci.yml`, `docs/dependencies.md`, `docs/distribution.md`,
+`docs/build-provenance.md`, `docs/development.md`, `tests/benchmarks/profile.md`,
+`specs/001-inspector-mvp/research.md`.
+
+- [ ] T055 [US2] Add MIT `LICENSE` with exactly `Copyright (c) 2026 Nidhal Dogga`; inspect the bundled dependency closure and write `THIRD_PARTY_NOTICES.txt`, including Apache-2.0 license text plus any NOTICE content for `@a2ui/react`, `@a2ui/web_core` and `@a2ui/markdown-it`; include LICENSE/notices in npm `files` and wheel/sdist package data through `scripts/package-python.mjs`, with archive assertions in `packages/python/tests/test_distribution.py`.
+- [ ] T056 [US2] Set MIT license metadata and approved `agui-inspector` identities in npm/Python manifests while retaining npm `private: true` and Python's private classifier; record unregistered status on 2026-10-02 and conditional `@ag-ui/inspector`/open G-03 in distribution/provenance docs; no registry registration or publishing.
+- [ ] T057 Add root `package.json` `"overrides": { "dompurify": "3.4.16" }`, update/commit `package-lock.json` without install lifecycle scripts, and document the `@a2ui/markdown-it` 0.2.0 -> vulnerable 3.4.11 exception (GHSA-c2j3-45gr-mqc4, GHSA-55q2-fjhq-7xh7) in research/dependency docs; remove when A2UI ships a fixed pin, preserving principle V.
+- [ ] T058 Run Python tests on both 3.10 and 3.14 in `.github/workflows/ci.yml`; update stale measurement-pending lines in `docs/development.md` and `tests/benchmarks/profile.md` with the recorded M4 Pro headless result, identifying its actual evidence without inventing timings, and leave headed physical M2 SC-009 certification pending with the maintainer.
+
+**Acceptance:** `npm ci --ignore-scripts`, `npm run check:ci -- --strict`,
+`npm run package:python`, `npm pack --workspace packages/inspector --dry-run --json`,
+`npm ls dompurify --all`; all succeed, dependency tree and lock resolve exactly 3.4.16.
+Inspect local npm tarball and wheel/sdist for full MIT/third-party texts and upstream NOTICE content;
+distribution tests assert inclusion. CI is green for Python 3.10 and 3.14. npm manifests remain
+private, Python retains its private classifier, no publishing workflow/tag/release is introduced.
+Benchmark docs distinguish measured M4 Pro headless evidence from pending headed M2 certification.
+
+### D02 theme-delivery
+
+**Refs:** FR-006, FR-037, FR-038, FR-041; SC-002, SC-008, SC-010; US2.5, US2.6; G-09.
+**Depends on:** main after this decision-recording PR only.
+**Owned paths:** `packages/inspector/src/contracts.ts`,
+`packages/inspector/src/core/config/index.ts`, `packages/inspector/src/core/config/validation.ts`,
+`packages/inspector/src/app/startup.ts`, `packages/inspector/src/app/index.tsx`,
+`packages/inspector/src/app/app.css`,
+`packages/inspector/src/views/theme/tokens.css`, `packages/inspector/src/views/theme/index.ts`,
+`packages/inspector/src/views/theme/config.ts`, `packages/inspector/tests/config/settings.test.ts`,
+`packages/inspector/tests/hosted/startup.test.ts`, `packages/inspector/tests/theme/config.test.ts`,
+`tests/e2e/theme/theme.spec.ts`, `tests/e2e/theme/config.spec.ts`,
+`packages/python/src/agui_inspector/__init__.py`, `packages/python/tests/test_embedding.py`,
+`docs/configuration.md`, `docs/theming.md`, `docs/embedding.md`,
+`specs/001-inspector-mvp/data-model.md`, `specs/001-inspector-mvp/contracts/mvp.md`,
+`specs/001-inspector-mvp/design/design.md`, `specs/001-inspector-mvp/quickstart.md`.
+
+- [ ] T059 [US2] Extend version-0 config/types and Python helper with optional `theme` containing optional `light`/`dark` string maps keyed only by the ten public properties; reject unknown/private names, bad shapes and unsafe values with visible nonfatal configuration warnings while preserving valid agents/overrides. At minimum deny case-insensitive `url(`/`image-set(` including whitespace before `(`, `@`, `;`, `{`, `}` and backslash escapes; do not relax CSP.
+- [ ] T060 [US2] Apply validated maps through startup and the existing automatic/manual light/dark selection in every MVP distribution mode, keeping omitted values at defaults; scope all generic derived tokens and dark variants in `tokens.css` to the inspector mount `#root`, not document `:root`, so host generic tokens cannot collide. Move shell background/foreground/font declarations that consume those tokens from `body` to `#root` in `app.css`; keep dialogs/popovers/toasts in the mount subtree; no new theme dependency.
+- [ ] T061 [US2] Add config/theme/startup unit and browser regressions for both maps, mode switches, missing maps, every unsafe form, unknown/private names, nonfatal warnings, unchanged CSP, zero new requests, hostile host generic tokens and in-root floating layers; Python embedding tests verify the same field in served `config.json`.
+- [ ] T062 [US2] Document config/Python delivery, public-name/value rules, visible warning behavior, default fallback and derived-root scoping in configuration/theming/embedding docs and the owned design/model/contract/quickstart artifacts.
+
+**Acceptance:** `npm run typecheck`, `npm run test:unit -- packages/inspector/tests/config
+packages/inspector/tests/theme packages/inspector/tests/hosted`,
+`npm run test:e2e -- tests/e2e/theme tests/e2e/python`,
+`uv run --project packages/python python -m unittest discover -s packages/python/tests -p test_embedding.py`,
+`npm run build && npm run check:bundle`; all pass. Check hosted, embedded and generic static serving
+with real config maps and Python-generated config, light/dark and automatic/manual selection.
+Invalid overrides warn visibly without fatal startup, requests or CSP change; valid agents still run.
+Host `--bg`/`--fg`/`--muted`/`--acc`/`--r` do not affect inspector derivations, and inspector tokens
+do not overwrite the host; dialogs/popovers/toasts retain inspector styling.
+
+### D03 a2ui-catalog-and-credential-echo
+
+**Refs:** FR-004, FR-007, FR-008, FR-020, FR-025, FR-034, FR-036, FR-037, FR-039;
+SC-003, SC-004, SC-007, SC-008; US3.4, US5.5; G-07.
+**Depends on:** main after this decision-recording PR only.
+**Owned paths:** `packages/inspector/src/views/a2ui/catalog.tsx`,
+`packages/inspector/tests/a2ui/catalog.test.ts`, `tests/e2e/a2ui/surfaces.spec.ts`,
+`tests/e2e/inspection/credential-echo.spec.ts`,
+`examples/reference-agent/credential-echo.ts`, `docs/a2ui.md`, `docs/recordings.md`.
+
+- [ ] T063 [US3] Add exactly one built-in alias beside `createBundledCatalog` in `packages/inspector/src/views/a2ui/catalog.tsx`: middleware 0.0.11 `https://a2ui.org/specification/v0_9/basic_catalog.json` resolves to renderer `https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json`. Test both ids with the real bundled renderer and action callback, no catalog fetch or operation rewrite; keep unsupported ids visibly rejected and general aliases deferred to 1.0.0.
+- [ ] T064 [US5] Add a model-free target fixture that echoes an entered synthetic auth token in a known exact frame, and an assembled-page E2E regression in `tests/e2e/inspection/credential-echo.spec.ts`. Compare retained/exported raw frame bytes to fixture bytes, verify export warning, and assert token absent from configuration, browser storage, exported header fields and inspector-written request recordings; do not assert absence from target-supplied evidence or redact it.
+- [ ] T065 [US3] Document the single alias/deferred general aliases and constitution 1.0.3 credential-held-versus-target-evidence policy in `docs/a2ui.md` and `docs/recordings.md`, preserving no-header recording/export, target bytes and sensitive-data warning.
+
+**Acceptance:** `npm run typecheck`, `npm run test:unit -- packages/inspector/tests/a2ui`,
+`npm run test:e2e -- tests/e2e/a2ui tests/e2e/inspection/credential-echo.spec.ts`,
+`npm run build && npm run check:bundle`; all pass. Both built-in catalog ids render/action-round-trip
+offline; unknown ids still show errors. The synthetic echo frame is byte-identical in capture and
+export, the warning shows before download, and token exclusion holds on every inspector-owned
+auth/config/storage/header/request-recording surface. No new credential-persistence path or redaction.
+
+**W3 count:** 3 PR slices, 11 tasks (T055-T065). Combined history: 16 slices, 65 tasks.
+Coverage is updated above; the maintainer's physical M2 SC-009 run and manual all-mode smoke are
+release verification, not a fourth W3 slice. Publishing still needs explicit authorization.

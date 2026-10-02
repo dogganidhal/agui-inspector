@@ -42,6 +42,7 @@ Surfaces are flat. Borders are 1 px lines mixed from the text color. Only floati
 
 Every color, radius, spacing step and font comes from the `--agui-*` properties below, so an adopter
 can rebrand the whole interface from one short stylesheet.
+For 0.1.0 delivery, the same public values are supplied through `config.json` theme maps.
 
 ## Theme tokens
 
@@ -82,8 +83,15 @@ success, and an accent that matches one makes the primary button read as a statu
 
 ### Derived tokens
 
-Internal to the inspector. Adopters should not override them, and lanes should not add new ones
-without an F06 change.
+Internal to the inspector. Adopters must not override them. D02 scopes all generic derived
+properties (`--bg`, `--fg`, `--muted`, `--acc`, `--r` and the rest) to the inspector mount `#root`,
+not document `:root`, and scopes their dark variants consistently. All views, including native
+dialogs/popovers and toasts, remain DOM descendants of that mount even when shown in the top layer;
+there are no out-of-root view portals. Therefore root scoping is sufficient, with no mechanical
+rename across every view stylesheet. Host generic tokens must not leak into or be overwritten by
+inspector derivations. Public `--agui-*` properties keep their existing documented names.
+Move the application shell's background, foreground and font declarations from `body` to `#root`
+along with the derived tokens, so the surrounding host does not consume inspector-private values.
 
 | Token | Value | Use |
 | --- | --- | --- |
@@ -108,10 +116,28 @@ with a hollow dot rather than a hue of their own.
 
 ### Delivering overrides
 
-How a host supplies its overrides is open decision G-09 in the [plan](../plan.md). Until it is
-decided, tests apply overrides with a stylesheet loaded after the inspector's own, which every
-candidate mechanism reduces to. Custom properties inherit through shadow roots, so the later in-app
-element can take the same properties from its host element.
+G-09 is closed: every MVP mode loads `config.json`, which accepts an optional `theme` field:
+
+```json
+{
+  "version": 0,
+  "agents": [],
+  "theme": {
+    "light": {"--agui-accent": "#2563eb", "--agui-radius": "6px"},
+    "dark": {"--agui-accent": "#93c5fd", "--agui-radius": "6px"}
+  }
+}
+```
+
+Either map and any public property may be omitted; omitted values retain defaults. The Python
+helper accepts the same `theme` field. Apply the selected map under the existing automatic
+`prefers-color-scheme` and explicit light/dark switch, without a rebuild or a separate CSS file.
+Accept only the ten documented public names and string values; unknown/private names and unsafe
+values show visible configuration warnings, not fatal errors. Reject affected overrides and keep
+valid configuration usable. Values cannot start requests or escape declarations: at minimum deny
+case-insensitive `url(`/`image-set(` (including whitespace before `(`), `@`, `;`, `{`, `}` and
+backslash escapes. No CSP relaxation is permitted. Test each rejected form, both maps, theme
+switching and hostile host generic properties. General in-app isolation remains G-06/1.0.0 scope.
 
 The A2UI renderer styles surface content itself. L05 maps the tokens onto whatever theming the
 official renderer exposes; content the renderer still styles on its own may keep its defaults, while
@@ -168,8 +194,9 @@ Export, the light and dark switch.
 The agent picker lists the agents from the configuration with their endpoints and has a field for
 any other endpoint. The mode tag reads `embedded` or `hosted`. The authentication button shows
 "No token" or the header name with a masked value; its popover holds the header name, the token and
-a line saying the token stays in memory, is cleared on reload or target change, and is never
-recorded or exported. Changing the agent or endpoint clears the token and says so in a toast
+a line saying the token stays in memory, is cleared on reload or target change, and is never copied
+from authentication state into recordings or exports. Target-supplied echoes remain unchanged
+evidence; export warns about sensitive data. Changing the agent or endpoint clears the token and says so in a toast
 (FR-004). Export opens the warning dialog described under sessions below.
 
 The "Theme tokens" button and its panel exist only in the prototype, as a tool for previewing
@@ -266,11 +293,14 @@ A settings list with protocol version, message mode as a segmented control, the 
 and the `render_a2ui` injection switch, followed by client tools, context entries and preset
 variables with their resolved values. Export profile and Import profile sit at the bottom with the
 note "Saved in this browser. Tokens are never saved."
+`renderA2ui` is display-only and persists/exports with the profile; toggling it does not change
+the next run's input. `injectA2uiTool` controls the input's A2UI tool declaration.
 
 ### Session export and import
 
 Export opens a modal dialog that says what the file holds, warns that raw frames can contain
-personal or sensitive data, states that headers and tokens are never included, and shows a summary
+personal or sensitive data, states that headers and inspector-held authentication state are never
+included (target-supplied credential echoes remain unchanged evidence), and shows a summary
 line with the file name, exchange count, frame count and "0 headers". Its buttons are Cancel and
 Export session. Import opens a file picker; a failed import shows its error in place of any success
 message and keeps the current session (FR-035).

@@ -7,7 +7,9 @@ and planning input.
 
 ## 0.1.0 MVP
 
-Status: specified. Planning, implementation, and release verification have not started.
+Status: implemented on main (W1/W2, PRs #3-#18). Release verification pending: SC-009 on the
+physical runner, a manual smoke run in all MVP distribution modes, and publishing (not authorized).
+Three approved W3 follow-ups remain in [tasks](specs/001-inspector-mvp/tasks.md#wave-w3-release-decision-follow-ups).
 
 The [MVP specification](specs/001-inspector-mvp/spec.md) defines the accepted scope;
 its [requirements checklist](specs/001-inspector-mvp/checklists/requirements.md) records the review.
@@ -19,14 +21,37 @@ its [requirements checklist](specs/001-inspector-mvp/checklists/requirements.md)
 - Agent configuration, presets, and client profiles with browser persistence and JSON import/export.
 - Raw JSON submissions, including schema-invalid inputs, and session export/import for inspection.
 - Views styled through documented theme properties, so adopters can restyle the inspector without
-  rebuilding it. The [UI design](specs/001-inspector-mvp/design/design.md) defines the properties.
+  rebuilding it, delivered as optional light/dark maps in `config.json` (also accepted by Python).
+  Unknown/private names or unsafe values produce visible nonfatal warnings; CSP is unchanged.
+  The [UI design](specs/001-inspector-mvp/design/design.md) defines the properties.
 
 Release criteria remain in the feature spec. The workload target is 5,000 retained frames, with at
 least 95% of filter changes and frame expansions finishing visibly within 200 ms during capture.
-The implementation plan must fix the benchmark profile before implementation. The complete client
+The implementation plan fixes the benchmark profile. The M4 Pro headless result is informational;
+headed physical M2 certification remains with the maintainer. The complete client
 bundle is limited to 2 MB minified and 600 KB gzipped.
 
-Next step: `/speckit-plan` for `specs/001-inspector-mvp`.
+### Approved release decisions (2026-10-02)
+
+- G-01 closed: MIT, `Copyright (c) 2026 Nidhal Dogga`; both distributions ship bundled-dependency
+  third-party notices, including Apache-2.0 license texts and any NOTICE for `@a2ui/react`,
+  `@a2ui/web_core` and `@a2ui/markdown-it`. D01 implements packaging/metadata and the exact
+  DOMPurify 3.4.16 override/lock, Python 3.10/3.14 CI and benchmark-doc cleanup.
+- G-02 closed: `agui-inspector` on npm and PyPI, both unregistered on this date.
+  `@ag-ui/inspector` remains conditional on upstream adoption; G-03 remains open.
+- G-07 closed by constitution 1.0.3 PATCH: inspector-held credentials remain memory-only and are
+  never written by it; the recorder reads no headers. Target evidence, including credential
+  echoes, remains unchanged, with the sensitive-data export warning. No redaction anywhere.
+- G-08 closed without an extra integration PR: checkpoint 13 pass, 1 fail (F-01 embedded config
+  path, fixed by #18), 2 pending (SC-008 credential part, D03; SC-009 physical M2, maintainer).
+- G-09 closed: `config.json` theme light/dark public-property maps in every MVP mode; D02 delivers
+  validation/application, Python support and root-scoped derived tokens to avoid host collisions.
+- D03 adds the single middleware 0.0.11 default catalog id alias to the renderer's basic catalog,
+  beside the catalog factory, plus the credential-echo end-to-end regression. General aliases
+  remain 1.0.0 scope. `renderA2ui` is display-only and persists/exports; tool injection changes input.
+
+Each W3 slice is one PR depending only on main after the decision-recording PR, with disjoint
+ownership. Manifests remain private: no publishing, tags or releases are authorized. FR-040 remains.
 
 ## 1.0.0 stable target
 
@@ -51,7 +76,7 @@ is selected for implementation. No delivery order or dates are assigned below.
 | Replay | Serve recorded sessions as AG-UI endpoints for client tests | Session format and recorded timing |
 | Inspection views | Subagent lanes and timelines, state history/diffs, waterfalls, and optional conversation Markdown | Recorded events and run relationships |
 | Plugins | Before-run/input hooks, header providers, and custom event/activity renderers | Preset limits and a versioned extension contract |
-| A2UI compatibility | v0.8, v0.9, and v1.0 support plus catalog aliases | Support in the A2UI project's renderer |
+| A2UI compatibility | v0.8, v0.9, and v1.0 support plus general catalog aliases (one middleware-default/basic alias is already MVP scope) | Support in the A2UI project's renderer |
 | Documentation | A page per rule and examples for major server frameworks | Rule catalogue and supported integrations |
 
 ### Release criteria
@@ -67,16 +92,10 @@ is selected for implementation. No delivery order or dates are assigned below.
 
 ## Open decisions
 
-- License: MIT remains the original candidate. Confirm the choice and dependency obligations before
-  publishing.
-- Package names: confirm npm and PyPI availability for `agui-inspector` before publishing.
-  `@ag-ui/inspector` remains conditional on upstream adoption.
-- Upstream placement: whether `ag-ui-protocol/ag-ui` would accept `apps/inspector`, and when.
-- Capability discovery: conditional on a protocol-defined mechanism. The MVP uses inline
+- G-03 upstream placement: whether `ag-ui-protocol/ag-ui` would accept `apps/inspector`, and when.
+- G-04 capability discovery: conditional on a protocol-defined mechanism. The MVP uses inline
   declarations or a configured capabilities URL.
-- WebSocket and push: conditional on AG-UI specifying their behavior. Capability names alone do not
+- G-05 WebSocket and push: conditional on AG-UI specifying their behavior. Capability names alone do not
   establish a transport contract.
-- In-app element: decide how element isolation works with A2UI styles injected into the document.
+- G-06 in-app element: decide how element isolation works with A2UI styles injected into the document.
   Shadow-root integration remains unresolved.
-- Theme delivery: decide how hosts supply `--agui-*` overrides: a file next to `config.json`, a
-  configuration field, or host-page CSS. 0.1.0 fixes the properties only.
