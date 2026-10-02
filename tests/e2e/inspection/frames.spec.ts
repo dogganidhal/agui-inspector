@@ -213,6 +213,11 @@ test('the list is keyboard accessible: headers and rows toggle with Enter and Sp
   await run(page, 'baselineRun');
   await run(page, 'invalidFrames');
   const older = page.locator('[data-exchange-header="exchange-1"]');
+  // The store tells the view once per animation frame, so the run resolving does not mean the list
+  // already shows it. Until the second exchange is listed and the first has collapsed, "older" is
+  // still the newest and open, and a key press would close it instead of opening it.
+  await expect(headers(page)).toHaveCount(2);
+  await expect(older).toHaveAttribute('aria-expanded', 'false');
   await older.focus();
   await page.keyboard.press('Enter');
   await expect(older).toHaveAttribute('aria-expanded', 'true');
