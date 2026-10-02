@@ -372,3 +372,62 @@ test('a saved profile is restored at the start, and a saved profile that no long
   assert.match(bad.error ?? '', /profile/i);
   assert.equal(bad.settings.profile.protocolVersion, '1.0', 'defaults stay in force');
 });
+
+// ---------------------------------------------------------------------------------------------
+// Theme maps (FR-041, G-09, SC-010): delivered by config.json, never by a request or a wider policy
+// ---------------------------------------------------------------------------------------------
+
+const themeFile = (theme: unknown) => JSON.stringify({ version: 0, agents: [{ id: 'support', url: `${AGENT}/run` }], theme });
+
+test('the theme in config.json is handed to the page with no extra request, in every deployment mode', async () => {
+  const theme = { light: { '--agui-accent': '#2563eb' }, dark: { '--agui-accent': '#93c5fd', '--agui-radius': '4px' } };
+  const hosted = page({ [`${PAGE}/hosting-config.json`]: hostedFile(), [`${PAGE}/config.json`]: themeFile(theme) });
+  const embedded = page({ [`${PAGE}/config.json`]: themeFile(theme) });
+  const bare = page({ [`${PAGE}/hosting-config.json`]: hostedFile(), [`${PAGE}/config.json`]: agentsFile({ id: 'support', url: `${AGENT}/run` }) });
+  for (const [name, site] of [['hosted', hosted], ['embedded', embedded]] as const) {
+    const result = started(await startPage(site.env));
+    assert.deepEqual(result.theme, theme, name);
+    assert.deepEqual(result.warnings, [], name);
+    assert.equal(result.error, undefined, name);
+    assert.equal(result.selectedAgentId, 'support', name);
+    assert.deepEqual(site.seen.map((request) => request.url), [`${PAGE}/hosting-config.json`, `${PAGE}/config.json`], `${name}: the same two requests as without a theme`);
+  }
+  const plain = started(await startPage(bare.env));
+  assert.equal(plain.theme, undefined);
+  assert.deepEqual(plain.warnings, []);
+  assert.deepEqual(hosted.log.map((entry) => entry.replace(PAGE, '')), bare.log.map((entry) => entry.replace(PAGE, '')));
+  assert.deepEqual(hosted.policies, bare.policies, 'the content security policy is the same with and without a theme');
+});
+
+test('rejected overrides are warnings: the valid ones and the agents are kept, no request starts and the policy is unchanged', async () => {
+  const theme = {
+    light: { '--agui-accent': 'url(https://evil.example/pixel.png)', '--agui-radius': '3px' },
+    dark: { '--bg': 'red', '--agui-font-sans': 'x; y', '--agui-density': '0.9' },
+    sepia: {},
+  };
+  const site = page({ [`${PAGE}/hosting-config.json`]: hostedFile(), [`${PAGE}/config.json`]: themeFile(theme) });
+  const result = started(await startPage(site.env));
+  assert.deepEqual(result.theme, { light: { '--agui-radius': '3px' }, dark: { '--agui-density': '0.9' } });
+  assert.equal(result.warnings.length, 4);
+  assert.match(result.warnings.join('\n'), /--agui-accent/);
+  assert.match(result.warnings.join('\n'), /--bg/);
+  assert.match(result.warnings.join('\n'), /--agui-font-sans/);
+  assert.match(result.warnings.join('\n'), /"sepia"/);
+  assert.equal(result.error, undefined, 'a theme warning is not the start error');
+  assert.equal(result.agents.length, 1);
+  assert.equal(result.selectedAgentId, 'support');
+  assert.ok(site.seen.every((request) => !request.url.includes('evil.example')));
+  assert.deepEqual(site.seen.map((request) => request.url), [`${PAGE}/hosting-config.json`, `${PAGE}/config.json`]);
+  assert.equal(site.policies.length, 1);
+  assert.equal(site.policies[0], contentSecurityPolicy(policyFor({ mode: 'hosted', allowedOrigins: [AGENT] }, PAGE)));
+  assert.doesNotMatch(site.policies[0] ?? '', /unsafe-inline|unsafe-eval|evil/);
+});
+
+test('a theme of the wrong shape is one warning and the start is otherwise unchanged', async () => {
+  const site = page({ [`${PAGE}/config.json`]: themeFile('cobalt') });
+  const result = started(await startPage(site.env));
+  assert.equal(result.theme, undefined);
+  assert.equal(result.warnings.length, 1);
+  assert.equal(result.agents.length, 1);
+  assert.equal(result.error, undefined);
+});

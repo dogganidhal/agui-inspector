@@ -22,7 +22,7 @@ import { ConversationView } from '../views/conversation/index';
 import { StateView } from '../views/conversation/state';
 import { InspectionView } from '../views/inspection/index';
 import { SettingsView, type CapabilitiesState } from '../views/settings/index';
-import { Button, Finding, Icon, SegmentedControl, ToastRegion, useToasts } from '../views/theme/index';
+import { Button, Finding, Icon, SegmentedControl, ToastRegion, applyTheme, useToasts } from '../views/theme/index';
 import '../views/a2ui/a2ui.css';
 import '../views/connection/connection.css';
 import '../views/conversation/conversation.css';
@@ -45,6 +45,8 @@ export interface AppExtras {
   /** An imported recording is open: inspection only, nothing can be sent. */
   readonly recording?: boolean;
   readonly renderActivity?: (entry: ActivityEntry) => ReactNode;
+  /** Configuration problems that did not stop the page, such as rejected theme overrides. */
+  readonly warnings?: readonly string[];
 }
 
 type Pane = 'conversation' | 'inspection';
@@ -91,7 +93,7 @@ function ThemeSwitch(): ReactElement {
  * The app shell: a fixed top bar above two panes that scroll on their own, conversation left and
  * inspection right. Under 960 px one pane shows and a segmented control switches between them.
  */
-export function App({ settings, connection, conversation, inspection, mode, allowedOrigins = [], capabilities, notice, recording, renderActivity }: AppProps & AppExtras): ReactElement {
+export function App({ settings, connection, conversation, inspection, mode, allowedOrigins = [], capabilities, notice, recording, renderActivity, warnings = [] }: AppProps & AppExtras): ReactElement {
   const [pane, setPane] = useState<Pane>('conversation');
   const [tab, setTab] = useState<Tab>('inspection');
 
@@ -109,6 +111,16 @@ export function App({ settings, connection, conversation, inspection, mode, allo
         </div>
         <ThemeSwitch />
       </header>
+
+      {warnings.length > 0 && (
+        <div className="agui-app-warnings" role="status" aria-label="Configuration warnings" data-view="warnings">
+          {warnings.map((warning) => (
+            <Finding key={warning} variant="warn" kind="Configuration">
+              {warning}
+            </Finding>
+          ))}
+        </div>
+      )}
 
       <div className="agui-app-switch">
         <SegmentedControl
@@ -265,6 +277,7 @@ function Root({ started, storage }: { started: Started; storage?: StorageLike })
     allowedOrigins: policy.allowedOrigins,
     recording,
     capabilities,
+    warnings: started.warnings,
     renderActivity: (entry) => a2uiActivity(entry, { renderEnabled: profile.renderA2ui, onAction }),
     ...(recording ? { notice: RECORDING_NOTICE } : state.notice !== undefined && { notice: state.notice }),
     settings: {
@@ -370,6 +383,9 @@ function browserStorage(): StorageLike | undefined {
 export async function mountApp(container: Element, env: StartupEnvironment): Promise<ReactRoot> {
   const root = createRoot(container);
   const started = await startPage(env);
+  // Before the first render, so the page never paints with the defaults and then jumps.
+  const view = env.document.defaultView;
+  if (started.ok && view !== null) applyTheme(env.document.documentElement, started.theme, view);
   root.render(
     <StrictMode>
       {started.ok ? <Root started={started} {...(env.storage !== undefined && { storage: env.storage })} /> : <StartupFailure message={started.error} />}

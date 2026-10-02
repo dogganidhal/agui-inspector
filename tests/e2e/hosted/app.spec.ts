@@ -462,7 +462,7 @@ test('the shell follows the theme tokens: an override stylesheet after the inspe
   const paint = () =>
     page.evaluate(() => ({
       mark: getComputedStyle(document.querySelector('.agui-app-mark') as Element).backgroundColor,
-      body: getComputedStyle(document.body).backgroundColor,
+      body: getComputedStyle(document.getElementById('root') as Element).backgroundColor,
     }));
   const before = await paint();
   await page.addStyleTag({ url: `${site.page.origin}/override.css` });

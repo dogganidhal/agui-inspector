@@ -493,3 +493,122 @@ test('no composed input holds an authentication field', () => {
   const input = value(composeRunInput(baseParams({ profile: profile({ tools: [tool('a')], forwardedProps: { x: 1 } }) })));
   assert.doesNotMatch(JSON.stringify(input), /authorization|token|password|secret/i);
 });
+
+// ---------------------------------------------------------------------------------------------
+// Theme maps in the configuration (FR-041, G-09, SC-010)
+// ---------------------------------------------------------------------------------------------
+
+const withTheme = (theme: unknown) => JSON.stringify({ version: 0, agents: [{ id: 'support', url: '/agents/support/stream' }], theme });
+const SUPPORT = [{ id: 'support', url: '/agents/support/stream' }];
+
+test('theme.light and theme.dark accept the ten public properties as strings', () => {
+  const light = {
+    '--agui-accent': '#2563eb',
+    '--agui-accent-contrast': 'white',
+    '--agui-tint-hue': '250',
+    '--agui-tint-chroma': '0.01',
+    '--agui-bg': 'oklch(0.99 0 0)',
+    '--agui-fg': 'rgb(20 20 30)',
+    '--agui-radius': '6px',
+    '--agui-density': '0.85',
+    '--agui-font-sans': '"Helvetica Neue", Arial, sans-serif',
+    '--agui-font-mono': 'ui-monospace, monospace',
+  };
+  const dark = { '--agui-accent': '#93c5fd' };
+  const parsed = value(parseConfig(withTheme({ light, dark })));
+  assert.deepEqual(parsed.theme, { light, dark });
+  assert.deepEqual(parsed.warnings, []);
+  assert.deepEqual(parsed.agents, SUPPORT);
+});
+
+test('either map, any property and the whole field may be omitted without a warning', () => {
+  assert.deepEqual(value(parseConfig(withTheme({ light: { '--agui-radius': '2px' } }))).theme, { light: { '--agui-radius': '2px' } });
+  assert.deepEqual(value(parseConfig(withTheme({ dark: {} }))).theme, { dark: {} });
+  const bare = value(parseConfig(config({ id: 'a', url: '/a' })));
+  assert.equal(bare.theme, undefined);
+  assert.deepEqual(bare.warnings, []);
+  assert.deepEqual(value(parseConfig(withTheme({}))).warnings, []);
+});
+
+test('unknown, private and generic property names are rejected one by one; valid ones and the agents stay', () => {
+  const rejected = ['--agui-accnt', '--bg', '--fg', '--muted', '--acc', '--r', '--u', '--sunk', 'agui-accent', '--AGUI-ACCENT', '--agui-bg ', 'color', '--', '__proto__', 'constructor'];
+  for (const name of rejected) {
+    const map = JSON.parse(`{${JSON.stringify(name)}: "red", "--agui-radius": "3px"}`);
+    const parsed = value(parseConfig(withTheme({ light: map })));
+    assert.deepEqual(parsed.theme, { light: { '--agui-radius': '3px' } }, name);
+    assert.equal(parsed.warnings.length, 1, name);
+    assert.match(parsed.warnings[0] ?? '', /not a public theme property/, name);
+    assert.deepEqual(parsed.agents, SUPPORT);
+  }
+});
+
+test('a value that is not a string, or is empty, is rejected with a warning naming the property', () => {
+  for (const bad of [8, null, true, [], {}, '', '   ']) {
+    const parsed = value(parseConfig(withTheme({ dark: { '--agui-density': bad, '--agui-radius': '4px' } })));
+    assert.deepEqual(parsed.theme, { dark: { '--agui-radius': '4px' } }, JSON.stringify(bad));
+    assert.match(parsed.warnings.join('\n'), /theme\.dark.*--agui-density.*nonempty string/, JSON.stringify(bad));
+  }
+});
+
+test('a bad shape is ignored with a warning and never stops the agents loading', () => {
+  for (const theme of [null, 'blue', 7, [], [{ light: {} }], true]) {
+    const parsed = value(parseConfig(withTheme(theme)));
+    assert.equal(parsed.theme, undefined, JSON.stringify(theme));
+    assert.match(parsed.warnings.join('\n'), /^theme must be an object/, JSON.stringify(theme));
+    assert.deepEqual(parsed.agents, SUPPORT);
+  }
+  for (const map of [null, 'red', 3, [], [['--agui-accent', 'red']]]) {
+    const parsed = value(parseConfig(withTheme({ light: map, dark: { '--agui-accent': 'navy' } })));
+    assert.deepEqual(parsed.theme, { dark: { '--agui-accent': 'navy' } }, JSON.stringify(map));
+    assert.match(parsed.warnings.join('\n'), /theme\.light must be an object/, JSON.stringify(map));
+  }
+  const parsed = value(parseConfig(withTheme({ light: { '--agui-radius': '2px' }, sepia: { '--agui-radius': '9px' } })));
+  assert.deepEqual(parsed.theme, { light: { '--agui-radius': '2px' } });
+  assert.match(parsed.warnings.join('\n'), /theme: "sepia" is not a theme map/);
+});
+
+test('every value that could start a request or escape its declaration is rejected, in any case and spacing', () => {
+  const unsafe = [
+    'url(https://evil.example/x.png)', 'URL(x)', 'Url (x)', 'url\t(x)', 'url\n(x)', 'url  (x)', 'red url(x)', 'url(data:image/png;base64,AAAA)',
+    'image-set(url(x) 1x)', 'IMAGE-SET(x 1x)', 'image-set (x 1x)', 'image-set\n(x 1x)', '-webkit-image-set(x 1x)', 'src(x)', 'image(x)', 'cross-fade(x, y)',
+    '@import "x.css"', 'red @media print', '@font-face',
+    'red; background: blue', ';', 'red;',
+    'red } body { display: none', '{', '}', 'a{b}',
+    'ur\\6c(x)', '\\75rl(x)', 'red\\', '\\',
+  ];
+  for (const text of unsafe) {
+    for (const mode of ['light', 'dark']) {
+      const parsed = value(parseConfig(withTheme({ [mode]: { '--agui-accent': text, '--agui-radius': '5px' } })));
+      assert.deepEqual(parsed.theme, { [mode]: { '--agui-radius': '5px' } }, `${mode}: ${text}`);
+      assert.match(parsed.warnings.join('\n'), new RegExp(`theme\\.${mode}.*--agui-accent`), text);
+      assert.deepEqual(parsed.agents, SUPPORT);
+    }
+  }
+});
+
+test('ordinary values that merely resemble the denied syntax are accepted', () => {
+  for (const text of ['oklch(0.5 0.1 250)', 'calc(var(--agui-tint-chroma) * 2)', 'color-mix(in oklab, red 40%, white)', 'ui-sans-serif, "Segoe UI", sans-serif', '"Source Sans 3", sans-serif', '0.85']) {
+    const parsed = value(parseConfig(withTheme({ light: { '--agui-font-sans': text } })));
+    assert.deepEqual(parsed.warnings, [], text);
+    assert.equal(parsed.theme?.light?.['--agui-font-sans'], text);
+  }
+});
+
+test('a theme problem is a warning, but a broken agent list is still the same visible error', () => {
+  const broken = JSON.stringify({ agents: [{ id: '', url: '/a' }], theme: { light: { '--agui-accent': 'url(x)' } } });
+  assert.match(failure(parseConfig(broken)), /id/);
+  const loaded = value(parseConfig(withTheme({ light: { '--agui-accent': 'url(x)' } })));
+  assert.equal(loaded.agents.length, 1);
+  assert.equal(loaded.warnings.length, 1);
+  assert.doesNotMatch(loaded.warnings[0] ?? '', /evil|https?:/);
+});
+
+test('loading a configuration with a theme makes exactly the one request it was handed', async () => {
+  const urls: string[] = [];
+  const loaded = await loadConfig('config.json', async (url) => {
+    urls.push(url);
+    return withTheme({ light: { '--agui-accent': 'url(https://evil.example/a.png)', '--agui-radius': '3px' } });
+  });
+  assert.deepEqual(urls, ['config.json']);
+  assert.deepEqual(value(loaded).theme, { light: { '--agui-radius': '3px' } });
+});

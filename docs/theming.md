@@ -8,7 +8,8 @@ anyone who restyles them. The tokens and primitives live in `packages/inspector/
 Every color, radius, spacing step and font in the views comes from ten public CSS custom properties
 named `--agui-*`. Everything else the views read is derived from those ten with `color-mix()`,
 `oklch()` and `calc()`. A host that overrides the ten properties restyles every view without
-rebuilding the bundle (FR-041, SC-010).
+rebuilding the bundle, either with a stylesheet or with the `theme` field of `config.json`
+(FR-041, SC-010).
 
 The default build requests nothing from outside its own origin. Fonts are system stacks, and no rule
 in either stylesheet uses `@import`, `@font-face` or `url()` (FR-037).
@@ -33,7 +34,7 @@ the stock inspector is monochrome and an adopter's accent is the only hue in the
 accent that is not red, amber or green: those hues mean errors, warnings and success, and an accent
 that matches one makes the primary button read as a status.
 
-A short override:
+A short override as a stylesheet:
 
 ```css
 :root {
@@ -68,9 +69,43 @@ no dark counterpart.
 
 ## Delivering overrides
 
-How a host supplies its stylesheet is open decision G-09 and is not settled here. The tests apply
-overrides as a stylesheet loaded after the inspector's own, which every candidate mechanism reduces
-to. Custom properties inherit through shadow roots, so the later in-app element can take the same
+There are two ways, and they can be combined.
+
+**`config.json`.** Add a `theme` field with optional `light` and `dark` maps. Every deployment mode
+reads it: hosted, embedded, the Python helper's `theme=` argument and any server that serves the
+assets beside a `config.json`. No stylesheet, rebuild or extra request is involved.
+
+```json
+{
+  "version": 0,
+  "agents": [],
+  "theme": {
+    "light": { "--agui-accent": "#2563eb", "--agui-radius": "6px" },
+    "dark": { "--agui-accent": "#93c5fd", "--agui-radius": "6px" }
+  }
+}
+```
+
+- Only the ten public names are accepted, and the values are strings. Anything else is rejected with
+  a visible "Configuration" warning under the top bar and the page starts normally. Unsafe values
+  (`url(`, `image-set(`, `@`, `;`, `{`, `}`, a backslash) are rejected for the same reason. The
+  full list and the per-input results are in [configuration](configuration.md#theme).
+- The page sets the map for the mode in use as custom properties on the root element, through the
+  CSS object model. The content security policy is unchanged and the page makes no request for it.
+  It follows the mode as it changes: the top-bar switch, which sets `data-theme`, wins over the
+  system preference, and a change of the system preference applies the other map while no switch
+  choice is made.
+- A property left out of a map keeps its default, so the dark map does not need to repeat the light
+  one. A map applies to the properties it names and no others, so unlike the stylesheet route below,
+  the map for dark mode can set `--agui-bg` and `--agui-fg` without matching the inspector's dark
+  selectors.
+- The map is applied after the page's stylesheets, so it wins over a stylesheet that sets the same
+  property.
+
+**A stylesheet.** Load a stylesheet after the inspector's own that sets the public properties on
+`:root`, as in the example above. The dark-mode caveat above applies to this route only.
+
+Custom properties inherit through shadow roots, so the later in-app element can take the same
 properties from its host element.
 
 ## Derived tokens
@@ -94,10 +129,18 @@ add one without changing the theme.
 | `--pop`, `--lift`, `--scrim` | Shadows and the dialog backdrop | Floating layers, raised controls |
 | `--ease` | `cubic-bezier(.16, 1, .3, 1)` | Every transition |
 
-Tokens sit on `:root` with short unprefixed names, as the design specifies. A host page that already
-defines `--bg`, `--fg`, `--line` or `--muted` on `:root` would collide with them; scoping the tokens
-to the inspector's own root element is a decision for the app shell and the delivery choice above.
-The primitives' class names all start with `agui-`, so they cannot collide with host CSS.
+The derived tokens have short unprefixed names, so they are declared on the inspector's mount
+element, `#root`, together with their dark variants, and never on the document's `:root`. A host
+page that already defines `--bg`, `--fg`, `--line`, `--muted`, `--acc` or `--r` cannot change the
+inspector's derivations, and the inspector does not overwrite the host's. The ten public `--agui-*`
+properties stay on `:root`: their names are namespaced, an override on `:root` or a `theme` map must
+sit on the same element as the defaults that build on them, and they are the contract.
+
+The application shell paints its background, text color and font on `#root` instead of `body`, so the
+surrounding document does not read any inspector token. Dialogs, popovers and toasts are DOM
+descendants of `#root` even when the browser shows them in the top layer, and no view renders outside
+it, so they keep the inspector's styling beside a hostile host. The primitives' class names all start
+with `agui-`, so they cannot collide with host CSS either.
 
 ## Fonts
 
@@ -142,9 +185,20 @@ Rules every primitive follows:
 - `packages/inspector/tests/theme/tokens.test.ts` reads the stylesheets: the ten properties and
   their defaults, both dark rules, no remote loading, no literal colors, radii or fonts in the
   primitives, spacing as multiples of `--u`, a focus rule and a reduced-motion rule.
+- `packages/inspector/tests/theme/config.test.ts` covers applying the maps (system preference, the
+  switch, a missing map) and where the stylesheets declare things: no generic token on `:root`,
+  derived tokens and dark variants on `#root`, the shell painted on `#root`.
+- `packages/inspector/tests/config/settings.test.ts` and `tests/hosted/startup.test.ts` cover
+  validating the `theme` field and handing it to the page without a request or a policy change.
 - `packages/inspector/tests/theme/primitives.test.ts` covers component logic.
 - `tests/e2e/theme/theme.spec.ts` renders every primitive and state from
   `packages/inspector/tests/theme/fixture.tsx` in light, dark and with an override stylesheet. It
   checks that each primitive's computed look equals an expression over the tokens, that overriding
   only `--agui-*` restyles every section in both modes, that the page requests nothing outside its
-  own origin, and that focus, popover, dialog, toast and reduced motion behave.
+  own origin, and that focus, popover, dialog, toast and reduced motion behave. It also loads a
+  host stylesheet that defines the same generic names and checks that nothing in the fixture changes.
+- `tests/e2e/theme/config.spec.ts` runs the production build with real `config.json` maps hosted,
+  embedded, behind the Python helper and from a generic static server: light and dark by system
+  preference and by the switch, a missing map, every rejected form as a visible warning with no
+  request and the same policy, valid agents still running, a hostile host stylesheet, and the shell
+  covering the viewport with an unpainted `body`.

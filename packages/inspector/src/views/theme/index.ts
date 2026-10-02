@@ -2,4 +2,5 @@
 import './tokens.css';
 import './primitives.css';
 
+export * from './config';
 export * from './primitives';

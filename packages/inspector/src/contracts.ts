@@ -88,10 +88,36 @@ export interface AgentConfig {
   readonly preset?: Preset;
 }
 
+/** The ten public theme properties (FR-041): the only names a `theme` map may set. */
+export const THEME_PROPERTIES = [
+  '--agui-accent',
+  '--agui-accent-contrast',
+  '--agui-tint-hue',
+  '--agui-tint-chroma',
+  '--agui-bg',
+  '--agui-fg',
+  '--agui-radius',
+  '--agui-density',
+  '--agui-font-sans',
+  '--agui-font-mono',
+] as const;
+
+export type ThemeProperty = (typeof THEME_PROPERTIES)[number];
+
+/** Values for some public properties; an omitted property keeps its default. */
+export type ThemeMap = { readonly [Name in ThemeProperty]?: string };
+
+/** Optional per-mode overrides. Each map applies under the existing automatic or manual light/dark choice. */
+export interface ThemeConfig {
+  readonly light?: ThemeMap;
+  readonly dark?: ThemeMap;
+}
+
 /** `version` may be omitted in a historical file and is then read as 0. */
 export interface ConfigFile {
   readonly version?: typeof FORMAT_VERSION;
   readonly agents: readonly AgentConfig[];
+  readonly theme?: ThemeConfig;
 }
 
 /** The seven persisted and exported client-profile settings. */

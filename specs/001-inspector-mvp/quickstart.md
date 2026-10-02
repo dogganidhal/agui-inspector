@@ -68,7 +68,7 @@ hashes and reports timing; release threshold certification also requires the nam
 | Privacy / SC-008 | Observe all requests during config/capability/preparation/run/rendering; attempt disallowed URLs/redirects and blocked CORS | Only explicit targets and own origin; zero telemetry/third-party assets; hosted no cookies; denied requests visible; CSP active before boot/no eval |
 | Credential echo / SC-008 | Enter a synthetic token only in auth, capture a target's exact echo frame, export after warning | Frame byte-identical, no redaction; token absent from config, browser storage, exported headers and request recordings written by inspector auth state; sensitive frame remains in export |
 | Performance / SC-009 | Production build, fixed 5,000-frame profile, one warm-up plus three measured runs | Exact retained counts/hashes; each measured class >=95% within 200 ms; complete asset totals <=2,000,000 and <=600,000 gzip bytes |
-| Theming / SC-010 | Load config.json theme light/dark maps in hosted, Python embedded and generic static serving; switch modes; try private/unknown names, unsafe syntax and hostile host generic tokens | Every view/primitive uses public overrides; each rejected override gives visible nonfatal warning, no request, unchanged CSP; generic derived properties remain mount-root-scoped |
+| Theming / SC-010 | Load config.json theme light/dark maps in hosted, Python embedded and generic static serving; switch modes; try private/unknown names, unsafe syntax and hostile host generic tokens | Every view/primitive uses public overrides; each rejected override gives visible nonfatal warning, no request, unchanged CSP; valid agents still run; generic derived properties remain mount-root-scoped, dialogs/popovers/toasts keep inspector styling, and `#root` covers the viewport with an unpainted `body` |
 
 Tests use synthetic payloads and entered synthetic credentials; do not upload recordings or
 request bodies to external tools. G-07 is resolved by constitution 1.0.3; D03 must prove the
@@ -90,6 +90,9 @@ physical run, a manual smoke in every MVP distribution mode, and publishing appr
 D01 checks local npm/wheel/sdist LICENSE/notices contents, MIT metadata, private publishing guards,
 the exact DOMPurify 3.4.16 override/lock and Python tests on 3.10 and 3.14; it updates benchmark docs
 with the M4 Pro headless result while leaving M2 certification pending.
-D02 checks the theme/config scenarios above, including Python helper serialization.
+D02 checks the theme/config scenarios above, including Python helper serialization:
+`npm run test:unit -- packages/inspector/tests/config packages/inspector/tests/theme packages/inspector/tests/hosted`,
+`npm run test:e2e -- tests/e2e/theme tests/e2e/python` (hosted, embedded, Python-served and generic
+static serving with real maps) and `uv run --project packages/python python -m unittest discover -s packages/python/tests -p test_embedding.py`.
 D03 checks the built-in catalog and credential-echo scenarios. Each slice is one independent PR
 from main after this decision-recording PR; [tasks.md](tasks.md) defines disjoint ownership.

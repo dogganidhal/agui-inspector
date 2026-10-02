@@ -73,7 +73,7 @@ test('dark mode follows prefers-color-scheme and data-theme, and redefines only 
 });
 
 test('derived tokens exist and mix from the public properties', () => {
-  const root = rule(tokens, ':root');
+  const root = rule(tokens, '#root');
   for (const token of [
     '--sunk', '--hover', '--line', '--line-2', '--muted', '--faint', '--acc-ink', '--acc-soft', '--acc-line',
     '--err', '--warn', '--ok', '--err-soft', '--warn-soft', '--ok-soft',
