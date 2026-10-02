@@ -7,10 +7,15 @@
 // and the content security policy the browser enforces. Both come from the same origin list, so a
 // request the transport would refuse is also one the browser would block.
 //
+// A hosted deployment may also opt in, in that same file, to visitor-chosen targets: any HTTPS origin and
+// plain HTTP to localhost or 127.0.0.1 on any port. The transport's `isVisitorTarget` and the
+// `connect-src` below are built from one host list, so the browser and the guard cannot disagree.
+//
 // Nothing the page loads afterwards (a configuration file, a capabilities URL, a typed endpoint) can
 // change either. Changing the policy means changing the deployment's file and reloading.
 import type { DeploymentMode, TransportPolicy } from '../contracts.ts';
 import type { Result } from '../core/config/index.ts';
+import { allowsVisitorTargets, isVisitorTarget, VISITOR_LOOPBACK_HOSTS } from '../core/runtime/transport.ts';
 
 export const HOSTING_CONFIG_FILE = 'hosting-config.json';
 export const DEFAULT_CONFIG_FILE = 'config.json';
@@ -21,12 +26,14 @@ export interface HostingConfig {
   readonly allowedOrigins: readonly string[];
   /** Where the agent configuration is read from; the page's own `config.json` when absent. */
   readonly config?: string;
+  /** Hosted only. Off when absent: visitor-chosen HTTPS and local HTTP targets, see the transport policy. */
+  readonly allowVisitorTargets?: boolean;
 }
 
 /** A page served without a `hosting-config.json`: its own origin and nothing else. */
 export const EMBEDDED_DEFAULTS: HostingConfig = { mode: 'embedded', allowedOrigins: [] };
 
-const ALLOWED_KEYS = ['version', 'mode', 'allowedOrigins', 'config'];
+const ALLOWED_KEYS = ['version', 'mode', 'allowedOrigins', 'config', 'allowVisitorTargets'];
 const reject = (error: string): Result<never> => ({ ok: false, error: `${HOSTING_CONFIG_FILE}: ${error}` });
 
 /** The normalized origin of an absolute http(s) origin written alone, or why it is not one. */
@@ -62,12 +69,25 @@ export function parseHostingConfig(text: string): Result<HostingConfig> {
   if ('version' in file && file.version !== 0) return reject('version must be 0');
   if (file.mode !== 'embedded' && file.mode !== 'hosted') return reject('mode must be "embedded" or "hosted"');
 
+  // Any mention in an embedded file is refused, false included: the option has no meaning there.
+  if (file.mode === 'embedded' && 'allowVisitorTargets' in file) {
+    return reject('an embedded page reaches its own origin only; allowVisitorTargets belongs to a hosted deployment');
+  }
+  if ('allowVisitorTargets' in file && typeof file.allowVisitorTargets !== 'boolean') return reject('allowVisitorTargets must be true or false');
+  const optIn = file.allowVisitorTargets === true;
+
   const listed = file.allowedOrigins ?? [];
   if (!Array.isArray(listed)) return reject('allowedOrigins must be an array of origins');
   const origins: string[] = [];
   for (const [index, entry] of listed.entries()) {
     const origin = parseOrigin(entry, `allowedOrigins[${index}]`);
     if (!origin.ok) return origin;
+    // A fixed origin cannot widen the boundary the opt-in sets.
+    if (optIn && !isVisitorTarget(new URL(origin.value))) {
+      return reject(
+        `allowedOrigins[${index}] "${String(entry)}" is outside the visitor-target boundary (HTTPS, or http://localhost / http://127.0.0.1 on any port); remove it or remove allowVisitorTargets`,
+      );
+    }
     if (!origins.includes(origin.value)) origins.push(origin.value);
   }
   if (file.mode === 'embedded' && origins.length > 0) {
@@ -77,12 +97,29 @@ export function parseHostingConfig(text: string): Result<HostingConfig> {
   if ('config' in file && (typeof file.config !== 'string' || file.config === '')) return reject('config must be a nonempty URL');
   return {
     ok: true,
-    value: { mode: file.mode, allowedOrigins: origins, ...(typeof file.config === 'string' && { config: file.config }) },
+    value: {
+      mode: file.mode,
+      allowedOrigins: origins,
+      ...(typeof file.config === 'string' && { config: file.config }),
+      ...(typeof file.allowVisitorTargets === 'boolean' && { allowVisitorTargets: file.allowVisitorTargets }),
+    },
   };
 }
 
 export function policyFor(hosting: HostingConfig, pageOrigin: string): TransportPolicy {
-  return { mode: hosting.mode, pageOrigin, allowedOrigins: hosting.allowedOrigins };
+  // `false` is the default, so only `true` is carried: an old file makes the policy it always made.
+  return { mode: hosting.mode, pageOrigin, allowedOrigins: hosting.allowedOrigins, ...(hosting.allowVisitorTargets === true && { allowVisitorTargets: true }) };
+}
+
+/**
+ * Where the page may connect: itself plus the fixed list, or, when a hosted deployment opted in, every
+ * HTTPS origin and the exact loopback hosts on any port. The fixed origins are all inside that boundary
+ * (the file and the transport both insist), so they add nothing and are not repeated. Never a bare
+ * `http:`, a wildcard host or an IPv6 literal.
+ */
+function connectSources(policy: TransportPolicy): string[] {
+  if (!allowsVisitorTargets(policy)) return ["'self'", ...policy.allowedOrigins];
+  return ["'self'", 'https:', ...VISITOR_LOOPBACK_HOSTS.map((host) => `http://${host}:*`)];
 }
 
 /**
@@ -97,7 +134,7 @@ export function contentSecurityPolicy(policy: TransportPolicy): string {
     "style-src 'self'",
     "img-src 'self' data:",
     "font-src 'self'",
-    `connect-src ${["'self'", ...policy.allowedOrigins].join(' ')}`,
+    `connect-src ${connectSources(policy).join(' ')}`,
     "object-src 'none'",
     "base-uri 'none'",
     "form-action 'none'",

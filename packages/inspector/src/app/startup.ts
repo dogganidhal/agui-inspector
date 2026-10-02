@@ -10,7 +10,7 @@
 import type { AgentConfig, ClientProfileSettings, JsonValue, SessionStore, ThemeConfig, TransportPolicy } from '../contracts.ts';
 import { loadConfig, type ParsedConfig, type Result } from '../core/config/index.ts';
 import { defaultProfile, loadProfile, type StorageLike } from '../core/profiles/index.ts';
-import { createRuntime, guardedFetchText, type Runtime } from '../core/runtime/index.ts';
+import { createRuntime, guardedFetchText, resolveTarget, type Runtime } from '../core/runtime/index.ts';
 import { createSessionStore } from '../core/store/index.ts';
 import { DEFAULT_CONFIG_FILE, EMBEDDED_DEFAULTS, HOSTING_CONFIG_FILE, installPolicy, parseHostingConfig, policyFor, type HostingConfig } from './security.ts';
 
@@ -23,6 +23,13 @@ export interface StartupEnvironment {
   readonly fetch: typeof globalThis.fetch;
   /** Browser storage for the saved profile, when the browser lets the page use it. */
   readonly storage?: StorageLike;
+  /**
+   * Which file the initial agent configuration is read from, instead of the deployment's `config` or
+   * `config.json`: relative to the page like those. It chooses a resource and nothing else. It is read
+   * after the policy is in place, from the page's origin or a fixed allowed origin only, and a missing
+   * one is the usual empty start unless the deployment's own file requires a configuration.
+   */
+  readonly configFile?: string;
 }
 
 /** What the runtime reads when it builds a run. The page updates it as the user edits. */
@@ -83,11 +90,18 @@ export async function startPage(env: StartupEnvironment): Promise<StartResult> {
   const problems: string[] = [];
 
   // Relative to the page, like `hosting-config.json`: the guarded transport alone would resolve it against the origin root.
-  const configName = hosting.value.config ?? DEFAULT_CONFIG_FILE;
+  const configName = env.configFile ?? hosting.value.config ?? DEFAULT_CONFIG_FILE;
   const readText = guardedFetchText(runtime.transport);
   // A page with no `config.json` is allowed: the user types an endpoint. One that exists but is
   // wrong, or that the policy refuses, is an error to show.
-  const loaded: Result<ParsedConfig> = await loadConfig(configName, () => readText(new URL(configName, env.baseUrl).href));
+  const loaded: Result<ParsedConfig> = await loadConfig(configName, () => {
+    const href = new URL(configName, env.baseUrl).href;
+    // The page loads this by itself, so it is held to the fixed list: opting in to visitor targets covers
+    // what a visitor starts, not where the page reads its own configuration from.
+    const fixed = resolveTarget(href, { ...policy, allowVisitorTargets: false });
+    if (!fixed.ok) throw new Error(fixed.error);
+    return readText(href);
+  });
   let agents: readonly AgentConfig[] = [];
   let theme: ThemeConfig | undefined;
   let warnings: readonly string[] = [];

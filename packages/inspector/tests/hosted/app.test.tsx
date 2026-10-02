@@ -85,6 +85,7 @@ test('the footer names the counts and the privacy facts of the mode', () => {
   assert.match(hosted, /3 exchanges · 0 frames · requests only to this origin and https:\/\/agent\.example, http:\/\/127\.0\.0\.1:8787 · no telemetry · headers never recorded/);
 
   assert.match(build({ mode: 'hosted', allowedOrigins: [] }).markup, /requests only to this origin ·/);
+  assert.match(build({ mode: 'hosted', allowedOrigins: [], allowVisitorTargets: false }).markup, /requests only to this origin ·/);
   assert.match(build({ recording: true }).markup, /imported recording, inspection only/);
 });
 
@@ -114,4 +115,37 @@ test('every control has an accessible name, and outside its own password field t
 test('the markup requests nothing and carries no inline script, handler or remote reference', () => {
   const { markup } = build({ mode: 'hosted', allowedOrigins: ['https://agent.example'] });
   assert.doesNotMatch(markup, /<script|<iframe|<img|<link|\son[a-z]+=|srcset|src="|href="https?:/i);
+});
+
+// P01 T004 (US2.4, FR-009): the footer follows the policy and only the policy.
+
+test('with the visitor-target option the footer names HTTPS targets and supported local servers, not "only this origin"', () => {
+  const { markup } = build({ mode: 'hosted', allowedOrigins: [], allowVisitorTargets: true }, 2);
+  assert.match(
+    markup,
+    /2 exchanges · 0 frames · requests to this origin, HTTPS targets and supported local servers \(use localhost; browser CORS and local-network rules apply\) · no telemetry · headers never recorded/,
+  );
+  assert.doesNotMatch(markup, /requests only to/);
+  // No URL, query or token can reach the footer through the policy: it states a scope, not addresses.
+  assert.doesNotMatch(markup.slice(markup.indexOf('<footer')), /https?:\/\/|\?|synthetic-token/);
+});
+
+test('fixed origins are not listed when the option is on (they are inside it), and the default footer keeps naming them', () => {
+  const on = build({ mode: 'hosted', allowedOrigins: ['https://agent.example'], allowVisitorTargets: true }).markup;
+  assert.match(on, /requests to this origin, HTTPS targets and supported local servers/);
+  assert.ok(!on.slice(on.indexOf('<footer')).includes('agent.example'));
+  assert.match(build({ mode: 'hosted', allowedOrigins: ['https://agent.example'] }).markup, /requests only to this origin and https:\/\/agent\.example ·/);
+});
+
+test('the option is stated only for a hosted page: embedded and unknown modes keep the own-origin footer', () => {
+  for (const mode of ['embedded', undefined] as const) {
+    const markup = build({ ...(mode !== undefined && { mode }), allowVisitorTargets: true }).markup;
+    assert.match(markup, /requests only to this origin · no telemetry · headers never recorded/);
+    assert.doesNotMatch(markup, /HTTPS targets/);
+  }
+});
+
+test('the footer text is the same for the live page and the recording, which adds only its own suffix', () => {
+  const markup = build({ mode: 'hosted', allowVisitorTargets: true, recording: true }).markup;
+  assert.match(markup, /headers never recorded · imported recording, inspection only/);
 });

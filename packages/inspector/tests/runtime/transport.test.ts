@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { TransportPolicy, TransportRequest } from '../../src/contracts.ts';
-import { createGuardedTransport, guardedFetchText, resolveTarget } from '../../src/core/runtime/transport.ts';
+import { createGuardedTransport, guardedFetchText, isVisitorTarget, resolveTarget, VISITOR_LOOPBACK_HOSTS } from '../../src/core/runtime/transport.ts';
 
 const TOKEN = 'synthetic-token-7f3a91';
 
@@ -245,4 +245,159 @@ test('guardedFetchText reads text through the guard and reports a bad status as 
   const blocked = scripted();
   await assert.rejects(guardedFetchText(createGuardedTransport(hosted, { fetch: blocked.fetch }))('https://evil.example/config.json'), /not an allowed destination/);
   assert.equal(blocked.seen.length, 0, 'a configuration cannot reach beyond the allowlist');
+});
+
+// ---------------------------------------------------------------------------------------------
+// Visitor targets (P01 T001/T002; constitution IV, feature 002): the opt-in boundary of the guard
+// ---------------------------------------------------------------------------------------------
+
+const visitor: TransportPolicy = { mode: 'hosted', pageOrigin: 'https://inspector.example', allowedOrigins: [], allowVisitorTargets: true };
+
+const REACHABLE = [
+  'https://unlisted.example/run',
+  'https://unlisted.example:8443/run?x=1',
+  'https://127.0.0.1:9/run',
+  'https://[::1]:8443/run',
+  'http://localhost/run',
+  'http://localhost:1/run',
+  'http://localhost:8787/run',
+  'http://LOCALHOST:8787/run',
+  'http://127.0.0.1/run',
+  'http://127.0.0.1:65535/run',
+  // The browser's own URL parser has already turned these into 127.0.0.1; the guard sees what fetch will use.
+  'http://127.1:8787/run',
+  'http://0x7f.0.0.1:8787/run',
+  'http://2130706433:8787/run',
+  'http://127.0.0.1.:8787/run',
+];
+
+const REFUSED = [
+  'http://unlisted.example/run',
+  'http://unlisted.example:443/run',
+  'http://192.168.1.20:8787/run',
+  'http://10.0.0.1/run',
+  'http://127.0.0.2:8787/run',
+  'http://0.0.0.0:8787/run',
+  'http://localhost.:8787/run',
+  'http://foo.localhost:8787/run',
+  'http://localhost.evil.example/run',
+  'http://127.0.0.1.evil.example/run',
+  'http://evil-localhost:8787/run',
+  'http://[::1]:8787/run',
+  'http://[0:0:0:0:0:0:0:1]:8787/run',
+  'http://[::ffff:127.0.0.1]:8787/run',
+  'http://localhost%2eevil.example/run',
+];
+
+test('opted in: any HTTPS origin and exactly localhost or 127.0.0.1 over HTTP, on any port, reach fetch with no cookies', async () => {
+  for (const url of REACHABLE) {
+    const { seen, fetch } = scripted();
+    await createGuardedTransport(visitor, { fetch }).send(post(url), { headerName: 'X-Api-Key', token: TOKEN });
+    assert.equal(seen.length, 1, url);
+    assert.equal(seen[0]?.init.credentials, 'omit', url);
+    assert.equal(seen[0]?.init.redirect, 'manual', url);
+    assert.equal(seen[0]?.init.referrerPolicy, 'no-referrer', url);
+    assert.equal(seen[0]?.headers['x-api-key'], TOKEN, url);
+    assert.deepEqual(Object.keys(seen[0]?.headers ?? {}).sort(), ['accept', 'content-type', 'x-api-key'], url);
+  }
+});
+
+test('opted in: every other HTTP destination, and IPv6 literals, are refused before fetch with the reason', async () => {
+  const { seen, fetch } = scripted();
+  const transport = createGuardedTransport(visitor, { fetch });
+  for (const url of REFUSED) {
+    await assert.rejects(transport.send(post(url)), /not an allowed destination.*HTTPS.*localhost.*127\.0\.0\.1/s, url);
+    assert.equal(resolveTarget(url, visitor).ok, false, url);
+  }
+  await assert.rejects(transport.send(post('http://[::1]:8787/run')), /IPv6.*localhost/s);
+  assert.equal(seen.length, 0, 'refused destinations never reach fetch');
+});
+
+test('opted in: userinfo, other schemes, unparseable text and redirects are refused exactly as before', async () => {
+  const { seen, fetch } = scripted();
+  const transport = createGuardedTransport(visitor, { fetch });
+  for (const url of ['https://user:hunter2@unlisted.example/run', 'http://token@localhost:8787/run', 'https://unlisted.example:pw@127.0.0.1/run']) {
+    await assert.rejects(transport.send(post(url)), (error: Error) => /user:password@/.test(error.message) && !/hunter2|pw@/.test(error.message), url);
+  }
+  for (const url of ['ftp://unlisted.example/run', 'ws://localhost:8787/run', 'wss://unlisted.example/run', 'file:///etc/passwd', 'javascript:alert(1)', 'data:text/plain,x']) {
+    await assert.rejects(transport.send(post(url)), /http or https/, url);
+  }
+  await assert.rejects(transport.send(post('http://')), /not a valid URL/);
+  assert.equal(seen.length, 0);
+
+  const redirect = scripted(() => new Response(null, { status: 307, headers: { location: 'http://169.254.169.254/' } }));
+  await assert.rejects(createGuardedTransport(visitor, { fetch: redirect.fetch }).send(post('https://unlisted.example/run')), /does not follow redirects/);
+  assert.equal(redirect.seen.length, 1, 'no second request');
+  assert.equal(redirect.seen[0]?.init.redirect, 'manual');
+});
+
+test('opted in: scheme-relative and backslash forms resolve first, then meet the same boundary', () => {
+  // The page is https, so `//host` is an https target; the same text under an http loopback page is not.
+  assert.equal(resolveTarget('//unlisted.example/run', visitor).ok, true);
+  assert.equal(resolveTarget('\\\\unlisted.example\\run', visitor).ok, true);
+  assert.equal(resolveTarget('//127.0.0.1:8787/run', visitor).ok, true);
+  const loopbackPage: TransportPolicy = { ...visitor, pageOrigin: 'http://127.0.0.1:4000' };
+  assert.equal(resolveTarget('//unlisted.example/run', loopbackPage).ok, false);
+  assert.equal(resolveTarget('//localhost:8787/run', loopbackPage).ok, true);
+  assert.equal(resolveTarget('/config.json', loopbackPage).ok, true, 'the page origin stays reachable');
+  assert.equal(resolveTarget('http://localhost@evil.example/run', visitor).ok, false);
+  assert.equal(resolveTarget('http://evil.example#@localhost/run', visitor).ok, false);
+  assert.equal(resolveTarget('http://evil.example/?@localhost', visitor).ok, false);
+});
+
+test('without the opt-in nothing changes: absent or false keeps the fixed allowlist, and truthy-but-not-true does not opt in', async () => {
+  for (const policy of [hosted, { ...hosted, allowVisitorTargets: false }, { ...embedded, allowVisitorTargets: false }]) {
+    const { seen, fetch } = scripted();
+    const transport = createGuardedTransport(policy, { fetch });
+    for (const url of ['https://unlisted.example/run', 'http://localhost:8787/run', 'http://127.0.0.1:8787/run', 'http://[::1]:8787/run']) {
+      await assert.rejects(transport.send(post(url)), /not an allowed destination/, `${policy.mode} ${url}`);
+    }
+    assert.equal(seen.length, 0);
+  }
+  // Old behavior with a fixed plain-HTTP origin is untouched while the option is off.
+  const fixed: TransportPolicy = { mode: 'hosted', pageOrigin: 'https://inspector.example', allowedOrigins: ['http://192.168.1.20:8787'] };
+  assert.equal(resolveTarget('http://192.168.1.20:8787/run', fixed).ok, true);
+  assert.equal(resolveTarget('http://192.168.1.20:8787/run', { ...fixed, allowVisitorTargets: false }).ok, true);
+  // Constructed objects that are not TypeScript-checked cannot opt in by being truthy.
+  for (const value of ['true', 1, {}, null]) {
+    const refused = resolveTarget('https://unlisted.example/run', { ...hosted, allowVisitorTargets: value as unknown as boolean });
+    assert.equal(refused.ok, false, String(value));
+    assert.match(refused.ok ? '' : refused.error, /allowVisitorTargets must be true or false/, String(value));
+  }
+});
+
+test('an embedded policy cannot opt in: every request is refused, the page origin included', async () => {
+  const { seen, fetch } = scripted();
+  const policy: TransportPolicy = { ...embedded, allowVisitorTargets: true };
+  const transport = createGuardedTransport(policy, { fetch });
+  for (const url of ['/agent', 'https://host.example/agent', 'https://unlisted.example/run', 'http://localhost:8787/run']) {
+    await assert.rejects(transport.send(post(url)), /hosted deployment/, url);
+  }
+  assert.equal(seen.length, 0);
+  assert.equal(resolveTarget('/agent', policy).ok, false);
+});
+
+test('opted in, fixed origins cannot widen the boundary: a constructed policy with one outside it refuses everything', async () => {
+  for (const entry of ['http://192.168.1.20:8787', 'http://agent.example', 'http://[::1]:8787', 'http://127.0.0.2:8787', 'not a url']) {
+    const policy: TransportPolicy = { ...visitor, allowedOrigins: ['https://agent.example', entry] };
+    const { seen, fetch } = scripted();
+    const transport = createGuardedTransport(policy, { fetch });
+    for (const url of ['https://agent.example/run', 'https://unlisted.example/run', 'http://localhost:8787/run', '/config.json', entry]) {
+      await assert.rejects(transport.send(post(url)), (error: Error) => error.message.includes('allowedOrigins') && error.message.includes('HTTPS') && !/not an allowed destination/.test(error.message), `${entry} ${url}`);
+    }
+    assert.equal(seen.length, 0, entry);
+  }
+  // Fixed origins inside the boundary are fine, and redundant.
+  const inside: TransportPolicy = { ...visitor, allowedOrigins: ['https://agent.example', 'http://localhost:8787', 'http://127.0.0.1:9'] };
+  for (const url of ['https://agent.example/run', 'http://localhost:8787/run', 'http://127.0.0.1:9/run', 'https://unlisted.example/run']) assert.equal(resolveTarget(url, inside).ok, true, url);
+});
+
+test('the shared predicate is the whole boundary: https, or http to exactly localhost / 127.0.0.1, without userinfo', () => {
+  const yes = (text: string) => isVisitorTarget(new URL(text));
+  assert.deepEqual(VISITOR_LOOPBACK_HOSTS, ['localhost', '127.0.0.1']);
+  for (const url of REACHABLE) assert.equal(yes(url), true, url);
+  for (const url of REFUSED) assert.equal(yes(url), false, url);
+  assert.equal(yes('https://user@unlisted.example/'), false);
+  assert.equal(yes('ftp://localhost/'), false);
+  assert.equal(yes('ws://localhost:1/'), false);
 });

@@ -7,6 +7,9 @@
 //
 // - Destinations: the page's own origin, plus the origins the deployment allowed at startup. A
 //   configuration or a typed endpoint cannot add one. A URL with `user:password@` is refused outright.
+//   A hosted deployment may instead opt in, at startup, to visitor-chosen targets (feature 002): any
+//   HTTPS origin and plain HTTP to exactly localhost or 127.0.0.1 on any port. `isVisitorTarget` is
+//   that boundary in one place; the startup content security policy is built from the same list.
 // - Cookies: none when hosted. Embedded requests to the page's own origin use the host's same-origin
 //   credentials; every other request omits them.
 // - Token: the volatile credential is turned into one header here and nowhere else. It is never part
@@ -43,8 +46,49 @@ export function headerNameProblem(name: string): string | undefined {
   return undefined;
 }
 
+/**
+ * The plain-HTTP hosts an opted-in page may reach, on any port. Exact names: a browser's content
+ * security policy cannot match IPv6 literals such as [::1] portably, so they are not listed and not
+ * claimed. A numeric form such as 127.1 or 2130706433 is already 127.0.0.1 once the URL is parsed.
+ */
+export const VISITOR_LOOPBACK_HOSTS: readonly string[] = ['localhost', '127.0.0.1'];
+
+const VISITOR_BOUNDARY = 'HTTPS origins, and http://localhost or http://127.0.0.1 on any port';
+
+/** The opt-in boundary: HTTPS, or HTTP to an exact loopback host, with no credentials in the URL. */
+export function isVisitorTarget(url: URL): boolean {
+  if (url.username !== '' || url.password !== '') return false;
+  return url.protocol === 'https:' || (url.protocol === 'http:' && VISITOR_LOOPBACK_HOSTS.includes(url.hostname));
+}
+
+const isVisitorOrigin = (origin: string): boolean => {
+  try {
+    return isVisitorTarget(new URL(origin));
+  } catch {
+    return false;
+  }
+};
+
+/** Whether `policy` is a hosted one that opted in. Only the boolean `true` does. */
+export const allowsVisitorTargets = (policy: TransportPolicy): boolean => policy.mode === 'hosted' && policy.allowVisitorTargets === true;
+
+/**
+ * Why a constructed policy cannot be enforced, or undefined. The hosting file is checked for the same
+ * things when it is read; a policy built another way gets the same refusal, for every request.
+ */
+function policyProblem(policy: TransportPolicy): string | undefined {
+  const option = policy.allowVisitorTargets;
+  if (option === undefined || option === false) return undefined;
+  if (option !== true) return 'The transport policy is invalid: allowVisitorTargets must be true or false';
+  if (policy.mode !== 'hosted') return 'The transport policy is invalid: only a hosted deployment can allow visitor targets';
+  const outside = policy.allowedOrigins.find((origin) => !isVisitorOrigin(origin));
+  return outside === undefined ? undefined : `The transport policy is invalid: allowedOrigins entry "${outside}" is outside the visitor-target boundary (${VISITOR_BOUNDARY}) and cannot widen it`;
+}
+
 /** Where `url` goes under `policy`, or the reason it may not. Never sends anything. */
 export function resolveTarget(url: string, policy: TransportPolicy): Result<URL> {
+  const problem = policyProblem(policy);
+  if (problem !== undefined) return fail(problem);
   if (hasUserinfo(url)) return fail('The URL must not contain credentials (user:password@); enter the token in the authentication field instead');
   let target: URL;
   try {
@@ -54,6 +98,13 @@ export function resolveTarget(url: string, policy: TransportPolicy): Result<URL>
   }
   if (target.protocol !== 'http:' && target.protocol !== 'https:') return fail('The URL must use http or https');
   const allowed = [policy.pageOrigin, ...policy.allowedOrigins];
+  if (allowsVisitorTargets(policy)) {
+    if (target.origin === policy.pageOrigin || isVisitorTarget(target)) return ok(target);
+    return fail(
+      `${target.origin} is not an allowed destination. This page may reach its own origin, ${VISITOR_BOUNDARY}; ` +
+        `IPv6 literals such as [::1] are not supported, so use http://localhost for a local server`,
+    );
+  }
   if (!allowed.includes(target.origin)) {
     return fail(`${target.origin} is not an allowed destination. This page may reach ${allowed.join(', ')}; the list is fixed when the page starts`);
   }

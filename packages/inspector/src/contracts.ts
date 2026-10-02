@@ -168,6 +168,11 @@ export interface TransportPolicy {
   readonly pageOrigin: string;
   /** Absolute origins of the explicit deployment allowlist (hosted). */
   readonly allowedOrigins: readonly string[];
+  /**
+   * The deployer's startup opt-in (hosted only; false when absent): visitor-chosen HTTPS origins and
+   * plain HTTP to localhost / 127.0.0.1 on any port. Fixed origins must already be inside that boundary.
+   */
+  readonly allowVisitorTargets?: boolean;
 }
 
 /** The caller says what body to expect; nothing inspects Content-Type or any header. */
