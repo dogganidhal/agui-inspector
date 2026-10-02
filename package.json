@@ -1,0 +1,27 @@
+{
+  "name": "agui-inspector-workspace",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Working-name workspace for the AG-UI inspector 0.1.0 MVP. Not published.",
+  "type": "module",
+  "workspaces": [
+    "packages/inspector"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json && tsc -p packages/inspector/tsconfig.json",
+    "test:unit": "node scripts/test-build.mjs",
+    "build": "node scripts/build.mjs",
+    "test:e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@types/node": "24.19.1",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "esbuild": "0.28.2",
+    "typescript": "7.0.2"
+  }
+}
