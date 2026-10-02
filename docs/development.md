@@ -19,6 +19,9 @@ Run from the repository root.
 | `npm run test:unit` | Compiles `*.test.ts(x)` with esbuild into `.build/tests`, then runs them with `node --test`. |
 | `npm run test:unit -- packages/inspector/tests/foundation` | Same, limited to the given files or directories. No tests found is a failure. |
 | `npm run build` | Writes `packages/inspector/dist` (`index.html` and `app.js`). `-- --outdir <dir>` builds elsewhere. |
+| `npm run check:bundle` | Fails when the files in `packages/inspector/dist` exceed 2,000,000 minified bytes or 600,000 gzip bytes. Run `npm run build` first. |
+| `npm run check:bundle:renderer` | Builds a representative bundle (scaffold app plus the pinned A2UI v0.9 renderer) into `.build/representative` and reports the headroom left. |
+| `npm run test:benchmark` | Checks the 5,000-frame fixture against its manifest and reports UI responsiveness as pending. `-- --strict` fails while it is pending. |
 | `npm run test:e2e` | Runs Playwright against `tests/e2e`. |
 | `npm run check:ci` | Runs the pull request gate locally (see below). |
 | `npm run check:ci -- --strict` | The same gate, but suites that are not introduced yet fail it. |
@@ -40,6 +43,40 @@ itself, so the file uses only erasable syntax.
 `packages/inspector/src/static-path.js` exports `staticAssetsPath`, the absolute path of `dist`.
 Another server can serve that directory next to a configuration file. The package ships no CLI and
 no server helper.
+
+## Bundle budget
+
+`npm run build && npm run check:bundle` sums every file under `packages/inspector/dist`: the HTML, the
+script, any chunk, stylesheet or other asset the build adds. Only source maps are left out. Gzip is
+measured per file at a fixed level (6) with no modification time in the header, then summed, so the
+number depends on the bytes alone. The command prints each file and both totals, and exits non-zero
+when either total is above its limit (2,000,000 minified or 600,000 gzip bytes, decimal). A total equal
+to the limit passes. A missing or empty directory fails.
+
+The scaffold is small, so the real build says little about the final app. `npm run check:bundle:renderer`
+bundles the scaffold together with the pinned A2UI v0.9 renderer and catalog, A2UI core, the AG-UI
+client, the event schemas and the upstream render tool, then prints how much room that leaves. On the
+pinned versions it comes to about 1.02 MB minified and 250 KB gzipped. This is headroom for planning, not
+a certified size: the integrated app adds its own code, and the same strict check runs on that build.
+Gzip output can differ slightly between Node versions, so compare numbers from the same Node.
+
+## 5,000-frame benchmark
+
+`tests/benchmarks/generate.ts` builds the fixed workload from the plan: seed `001`, ten exchanges of
+500 original SSE data frames, all 31 event types plus 100 invalid frames. `tests/benchmarks/manifest.json`
+freezes the type counts, each frame's data and envelope byte lengths in order, and a SHA-256 for each
+exchange. `npm run test:unit -- tests/benchmarks` regenerates the fixture and compares it to the manifest,
+checks the counts and payload sizes against the plan, validates the 4,900 valid frames with the upstream
+schema, checks each event lifecycle and runs every exchange through the pinned protocol client.
+
+The manifest is frozen. After a reviewed profile change, regenerate it with
+`node tests/benchmarks/generate.ts --write` and review the diff.
+
+`npm run test:benchmark` repeats the manifest check and then prints the responsiveness status. There is
+no UI timing yet, so the status is `PENDING` and `SC-009 NOT PASSED`; a timer that does not drive the UI
+is never accepted instead. The runner, browser, interaction schedule, warm-up and three measured runs,
+and the pass rules (at least 95 of 100 filters and 95 of 100 expansions within 200 ms, plus exact frame
+count and hashes) are in `tests/benchmarks/profile.md`. Slice L04 supplies the measurements.
 
 ## Pull request checks
 
@@ -78,15 +115,16 @@ a separate, blocked step; see `docs/distribution.md`.
 
 ## What exists and what is still missing
 
-This is the F01 scaffold plus the F02 gate. The views render "Not implemented" and every control is
-disabled.
+This is the F01 scaffold, the F02 gate and the F03 budget and benchmark fixture. The views render
+"Not implemented" and every control is disabled.
 
 | Check | Status |
 | --- | --- |
 | Typecheck, foundation unit tests, build | Present. |
 | CI workflow and `npm run check:ci` | Present (slice F02). Reports the suites below as pending. |
-| Bundle-budget check (2 MB minified, 600 KB gzipped) | Missing (slice F03). |
-| 5,000-frame benchmark fixture and measurement | Missing (slice F03, then L04). |
+| Bundle-budget check (2 MB minified, 600 KB gzipped) | Present (slice F03). Counts the scaffold build; the final app repeats it. |
+| 5,000-frame benchmark fixture and manifest | Present (slice F03). |
+| 5,000-frame responsiveness measurement | Pending until the benchmark UI (slice L04) and the physical runner exist. |
 | End-to-end tests and network-allowlist checks | Missing; only the configuration exists. |
 | Python package and tests | Missing (slice L06). |
 
