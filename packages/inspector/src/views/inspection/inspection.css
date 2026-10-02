@@ -111,7 +111,7 @@
 .agui-fr-tick[data-family="activity"] { --c: var(--f-activity); }
 .agui-fr-tick--issue { height: 100%; background: var(--err); }
 .agui-fr-axis { position: relative; height: calc(var(--u) * 3.5); color: var(--faint); font: 10.5px var(--agui-font-mono); }
-.agui-fr-axis span { position: absolute; transform: translateX(-50%); }
+.agui-fr-axis span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
 .agui-fr-axis span:first-child { transform: none; }
 .agui-fr-axis .agui-fr-axis-end { transform: translateX(-100%); color: var(--muted); }
 
