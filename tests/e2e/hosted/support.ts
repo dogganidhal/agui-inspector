@@ -83,7 +83,13 @@ async function readBody(request: IncomingMessage): Promise<string> {
 }
 
 const listen = (server: Server) => new Promise<string>((resolve) => server.listen(0, '127.0.0.1', () => resolve(`http://127.0.0.1:${(server.address() as AddressInfo).port}`)));
-const close = (server: Server) => new Promise((resolve) => server.close(resolve));
+// close() alone waits for a connection that is mid-request, such as one the browser still has open
+// when the test ends; dropping the connections lets the teardown finish at once.
+const close = (server: Server) =>
+  new Promise((resolve) => {
+    server.close(resolve);
+    server.closeAllConnections();
+  });
 
 /** What every scripted agent answers, on whichever origin it is asked. */
 function answer(pathname: string, input: { threadId?: unknown; runId?: unknown } | undefined, response: ServerResponse, redirectTo: () => string): void {
