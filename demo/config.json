@@ -1,0 +1,64 @@
+{
+  "version": 0,
+  "agents": [
+    {
+      "id": "interactive",
+      "name": "Interactive scenarios (browser-local example)",
+      "url": "__demo__/agent/interactive",
+      "capabilities": {
+        "identity": { "name": "Interactive reference agent", "version": "0.1.0" },
+        "transport": { "streaming": true },
+        "tools": { "supported": true, "parallelCalls": true },
+        "state": { "snapshots": true, "deltas": true },
+        "humanInTheLoop": { "interrupts": true }
+      },
+      "preset": {
+        "messages": "turn",
+        "prepare": [
+          { "method": "PUT", "path": "__demo__/prepare/sessions/{{threadId}}", "body": { "thread": "{{threadId}}" } },
+          { "method": "POST", "path": "__demo__/prepare/warm", "body": { "run": "{{runId}}" } }
+        ],
+        "quickMessages": ["Hello there", "interrupt", "tools", "slow", "state", "broken"]
+      }
+    },
+    {
+      "id": "a2ui",
+      "name": "A2UI form (browser-local example)",
+      "url": "__demo__/agent/a2ui",
+      "capabilities": {
+        "identity": { "name": "A2UI reference agent", "version": "0.1.0" },
+        "transport": { "streaming": true }
+      },
+      "preset": {
+        "messages": "turn",
+        "quickMessages": ["Show the order form"]
+      }
+    },
+    {
+      "id": "protocol-baseline",
+      "name": "Protocol baseline (browser-local example)",
+      "url": "__demo__/agent/protocol/baseline",
+      "capabilities": {
+        "identity": { "name": "Protocol baseline reference agent", "version": "0.1.0" },
+        "transport": { "streaming": true }
+      },
+      "preset": {
+        "messages": "turn",
+        "quickMessages": ["Run the baseline protocol example"]
+      }
+    },
+    {
+      "id": "protocol-run-error",
+      "name": "Protocol run error (browser-local example)",
+      "url": "__demo__/agent/protocol/run-error",
+      "capabilities": {
+        "identity": { "name": "Protocol run-error reference agent", "version": "0.1.0" },
+        "transport": { "streaming": true }
+      },
+      "preset": {
+        "messages": "turn",
+        "quickMessages": ["Run the failing example"]
+      }
+    }
+  ]
+}

@@ -8,31 +8,18 @@
 // echoes a header, a cookie or a token: a test that finds a token anywhere in the page therefore knows
 // the page put it there. CORS is granted to exactly one origin when asked to, and credentials mode is
 // never enabled, so a hosted page that sent cookies could not even read the answer.
+// What the agent answers is chosen by the environment-neutral producer in scenarios.ts, which the
+// browser demo's service worker shares; this adapter keeps the Node I/O, validation, CORS, request log,
+// failure controls and open-stream accounting.
 // Erasable TypeScript only, so Node can run it directly.
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { interactiveResponse, type RunInput } from './scenarios.ts';
 
-/** What the last user message asks the agent to do. Anything else gets a plain reply. */
-export const SCENARIOS = {
-  interrupt: 'interrupt',
-  tools: 'tools',
-  slow: 'slow',
-  state: 'state',
-  broken: 'broken',
-} as const;
+export { INTERRUPTS, SCENARIOS } from './scenarios.ts';
 
 /** A route that only answers with a redirect to the agent, to show that the page refuses to follow one. */
 export const REDIRECT_PATH = '/redirect';
-
-export const INTERRUPTS = [
-  {
-    id: 'i-approve',
-    reason: 'approval',
-    message: 'Approve the refund of 25.00?',
-    responseSchema: { type: 'object', required: ['approved'], properties: { approved: { type: 'boolean' }, note: { type: 'string' } } },
-  },
-  { id: 'i-contact', reason: 'input', message: 'Which contact should the agent use?' },
-] as const;
 
 export interface RecordedRequest {
   readonly seq: number;
@@ -69,15 +56,6 @@ export interface InteractiveOptions {
   readonly allowOrigin?: string;
 }
 
-interface Input {
-  threadId?: unknown;
-  runId?: unknown;
-  messages?: Array<{ role?: string; content?: unknown; toolCallId?: string }>;
-  resume?: Array<{ interruptId: string; status: string; payload?: unknown }>;
-  forwardedProps?: { a2uiAction?: { userAction?: { name?: string } } };
-  state?: unknown;
-}
-
 const CREDENTIAL_HEADERS = ['authorization', 'x-api-key', 'cookie'] as const;
 
 export async function createInteractiveServer(options: InteractiveOptions = {}): Promise<InteractiveServer> {
@@ -104,83 +82,16 @@ export async function createInteractiveServer(options: InteractiveOptions = {}):
     }
   }
 
-  const frame = (response: ServerResponse, event: object) => response.write(`data: ${JSON.stringify(event)}\n\n`);
-
-  function lastUserText(input: Input): string {
-    const users = (input.messages ?? []).filter((message) => message.role === 'user');
-    const content = users.at(-1)?.content;
-    return typeof content === 'string' ? content : '';
-  }
-
-  function stream(response: ServerResponse, input: Input): void {
-    const threadId = String(input.threadId);
-    const runId = String(input.runId);
-    const started = { type: 'RUN_STARTED', threadId, runId };
-    const finished = (outcome: object = { type: 'success' }) => ({ type: 'RUN_FINISHED', threadId, runId, outcome });
-    const say = (messageId: string, delta: string) => [
-      { type: 'TEXT_MESSAGE_START', messageId, role: 'assistant' },
-      { type: 'TEXT_MESSAGE_CONTENT', messageId, delta },
-      { type: 'TEXT_MESSAGE_END', messageId },
-    ];
-    response.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store' });
-
-    const send = (events: object[], hold = false): void => {
-      for (const event of events) frame(response, event);
-      if (!hold) return void response.end();
-      open += 1;
-      // The response closes when the client goes away; the request's own 'close' fires once its body is read.
-      response.on('close', () => {
-        open -= 1;
-      });
-    };
-
-    const message = lastUserText(input);
-    const tools = (input.messages ?? []).filter((candidate) => candidate.role === 'tool');
-    const action = input.forwardedProps?.a2uiAction?.userAction;
-
-    if (input.resume !== undefined) {
-      const answers = input.resume.map((entry) => `${entry.interruptId}=${entry.status}${entry.payload === undefined ? '' : `:${JSON.stringify(entry.payload)}`}`).join(', ');
-      return send([started, ...say(`m-${runId}`, `Resumed with ${answers}`), finished()]);
-    }
-    if (tools.length > 0) {
-      const results = tools.map((tool) => `${tool.toolCallId}=${String(tool.content)}`).join(', ');
-      return send([started, ...say(`m-${runId}`, `Tool results: ${results}`), finished()]);
-    }
-    if (action !== undefined) return send([started, ...say(`m-${runId}`, `Action received: ${String(action.name)}`), finished()]);
-
-    switch (message) {
-      case SCENARIOS.interrupt:
-        return send([started, ...say(`m-${runId}`, 'I need two answers before I can continue.'), finished({ type: 'interrupt', interrupts: INTERRUPTS })]);
-      case SCENARIOS.tools:
-        return send([
-          started,
-          { type: 'TOOL_CALL_START', toolCallId: 'c-color', toolCallName: 'pick_color' },
-          { type: 'TOOL_CALL_ARGS', toolCallId: 'c-color', delta: '{"choices":' },
-          { type: 'TOOL_CALL_ARGS', toolCallId: 'c-color', delta: '["red","teal"]}' },
-          { type: 'TOOL_CALL_END', toolCallId: 'c-color' },
-          { type: 'TOOL_CALL_START', toolCallId: 'c-size', toolCallName: 'pick_size' },
-          { type: 'TOOL_CALL_ARGS', toolCallId: 'c-size', delta: '{"max":3}' },
-          { type: 'TOOL_CALL_END', toolCallId: 'c-size' },
-          finished(),
-        ]);
-      case SCENARIOS.slow:
-        // Streams a little and then stays open until the client goes away.
-        return send([started, { type: 'TEXT_MESSAGE_START', messageId: `m-${runId}`, role: 'assistant' }, { type: 'TEXT_MESSAGE_CONTENT', messageId: `m-${runId}`, delta: 'Thinking about it' }], true);
-      case SCENARIOS.state:
-        return send([
-          started,
-          { type: 'STATE_SNAPSHOT', snapshot: { counter: 1, items: ['a'] } },
-          { type: 'STATE_DELTA', delta: [{ op: 'replace', path: '/counter', value: 2 }, { op: 'add', path: '/items/-', value: 'b' }] },
-          finished(),
-        ]);
-      case SCENARIOS.broken:
-        response.write(`data: ${JSON.stringify(started)}\n\n`);
-        response.write(`data: ${JSON.stringify({ type: 'TEXT_MESSAGE_CONTENT', messageId: 'never-started', delta: 'no start event' })}\n\n`);
-        response.write('data: {not json at all\n\n');
-        return send([{ type: 'STEP_STARTED', stepName: 'after the damage' }, { type: 'STEP_FINISHED', stepName: 'after the damage' }, finished()]);
-      default:
-        return send([started, ...say(`m-${runId}`, 'Hello from the reference agent.'), finished()]);
-    }
+  function stream(response: ServerResponse, input: RunInput): void {
+    const answer = interactiveResponse(input);
+    response.writeHead(answer.status, { 'content-type': answer.contentType, 'cache-control': 'no-store' });
+    for (const chunk of answer.chunks) response.write(chunk);
+    if (answer.ending === 'close') return void response.end();
+    open += 1;
+    // The response closes when the client goes away; the request's own 'close' fires once its body is read.
+    response.on('close', () => {
+      open -= 1;
+    });
   }
 
   const server = createServer(async (request, response) => {
@@ -228,11 +139,11 @@ export async function createInteractiveServer(options: InteractiveOptions = {}):
     if (failure !== undefined) return text(response, failure, 'application/json', '{"error":"scripted failure"}');
     if (kind === 'preparation') return text(response, 200, 'application/json', '{"ok":true}');
 
-    const input = parsed as Input;
+    const input = parsed as Partial<RunInput> | null;
     if (typeof input?.threadId !== 'string' || typeof input.runId !== 'string') {
       return text(response, 422, 'application/json', JSON.stringify({ detail: 'threadId and runId must be strings' }));
     }
-    return stream(response, input);
+    return stream(response, input as RunInput);
   });
 
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
