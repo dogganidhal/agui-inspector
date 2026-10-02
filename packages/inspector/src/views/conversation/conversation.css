@@ -1,0 +1,171 @@
+/* Conversation and state views (design.md: Conversation, State). Every color, radius, spacing step and
+   font comes from the theme tokens (tokens.css); spacing is a multiple of --u so --agui-density scales
+   it. Primitives carry the rest. Classes use the agui-conv- prefix. */
+
+.agui-conv {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 3.5);
+  max-width: 780px;
+  padding: calc(var(--u) * 4) 16px calc(var(--u) * 6);
+  color: var(--fg);
+  font: 400 13px/1.5 var(--agui-font-sans);
+}
+
+/* A heading for assistive technology: the pane header the shell draws is the visible one. */
+.agui-conv > h2,
+.agui-conv-state > h2 {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.agui-conv-mono { font-family: var(--agui-font-mono); }
+.agui-conv-muted { color: var(--muted); }
+.agui-conv-faint { color: var(--faint); font-size: 11px; }
+/* Long received values wrap instead of widening the pane. */
+.agui-conv-value { overflow-wrap: anywhere; white-space: pre-wrap; min-width: 0; }
+.agui-conv-empty { margin: 0; color: var(--muted); }
+
+/* Disclosure */
+.agui-conv-summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: calc(var(--u) * 2);
+  padding: calc(var(--u) * 0.5) 0;
+  color: var(--muted);
+  font-size: 12px;
+  list-style: none;
+  cursor: pointer;
+}
+.agui-conv-summary::-webkit-details-marker { display: none; }
+.agui-conv-chev { display: inline-flex; transition: transform 0.2s var(--ease); }
+details[open] > .agui-conv-summary .agui-conv-chev { transform: rotate(90deg); }
+
+/* Run header and the snapshot divider share one shape: a line of facts that ends in a rule. */
+.agui-conv-run,
+.agui-conv-snapshot {
+  display: grid;
+  gap: calc(var(--u) * 2);
+  padding-top: calc(var(--u) * 2);
+}
+.agui-conv-rulehead {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: calc(var(--u) * 2);
+  font-size: 12px;
+}
+.agui-conv-rulehead b { font-size: 12px; font-weight: 600; }
+.agui-conv-rule { flex: 1 1 40px; height: 1px; background: var(--line); }
+.agui-conv-sub { color: var(--muted); font-size: 12px; }
+.agui-conv-sub .agui-conv-mono { color: var(--fg); }
+
+/* Messages */
+.agui-conv-who {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: calc(var(--u) * 2);
+  margin-bottom: calc(var(--u) * 1);
+}
+.agui-conv-body {
+  max-width: 64ch;
+  font-size: 14px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.agui-conv-msg[data-role="user"] .agui-conv-body {
+  display: inline-block;
+  padding: calc(var(--u) * 2.5) calc(var(--u) * 3.5);
+  border-radius: var(--r);
+  background: var(--sunk);
+}
+.agui-conv-msg[data-role="system"] .agui-conv-body,
+.agui-conv-msg[data-role="developer"] .agui-conv-body { color: var(--muted); }
+
+/* Reasoning */
+.agui-conv-reason .agui-conv-reasontext {
+  margin-top: calc(var(--u) * 1.5);
+  padding-left: calc(var(--u) * 3.5);
+  border-left: 1px solid var(--line-2);
+  color: var(--muted);
+  font-size: 13.5px;
+}
+
+/* Deltas */
+.agui-conv-deltas { margin-top: calc(var(--u) * 1); }
+.agui-conv-deltalist {
+  display: grid;
+  gap: calc(var(--u) * 1);
+  max-height: 240px;
+  margin: calc(var(--u) * 1.5) 0 0;
+  padding: calc(var(--u) * 2) calc(var(--u) * 3);
+  overflow: auto;
+  border-radius: var(--r-sm);
+  background: var(--sunk);
+  list-style: none;
+  font-size: 12px;
+}
+.agui-conv-deltalist li { display: flex; align-items: baseline; gap: calc(var(--u) * 2); min-width: 0; }
+
+/* Steps */
+.agui-conv-stepbody {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 3);
+  margin: calc(var(--u) * 2) 0 0 calc(var(--u) * 1.75);
+  padding-left: calc(var(--u) * 4);
+  border-left: 1px solid var(--line-2);
+}
+
+/* Markers and nested subagents */
+.agui-conv-marker {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: calc(var(--u) * 2);
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.agui-conv-marker b { color: var(--fg); font-weight: 500; }
+.agui-conv-nest {
+  display: grid;
+  gap: calc(var(--u) * 1.5);
+  padding: calc(var(--u) * 2) calc(var(--u) * 3);
+  border: 1px dashed var(--line-2);
+  border-radius: var(--r);
+  font-size: 12.5px;
+}
+.agui-conv-lines { display: grid; gap: calc(var(--u) * 1.5); margin: 0; padding: 0; list-style: none; }
+.agui-conv-lines li { display: flex; align-items: center; flex-wrap: wrap; gap: calc(var(--u) * 2); }
+
+/* Projection issues */
+.agui-conv-issues { display: grid; gap: calc(var(--u) * 1.5); margin: 0; padding: 0; list-style: none; }
+
+/* State */
+.agui-conv-state {
+  display: grid;
+  gap: calc(var(--u) * 3);
+  padding: calc(var(--u) * 4) 16px calc(var(--u) * 6);
+  color: var(--fg);
+  font: 400 13px/1.5 var(--agui-font-sans);
+}
+.agui-conv-state-h { display: flex; align-items: baseline; flex-wrap: wrap; gap: calc(var(--u) * 2); }
+.agui-conv-changes { display: grid; gap: calc(var(--u) * 3); margin: 0; padding: 0; list-style: none; }
+.agui-conv-change {
+  display: grid;
+  gap: calc(var(--u) * 2);
+  padding-bottom: calc(var(--u) * 3);
+  border-bottom: 1px solid var(--line);
+}
+.agui-conv-change-h { display: flex; align-items: center; flex-wrap: wrap; gap: calc(var(--u) * 2); }
+.agui-conv-ops { display: grid; gap: calc(var(--u) * 1.5); margin: 0; padding: 0; list-style: none; }
+.agui-conv-op { display: flex; align-items: baseline; flex-wrap: wrap; gap: calc(var(--u) * 2); font-size: 12px; }
+.agui-conv-briefs { display: grid; gap: calc(var(--u) * 1.5); margin: calc(var(--u) * 1.5) 0 0; padding: 0; list-style: none; font-size: 12.5px; }
