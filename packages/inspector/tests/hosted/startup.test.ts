@@ -24,7 +24,7 @@ interface Seen {
  * A page with a scripted network. `files` answers by absolute URL; anything else is a 404. The log
  * records requests and the moment the policy is added, in order, so a test can read the sequence.
  */
-function page(files: Record<string, string | Response>, storage?: { items: Record<string, string> }) {
+function page(files: Record<string, string | Response>, storage?: { items: Record<string, string> }, baseUrl = `${PAGE}/`) {
   const log: string[] = [];
   const seen: Seen[] = [];
   const policies: string[] = [];
@@ -53,7 +53,7 @@ function page(files: Record<string, string | Response>, storage?: { items: Recor
     env: {
       document,
       origin: PAGE,
-      baseUrl: `${PAGE}/`,
+      baseUrl,
       fetch,
       ...(storage && { storage: { getItem: (key: string) => storage.items[key] ?? null, setItem: (key: string, value: string) => void (storage.items[key] = value) } }),
     },
@@ -145,6 +145,33 @@ test('hosting-config.json is read first, the policy is added next, and only then
   assert.deepEqual(result.policy, { mode: 'hosted', pageOrigin: PAGE, allowedOrigins: [AGENT] });
   assert.equal(result.selectedAgentId, 'support', 'the first configured agent is selected');
   assert.equal(result.runtime.getState().connection.targetUrl, `${AGENT}/run`);
+});
+
+test('under a mount path, hosting-config.json and config.json are read beside the page and never from the origin root', async () => {
+  for (const mount of ['/agui-inspector/', '/tools/inspector/']) {
+    const { env, seen } = page(
+      { [`${PAGE}${mount}config.json`]: agentsFile({ id: 'demo', url: '/agents/demo/stream' }) },
+      undefined,
+      `${PAGE}${mount}`,
+    );
+    const result = started(await startPage(env));
+    assert.deepEqual(
+      seen.map((request) => request.url),
+      [`${PAGE}${mount}hosting-config.json`, `${PAGE}${mount}config.json`],
+      mount,
+    );
+    assert.equal(result.selectedAgentId, 'demo', mount);
+    assert.equal(result.error, undefined, mount);
+    assert.deepEqual(result.policy, { mode: 'embedded', pageOrigin: PAGE, allowedOrigins: [] });
+  }
+});
+
+test('a relative config in hosting-config.json is read beside the page, an origin-relative one from the origin', async () => {
+  const mount = `${PAGE}/tools/inspector/`;
+  const beside = page({ [`${mount}hosting-config.json`]: hostedFile({ config: 'agents.json' }), [`${mount}agents.json`]: agentsFile({ id: 'a', url: `${AGENT}/run` }) }, undefined, mount);
+  assert.equal(started(await startPage(beside.env)).selectedAgentId, 'a');
+  const root = page({ [`${mount}hosting-config.json`]: hostedFile({ config: '/agents.json' }), [`${PAGE}/agents.json`]: agentsFile({ id: 'r', url: `${AGENT}/run` }) }, undefined, mount);
+  assert.equal(started(await startPage(root.env)).selectedAgentId, 'r');
 });
 
 test('the one request made before the policy is the deployment file, read as the page itself with no redirects', async () => {
