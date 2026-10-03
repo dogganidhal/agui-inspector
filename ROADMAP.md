@@ -36,11 +36,12 @@ Still to verify:
 
 Publication gates:
 
-- Nothing is published. `agui-inspector` was unregistered on npm and PyPI on 2026-10-03. Both manifests are private and
-  the Python package still carries the `Private :: Do Not Upload` classifier, so a registry install is not available.
-- Python: merging the open version pull request is the release, and the first release also needs a pull request that
-  removes the classifier. The maintainer approves the `pypi` deployment. Registering the trusted publisher on PyPI
-  happens outside this repository, and the maintainer confirms it.
+- Nothing is published. `agui-inspector` was unregistered on npm and PyPI on 2026-10-03. Both npm manifests are private,
+  so there is no npm install. The Python package no longer carries the `Private :: Do Not Upload` classifier, so a PyPI
+  install becomes available once the release below runs.
+- Python: merging the open version pull request is the release. The `minor` changeset in the classifier pull request makes
+  it 0.1.0. The maintainer approves the `pypi` deployment. Registering the trusted publisher on PyPI happens outside this
+  repository, and the maintainer confirms it.
 - npm: not set up. FR-040 asks for a CI build from a tag with npm provenance, and Changesets ignores the npm package
   until that exists.
 - G-03, whether upstream accepts the inspector under `apps/inspector`, is open. `@ag-ui/inspector` stays conditional on it.
