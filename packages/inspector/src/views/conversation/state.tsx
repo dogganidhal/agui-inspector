@@ -4,10 +4,10 @@
 // A delta that cannot be applied is listed with its error and leaves the state as it was; the raw
 // frame stays in the frames list either way.
 import type { ReactElement } from 'react';
-import type { FrameId, JsonValue, RawFrame, SessionStore } from '../../contracts';
+import type { EvidenceTarget, FrameId, JsonValue, RawFrame, SessionStore } from '../../contracts';
 import type { MessageBrief, PatchOperationView, SnapshotEntry, StateChange } from '../../core/projection/index';
 import { Card, CardBody, CardHeader, CodeBlock, FamilyDot, Finding, Label, Tag } from '../theme/primitives';
-import { Disclosure, FrameRef, formatOffset, useProjection } from './shared';
+import { Disclosure, FrameRef, RevealProvider, formatOffset, useProjection } from './shared';
 
 const pretty = (value: JsonValue | undefined): string => JSON.stringify(value, null, 2) ?? 'undefined';
 const compact = (value: JsonValue): string => JSON.stringify(value) ?? '';
@@ -56,7 +56,7 @@ function Change({ change, frames }: { change: StateChange; frames: ReadonlyMap<F
 }
 
 /** The current state as the next run will carry it, and every snapshot and delta that built it. */
-export function StateView({ store, threadId }: { store: SessionStore; threadId?: string }): ReactElement {
+export function StateView({ store, threadId, onReveal }: { store: SessionStore; threadId?: string; onReveal?(target: EvidenceTarget): void }): ReactElement {
   const { model, frames } = useProjection(store, threadId);
   const { current, changes } = model.state;
   return (
@@ -71,11 +71,13 @@ export function StateView({ store, threadId }: { store: SessionStore; threadId?:
       {changes.length === 0 ? (
         <p className="agui-conv-empty">No state events in this thread.</p>
       ) : (
-        <ol className="agui-conv-changes">
-          {changes.map((change) => (
-            <Change key={change.frameId} change={change} frames={frames} />
-          ))}
-        </ol>
+        <RevealProvider value={onReveal}>
+          <ol className="agui-conv-changes">
+            {changes.map((change) => (
+              <Change key={change.frameId} change={change} frames={frames} />
+            ))}
+          </ol>
+        </RevealProvider>
       )}
     </section>
   );

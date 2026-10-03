@@ -233,6 +233,14 @@ Two rules decide what stays visible:
 The newest exchange that is listed opens first. When the session holds only hidden preparation
 exchanges, the list says so instead of saying that no exchange exists yet.
 
+## Arriving from the conversation
+
+A run id or a frame reference in the conversation opens its evidence here. The list opens the exchange
+and the frame's detail, scrolls the row to the middle of the pane, marks it with `aria-current` and
+focuses it. A filter that lists the frame stays as it was. One that would hide the frame is cleared, and
+a toast says so. Nothing is sent and the recording is not changed. See
+[event views](event-views.md#following-a-reference).
+
 ## Protocol fixtures
 
 `examples/reference-agent/protocol-fixtures.ts` holds the F05 scenarios, deterministic and offline.

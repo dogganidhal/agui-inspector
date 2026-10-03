@@ -1,6 +1,6 @@
 // Small pieces the conversation and state views share. Composes F06 primitives; adds no styling of its own.
-import { useMemo, useState, useSyncExternalStore, type ReactElement, type ReactNode } from 'react';
-import type { FrameId, InspectionSession, RawFrame, SessionStore } from '../../contracts';
+import { createContext, useContext, useMemo, useState, useSyncExternalStore, type ReactElement, type ReactNode } from 'react';
+import type { EvidenceTarget, FrameId, InspectionSession, RawFrame, SessionStore } from '../../contracts';
 import { projectConversation, type ConversationModel } from '../../core/projection/index';
 import { Icon } from '../theme/primitives';
 
@@ -28,10 +28,26 @@ export const formatOffset = (ms: number): string => `+${(ms / 1000).toFixed(3)}`
 
 export const DERIVED_NOTE = 'Derived from frame offsets, not received';
 
-/** "frame #12": where the evidence for an entry sits in its exchange's raw frames. */
+/**
+ * The page's navigation action: it shows the evidence a reference points at in the frames list. Without one, as when a
+ * view is mounted on its own, run ids and frame references stay plain text.
+ */
+const RevealContext = createContext<((target: EvidenceTarget) => void) | undefined>(undefined);
+export const RevealProvider = RevealContext.Provider;
+export const useReveal = () => useContext(RevealContext);
+
+/** "frame #12": where the evidence for an entry sits in its exchange's raw frames. A button when the frame can be revealed. */
 export function FrameRef({ frameId, frames }: { frameId: FrameId; frames: ReadonlyMap<FrameId, RawFrame> }): ReactElement {
+  const reveal = useReveal();
   const frame = frames.get(frameId);
-  return <span className="agui-conv-mono agui-conv-evidence">{frame ? `frame #${frame.index}` : 'frame'}</span>;
+  if (frame === undefined) return <span className="agui-conv-mono agui-conv-evidence">frame</span>;
+  const text = `frame #${frame.index}`;
+  if (reveal === undefined) return <span className="agui-conv-mono agui-conv-evidence">{text}</span>;
+  return (
+    <button type="button" className="agui-conv-mono agui-conv-evidence agui-conv-ref" aria-label={`Show ${text} in the frames list`} onClick={() => reveal({ exchangeId: frame.exchangeId, frameId })}>
+      {text}
+    </button>
+  );
 }
 
 /**

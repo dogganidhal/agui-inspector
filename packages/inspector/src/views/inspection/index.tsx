@@ -1,18 +1,24 @@
 // The inspection pane: the frames list, the raw request editor and the session controls. It reads
 // the shared store and reports user actions through the typed callbacks in InspectionViewProps;
 // it never sends a request itself and never touches headers or credentials.
-import { useCallback, useState, useSyncExternalStore, type ReactElement } from 'react';
-import type { ExchangeId, InspectionViewProps } from '../../contracts.ts';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactElement } from 'react';
+import type { EvidenceTarget, ExchangeId, InspectionViewProps } from '../../contracts.ts';
 import { Button, Dialog, Editor, Finding, SegmentedControl, ToastRegion, useToasts } from '../theme/index.ts';
 import { FramesPanel } from './frames.tsx';
 import './inspection.css';
-import { NO_FILTER, type FrameFilter } from './model.ts';
+import { NO_FILTER, indexSession, revealEvidence, type FrameFilter } from './model.ts';
 import { RawRequest } from './raw.tsx';
 import { SessionControls } from './session.tsx';
 
 type Tab = 'frames' | 'raw';
 
-export function InspectionView({ store, error, onSendRaw, onExportSession, onImportSession }: InspectionViewProps): ReactElement {
+/** Optional hooks for the assembly. */
+export interface InspectionViewExtras {
+  /** Asks the frames list to show a run or frame. Each request is a new object, so asking for the same target again shows it again. */
+  reveal?: EvidenceTarget;
+}
+
+export function InspectionView({ store, error, onSendRaw, onExportSession, onImportSession, reveal }: InspectionViewProps & InspectionViewExtras): ReactElement {
   const session = useSyncExternalStore(store.subscribe, store.snapshot, store.snapshot);
   const [tab, setTab] = useState<Tab>('frames');
   const [filter, setFilter] = useState<FrameFilter>(NO_FILTER);
@@ -21,7 +27,33 @@ export function InspectionView({ store, error, onSendRaw, onExportSession, onImp
   const [generation, setGeneration] = useState(0);
   const [readError, setReadError] = useState<string>();
   const [manual, setManual] = useState<{ text: string; what: string }>();
+  // A request that is already there when the view mounts is old: a remount, such as after a pane error, must not replay it.
+  const [handled, setHandled] = useState(reveal);
+  const [revealed, setRevealed] = useState<{ target: EvidenceTarget; filterCleared: boolean }>();
   const { toasts, toast } = useToasts();
+  const root = useRef<HTMLElement>(null);
+
+  // A request is applied while rendering, so the commit that shows the pane already holds the open rows.
+  if (reveal !== undefined && reveal !== handled) {
+    setHandled(reveal);
+    const next = revealEvidence(indexSession(session), reveal, { filter, openExchanges, openFrames });
+    setRevealed(next && { target: reveal, filterCleared: next.filterCleared });
+    if (next !== undefined) {
+      setTab('frames');
+      setFilter(next.filter);
+      setOpenExchanges(next.openExchanges);
+      setOpenFrames(next.openFrames);
+      setGeneration((value) => value + 1);
+    }
+  }
+  // The list marks what was revealed with aria-current; that row (or exchange header) is what takes the focus.
+  useEffect(() => {
+    if (revealed === undefined) return;
+    const target = root.current?.querySelector<HTMLElement>('[aria-current="true"]');
+    target?.scrollIntoView({ block: 'center' });
+    target?.focus({ preventScroll: true });
+    if (revealed.filterCleared) toast(`Filter cleared to show the ${revealed.target.frameId === undefined ? 'exchange' : 'frame'}`);
+  }, [revealed, toast]);
 
   // Each user action that changes what the list shows bumps the generation in the same commit, so a
   // measurement can tell the render that answers an input from any render a capture update caused.
@@ -53,7 +85,7 @@ export function InspectionView({ store, error, onSendRaw, onExportSession, onImp
   );
 
   return (
-    <section aria-labelledby="inspection-heading" data-view="inspection" className="agui-ins">
+    <section ref={root} aria-labelledby="inspection-heading" data-view="inspection" className="agui-ins">
       <div className="agui-ins-head">
         <h2 id="inspection-heading">Inspection</h2>
         <SegmentedControl
@@ -91,6 +123,7 @@ export function InspectionView({ store, error, onSendRaw, onExportSession, onImp
           openExchanges={openExchanges}
           openFrames={openFrames}
           generation={generation}
+          {...(revealed !== undefined && { revealed: revealed.target })}
           onFilter={onFilter}
           onToggleExchange={onToggleExchange}
           onToggleFrame={onToggleFrame}
