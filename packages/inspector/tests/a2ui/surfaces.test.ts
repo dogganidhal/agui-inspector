@@ -267,9 +267,11 @@ test('only a2ui-surface activities get a rendered view; every other type stays J
   assert.equal(a2uiActivity(entry('PLAN', { a2ui_operations: json(formSurface) }), { renderEnabled: true, onAction: noAction }), undefined);
   assert.equal(a2uiActivity(entry('a2ui-surface-v1', {}), { renderEnabled: true, onAction: noAction }), undefined);
   assert.notEqual(a2uiActivity(entry('a2ui-surface', { a2ui_operations: json(formSurface) }), { renderEnabled: true, onAction: noAction }), undefined);
-  // A lifecycle snapshot (status: building) has no operations yet; it still gets the view, which says so.
+  // A lifecycle snapshot (status: building) has no operations yet; it still gets the view, which says what it is doing.
   const building = a2uiActivity(entry('a2ui-surface', { status: 'building' }), { renderEnabled: true, onAction: noAction });
-  assert.match(renderToStaticMarkup(createElement(Fragment, null, building)), /No A2UI operations yet/);
+  assert.match(renderToStaticMarkup(createElement(Fragment, null, building)), /data-status="building"/);
+  const empty = a2uiActivity(entry('a2ui-surface', {}), { renderEnabled: true, onAction: noAction });
+  assert.match(renderToStaticMarkup(createElement(Fragment, null, empty)), /No A2UI operations yet/);
   // Disabled rendering still hands over the view, which shows the JSON.
   const off = a2uiActivity(entry('a2ui-surface', { a2ui_operations: json(formSurface) }), { renderEnabled: false, onAction: noAction });
   assert.match(renderToStaticMarkup(createElement(Fragment, null, off)), /json-only/);

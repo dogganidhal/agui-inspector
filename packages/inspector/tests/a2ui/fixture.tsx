@@ -7,7 +7,7 @@ import { createRoot } from 'react-dom/client';
 import { A2uiSurface, basicCatalog, type ReactComponentImplementation } from '@a2ui/react/v0_9';
 import { MessageProcessor } from '@a2ui/web_core/v0_9';
 import type { A2uiAction, JsonValue } from '../../src/contracts';
-import { A2uiView } from '../../src/views/a2ui/index';
+import { A2uiView, a2uiActivity } from '../../src/views/a2ui/index';
 import { continuation, type Operation } from '../../../../examples/reference-agent/a2ui-scenarios';
 import '../../src/views/theme/index';
 import '../../src/views/a2ui/a2ui.css';
@@ -18,6 +18,8 @@ interface State {
   /** When on, each action is answered by the scripted continuation. */
   continuing: boolean;
   control?: JsonValue;
+  /** When set, the view is reached the way the conversation view reaches it: through the whole activity content. */
+  activity?: JsonValue;
 }
 
 const state: State = { operations: null, renderEnabled: true, continuing: false };
@@ -32,6 +34,8 @@ declare global {
       actions(): A2uiAction[];
       /** The official renderer with its stock catalog, to show what the guard prevents. */
       control(operations: JsonValue): void;
+      /** An `a2ui-surface` activity's whole content, so a lifecycle snapshot (`status`, no operations) can be shown. */
+      activity(content: JsonValue): void;
     };
   }
 }
@@ -66,7 +70,11 @@ const root = createRoot(container);
 function draw(): void {
   root.render(
     <main style={{ background: 'var(--bg)', color: 'var(--fg)', minHeight: '100vh', padding: 16 }}>
-      <A2uiView activityId="a2ui-surface-1" operations={state.operations} renderEnabled={state.renderEnabled} onAction={onAction} />
+      {state.activity === undefined ? (
+        <A2uiView activityId="a2ui-surface-1" operations={state.operations} renderEnabled={state.renderEnabled} onAction={onAction} />
+      ) : (
+        a2uiActivity({ messageId: 'a2ui-surface-1', activityType: 'a2ui-surface', content: state.activity }, { renderEnabled: state.renderEnabled, onAction })
+      )}
       {state.control !== undefined && <Control operations={state.control} />}
     </main>,
   );
@@ -75,6 +83,7 @@ function draw(): void {
 window.__a2ui = {
   set(operations) {
     state.operations = operations;
+    state.activity = undefined;
     draw();
   },
   render(enabled) {
@@ -87,6 +96,10 @@ window.__a2ui = {
   actions: () => [...actions],
   control(operations) {
     state.control = operations;
+    draw();
+  },
+  activity(content) {
+    state.activity = content;
     draw();
   },
 };

@@ -3,7 +3,8 @@ import { A2uiSurface } from '@a2ui/react/v0_9';
 import type { ReactComponentImplementation } from '@a2ui/react/v0_9';
 import type { A2uiAction, A2uiViewProps, JsonValue } from '../../contracts';
 import { A2UI_ACTIVITY_TYPE, createSurfaceSession, type SurfaceIssue, type SurfaceSession } from '../../core/a2ui/index';
-import { CodeBlock, Finding } from '../theme/primitives';
+import { readLifecycle, type Lifecycle } from '../../core/a2ui/lifecycle';
+import { CodeBlock, Finding, Tag } from '../theme/primitives';
 import { createBundledCatalogs } from './catalog';
 
 export { A2UI_ACTIVITY_TYPE };
@@ -31,6 +32,55 @@ function Issues({ issues }: { issues: readonly SurfaceIssue[] }): ReactElement {
           )}
         </div>
       ))}
+    </div>
+  );
+}
+
+/** How far the retries got: the attempt in progress while retrying, the attempts used once it gave up. */
+function attempts({ status, attempt, maxAttempts }: Lifecycle): string | undefined {
+  if (attempt === undefined) return maxAttempts === undefined ? undefined : `At most ${maxAttempts} attempts.`;
+  if (status === 'failed') return maxAttempts === undefined ? `${attempt} attempts used.` : `${attempt} of ${maxAttempts} attempts used.`;
+  return maxAttempts === undefined ? `Attempt ${attempt}.` : `Attempt ${attempt} of ${maxAttempts}.`;
+}
+
+/** What an activity shows before it has operations to paint: the generation is under way, is being retried, or gave up. */
+function Pending({ lifecycle }: { lifecycle: Lifecycle }): ReactElement {
+  const { status, error, progressTokens, details, debugExposure } = lifecycle;
+  const tries = attempts(lifecycle);
+  return (
+    <div className="agui-a2ui-lifecycle" data-state={status}>
+      {status === 'building' && (
+        <p role="status" className="agui-a2ui-pending">
+          <Tag variant="accent" pulse>Building</Tag>
+          <span>The surface is being generated.</span>
+          {progressTokens !== undefined && <span className="agui-count">about {progressTokens} tokens so far</span>}
+        </p>
+      )}
+      {status === 'retrying' && (
+        <div role="status">
+          <Finding variant="warn" kind="Retrying">
+            The generated surface did not validate, so it is being generated again.{tries && ` ${tries}`}
+          </Finding>
+        </div>
+      )}
+      {status === 'failed' && (
+        <div role="alert">
+          <Finding variant="err" kind="Failed">
+            {error ?? 'The surface could not be generated.'}
+            {tries && ` · ${tries}`}
+          </Finding>
+        </div>
+      )}
+      {details.length > 0 && debugExposure !== 'hidden' && (
+        <details className="agui-a2ui-received" open={debugExposure === 'verbose'}>
+          <summary>Validation errors ({details.length})</summary>
+          <ul className="agui-a2ui-errors">
+            {details.map((detail, at) => (
+              <li key={at}>{detail}</li>
+            ))}
+          </ul>
+        </details>
+      )}
     </div>
   );
 }
@@ -77,15 +127,23 @@ function Rendered({ activityId, operations, onAction }: Pick<A2uiViewProps, 'act
 
 /**
  * The content of an `a2ui-surface` activity: v0.9 operations drawn by the official renderer from the
- * bundled catalog, or, with rendering off, the operations as JSON. It reads nothing but its props and
- * calls `onAction` only when a user acts on a surface.
+ * bundled catalog, or, with rendering off, the operations as JSON. Before there are operations it shows
+ * the generation `lifecycle` (building, retrying, failed) when the activity declared one. It reads
+ * nothing but its props and calls `onAction` only when a user acts on a surface.
  */
-export function A2uiView({ activityId, operations, renderEnabled, onAction }: A2uiViewProps): ReactElement {
+export function A2uiView({ activityId, operations, renderEnabled, onAction, lifecycle }: A2uiViewProps & { readonly lifecycle?: Lifecycle }): ReactElement {
   if (!renderEnabled) {
     return (
       <Shell activityId={activityId} status="json-only">
         <p role="status" className="agui-a2ui-note">Rendering is off. The operations are shown as received.</p>
         <CodeBlock text={pretty(operations)} aria-label={`Operations of ${activityId}`} />
+      </Shell>
+    );
+  }
+  if (operations === null && lifecycle !== undefined) {
+    return (
+      <Shell activityId={activityId} status={lifecycle.status}>
+        <Pending lifecycle={lifecycle} />
       </Shell>
     );
   }
@@ -117,5 +175,6 @@ export function a2uiActivity(
   if (entry.activityType !== A2UI_ACTIVITY_TYPE) return undefined;
   const { content } = entry;
   const operations = isRecord(content) ? (content['a2ui_operations'] ?? null) : null;
-  return <A2uiView key={entry.messageId} activityId={entry.messageId} operations={operations} renderEnabled={options.renderEnabled} onAction={options.onAction} />;
+  const lifecycle = operations === null ? readLifecycle(content) : undefined;
+  return <A2uiView key={entry.messageId} activityId={entry.messageId} operations={operations} lifecycle={lifecycle} renderEnabled={options.renderEnabled} onAction={options.onAction} />;
 }
