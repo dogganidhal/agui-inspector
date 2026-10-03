@@ -107,7 +107,9 @@ operation.
 
 A delta that cannot be applied is shown as "not applied" with the reason. The state stays at the last
 valid value and the frame stays in the frames list. A new thread starts from its own state; earlier
-exchanges stay in the session but are not part of the current conversation.
+exchanges stay in the session but are not part of the current conversation. The views show the thread
+the assembly names with `threadId` (the runtime's), even before that thread has an exchange. Without
+one they show the thread of the latest conversation exchange.
 
 ## Wiring it in
 
@@ -122,7 +124,7 @@ import { publishChunkExpansions } from 'core/projection/index';
   the connection lane's. Its optional `renderActivity(entry)` prop lets the assembly draw an
   activity's content, for example an A2UI surface, inside the card. The card gets a Rendered and JSON
   switch when it returns something.
-- `StateView` takes `{ store }`.
+- `StateView` takes `{ store }` and an optional `threadId`, with the same meaning as on `ConversationView`.
 - Neither module imports a stylesheet, so importing them never changes what the build emits. The
   assembly loads `views/theme/index.ts` and `views/conversation/conversation.css`. The stylesheet
   uses the theme tokens only (`--agui-*` and the tokens derived from them) and defines none.

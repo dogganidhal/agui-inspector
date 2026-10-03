@@ -7,6 +7,7 @@ import { test } from 'node:test';
 import type { Interrupt } from '@ag-ui/core';
 import { RunAgentInputSchema } from '@ag-ui/core/schemas';
 import type { JsonValue } from '../../src/contracts.ts';
+import { projectConversation, type MessageEntry } from '../../src/core/projection/index.ts';
 import { AGENT, bodyOf, embedded, eventStream, hosted, ok200, replyRoute, rig, sse, type Call, type Route } from './support.ts';
 
 const TOKEN = 'synthetic-token-7f3a91';
@@ -216,6 +217,29 @@ test('New thread changes the identifiers and clears what the next run carries, a
   assert.deepEqual(after.frames.slice(0, before.frames.length), before.frames, 'so are its frames');
   assert.notEqual((bodyOf(net.on('/run')[1]) as { threadId: string }).threadId, oldThread);
   assert.equal(after.exchanges.length, 2);
+});
+
+test('New thread shows an empty conversation and state at once, and the next run and its preparation are on the new thread', async () => {
+  const { runtime, net, session, settle } = rig([ok200, route((call) => [start(call), { type: 'STATE_SNAPSHOT', snapshot: { n: 1 } }, finish(call)])]);
+  runtime.selectAgent({ ...support, preset: { prepare: [{ method: 'PUT', path: '/prepare/sessions/{{threadId}}' }] } });
+  await runtime.send('old thread');
+  const oldThread = runtime.getState().threadId;
+  const before = projectConversation(await settle(), oldThread);
+  assert.deepEqual([before.entries.length > 0, before.state.current], [true, { n: 1 }]);
+
+  runtime.newThread();
+  const newThread = runtime.getState().threadId;
+  assert.notEqual(newThread, oldThread);
+  const cleared = projectConversation(session(), newThread);
+  assert.deepEqual([cleared.entries, cleared.state.current], [[], undefined], 'nothing of the old thread is shown before the next run');
+  assert.equal(session().exchanges.length, 2, 'the retained exchanges are untouched');
+
+  await runtime.send('new thread');
+  const run = bodyOf(net.on('/run')[1]) as { threadId: string; parentRunId?: string; state: unknown; messages: Array<{ content: string }> };
+  assert.deepEqual([run.threadId, run.parentRunId, run.state, run.messages.map((message) => message.content)], [newThread, undefined, {}, ['new thread']]);
+  assert.deepEqual(net.calls.filter((call) => call.path.startsWith('/prepare/')).map((call) => `${call.method} ${call.path}`), [`PUT /prepare/sessions/${oldThread}`, `PUT /prepare/sessions/${newThread}`]);
+  const shown = projectConversation(await settle(), newThread);
+  assert.deepEqual(shown.entries.filter((entry): entry is MessageEntry => entry.kind === 'message').map((message) => message.text), ['new thread']);
 });
 
 test('New thread while a run streams ends that run and starts clean', async () => {

@@ -11,12 +11,12 @@ export interface Projected {
   readonly frames: ReadonlyMap<FrameId, RawFrame>;
 }
 
-/** The session and everything projected from it, recomputed when the store changes. */
-export function useProjection(store: SessionStore): Projected {
+/** The session and everything projected from it, recomputed when the store or the thread changes. */
+export function useProjection(store: SessionStore, threadId?: string): Projected {
   const session = useSyncExternalStore(store.subscribe, store.snapshot, store.snapshot);
   return useMemo(
-    () => ({ session, model: projectConversation(session), frames: new Map(session.frames.map((frame) => [frame.id, frame])) }),
-    [session],
+    () => ({ session, model: projectConversation(session, threadId), frames: new Map(session.frames.map((frame) => [frame.id, frame])) }),
+    [session, threadId],
   );
 }
 

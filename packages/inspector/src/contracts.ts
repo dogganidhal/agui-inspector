@@ -449,6 +449,8 @@ export interface ConnectionViewProps {
 
 export interface ConversationViewProps {
   readonly store: SessionStore;
+  /** The thread to show, normally the runtime's. Absent: the thread of the latest conversation exchange, as an imported recording shows. */
+  readonly threadId?: string;
   readonly interrupts: readonly InterruptAnswer[];
   readonly toolResults: readonly ToolResultDraft[];
   onDraftInterrupt(interruptId: string, draft: JsonValue): void;

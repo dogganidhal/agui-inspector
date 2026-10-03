@@ -90,7 +90,9 @@ session holds the same input. A message that failed before it was sent is not ad
   the run's outcome stays unknown and the missing `RUN_FINISHED` or `RUN_ERROR` is reported as a
   finding on the run. Stop is a transport control. It does not answer an interrupt.
 - New thread stops any active run, then starts a new thread: new `threadId`, empty transcript, empty
-  state, nothing waiting. The exchanges and frames already recorded are not touched.
+  state, nothing waiting. The exchanges and frames already recorded are not touched. The conversation
+  and State views switch to the new thread at once, before it has a run; the Inspection pane keeps
+  every exchange. Selecting another agent or endpoint starts a new thread the same way.
 - Quick messages are the preset's one-click messages. They go through the same path as typing the
   message, preparations included.
 
@@ -193,6 +195,10 @@ together. An assembly that wants them in different places uses `TargetControls` 
 `Composer` under the transcript, and puts `RepliesView` below the transcript. It takes the same props
 as `ConversationView`, so one props object serves both. The conversation view does not draw reply
 controls itself.
+
+Pass `threadId: state.threadId` to `ConversationView` and `StateView`. They then show that thread, so
+New thread empties them straight away. Without it they show the thread of the latest conversation
+exchange, which is what an imported recording needs.
 
 The views import no stylesheet. The page loads `views/theme/index` and
 `views/connection/connection.css`, as it does for the other views.

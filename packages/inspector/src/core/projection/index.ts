@@ -313,8 +313,12 @@ const CLOSES_OWN_LANE = new Set([
 ]);
 const CLOSES_ALL_LANES = new Set(['RUN_STARTED', 'RUN_FINISHED', 'RUN_ERROR', 'MESSAGES_SNAPSHOT']);
 
-/** Builds the conversation, state and chunk expansions of the session's current thread. */
-export function projectConversation(session: InspectionSession): ConversationModel {
+/**
+ * Builds the conversation, state and chunk expansions of one thread: `current` when the caller names it
+ * (the runtime's thread, which may have no exchange yet), else the thread of the latest conversation
+ * exchange, which is what an imported recording has.
+ */
+export function projectConversation(session: InspectionSession, current?: string): ConversationModel {
   const framesOf = new Map<ExchangeId, RawFrame[]>();
   for (const frame of session.frames) {
     const list = framesOf.get(frame.exchangeId);
@@ -325,7 +329,7 @@ export function projectConversation(session: InspectionSession): ConversationMod
 
   const conversation = session.exchanges.filter((exchange) => exchange.kind === 'conversation');
   const threadIds = conversation.map((exchange) => threadOf(exchange, runOf.get(exchange.id), framesOf.get(exchange.id) ?? []));
-  const threadId = threadIds[threadIds.length - 1];
+  const threadId = current ?? threadIds[threadIds.length - 1];
   // A new thread clears the current conversation without rewriting the retained exchanges.
   const exchanges = conversation.filter((_, i) => threadIds[i] === threadId);
 

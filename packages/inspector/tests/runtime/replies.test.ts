@@ -319,10 +319,11 @@ test('interrupts: a new thread drops what was waiting; the earlier exchanges sta
   assert.notEqual(runtime.getState().threadId, firstThread);
   assert.deepEqual(runtime.getState().interrupts, []);
   await runtime.send('fresh start');
-  const second = bodyOf(net.on('/run')[1]) as { threadId: string; messages: unknown[]; resume?: unknown };
+  const second = bodyOf(net.on('/run')[1]) as { threadId: string; parentRunId?: string; messages: unknown[]; resume?: unknown };
   assert.notEqual(second.threadId, firstThread);
   assert.equal(second.messages.length, 1);
   assert.equal(second.resume, undefined);
+  assert.equal(second.parentRunId, undefined, 'the run that was waiting is not the new thread\'s parent');
   assert.equal((await settle()).exchanges.filter((exchange) => exchange.kind === 'conversation').length, 2);
 });
 
