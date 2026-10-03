@@ -28,6 +28,21 @@
 .agui-conv-muted { color: var(--muted); }
 /* Frame references and offsets show where a value came from, so they use --muted. --faint is for decoration. */
 .agui-conv-evidence { color: var(--muted); font-size: 11px; }
+/* A run id or frame reference that reveals its evidence is the same text as a button. Its color and size come from
+   the classes it is combined with, so it keeps the evidence token's contrast. The underline marks it as a control,
+   and hover only moves the color toward --fg. */
+.agui-conv-ref {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  line-height: inherit;
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.agui-conv-ref:hover { color: var(--fg); text-decoration-style: solid; }
+.agui-conv-runref { color: var(--fg); }
 /* Long received values wrap instead of widening the pane. */
 .agui-conv-value { overflow-wrap: anywhere; white-space: pre-wrap; min-width: 0; }
 .agui-conv-empty { margin: 0; color: var(--muted); }

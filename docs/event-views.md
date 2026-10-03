@@ -79,6 +79,27 @@ resume answers, a tool result, or an A2UI action. Messages already shown (by id)
 when a run resends the full transcript. A result the user entered for a pending call joins the
 original card and names the run that carried it.
 
+### Following a reference
+
+A run id in a run header and each `frame #n` beside an entry are buttons. A run id shows its exchange in
+the frames list, and a frame reference shows that frame. The references in the state view and in a "Not
+shown" note work the same way.
+
+A reference names its target by recorded ids, the exchange id and the frame id, because frame indices
+restart in every exchange. `frame #4` can exist in two exchanges, and the button opens the one the
+entry came from. Activating a reference:
+
+- selects the Inspection pane, which under 960 px is the only way to see it, and its Inspection tab and
+  Frames view;
+- opens the exchange and, for a frame, the frame's detail;
+- keeps the filter when it lists the target, and clears it when it would hide the target, with a toast
+  that says so;
+- scrolls the target to the middle of the pane, marks it with `aria-current` and moves keyboard focus to
+  it, so Tab continues from there.
+
+This changes only what the page shows. It sends no request and does not touch the capture, so it works
+on an imported recording as well.
+
 ### Chunks
 
 A chunk expands the way the protocol client expands it. A chunk with a new id opens a message, tool
@@ -127,6 +148,10 @@ import { publishChunkExpansions } from 'core/projection/index';
   activity's content, for example an A2UI surface, inside the card. The card gets a Rendered and JSON
   switch when it returns something.
 - `StateView` takes `{ store }` and an optional `threadId`, with the same meaning as on `ConversationView`.
+- `ConversationView` and `StateView` also take an optional `onReveal(target)`, where `target` is an
+  `EvidenceTarget` (`exchangeId` and, for a frame, `frameId`). Without it, run ids and frame references
+  stay plain text. `InspectionView` takes an optional `reveal` target and applies it to its own filter and
+  open rows; each request must be a new object. `App` connects the three.
 - Neither module imports a stylesheet, so importing them never changes what the build emits. The
   assembly loads `views/theme/index.ts` and `views/conversation/conversation.css`. The stylesheet
   uses the theme tokens only (`--agui-*` and the tokens derived from them) and defines none.

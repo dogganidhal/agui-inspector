@@ -3,7 +3,7 @@
 // of its props. Frame rows are plain elements built from the F06 primitives; only the expanded
 // exchange builds rows, and a frame's raw text is built only when its row is opened.
 import { memo, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
-import type { DerivedEntry, Exchange, ExchangeId, Finding as FindingRecord, InspectionSession, RawFrame } from '../../contracts.ts';
+import type { DerivedEntry, EvidenceTarget, Exchange, ExchangeId, Finding as FindingRecord, FrameId, InspectionSession, RawFrame } from '../../contracts.ts';
 import { Button, CodeBlock, FamilyDot, Finding, FilterChip, Icon, Label, SearchField, Tag, type TagVariant } from '../theme/index.ts';
 import './inspection.css';
 import {
@@ -37,6 +37,8 @@ export interface FramesPanelProps {
   readonly openFrames: ReadonlySet<string>;
   /** Counts the user's filter and expansion actions; a measurement links an input to the commit that answers it. */
   readonly generation?: number;
+  /** The run or frame the user was last sent to. Its row is marked `aria-current`, which is how the page finds it to focus. */
+  readonly revealed?: EvidenceTarget;
   onFilter(filter: FrameFilter): void;
   onToggleExchange(id: ExchangeId, open: boolean): void;
   onToggleFrame(id: string): void;
@@ -51,7 +53,7 @@ const isLive = (exchange: Exchange) => exchange.transport === 'sending' || excha
 const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? '' : 's'}`;
 
 export function FramesPanel(props: FramesPanelProps): ReactElement {
-  const { session, filter, openExchanges, openFrames, generation = 0, onFilter, onToggleExchange, onToggleFrame, onCopy } = props;
+  const { session, filter, openExchanges, openFrames, generation = 0, revealed, onFilter, onToggleExchange, onToggleFrame, onCopy } = props;
   const index = useMemo(() => indexSession(session), [session]);
   const filtering = isFiltering(filter);
   const { exchanges, shown } = listExchanges(index, filter);
@@ -77,6 +79,7 @@ export function FramesPanel(props: FramesPanelProps): ReactElement {
               // Without an explicit choice the newest exchange that is listed is the open one.
               open={openExchanges.get(entry.exchange.id) ?? position === 0}
               openFrames={openFrames}
+              {...(revealed?.exchangeId === entry.exchange.id && { revealed })}
               onToggleExchange={onToggleExchange}
               onToggleFrame={onToggleFrame}
               onCopy={onCopy}
@@ -163,12 +166,14 @@ interface ExchangeCardProps {
   filter: FrameFilter;
   open: boolean;
   openFrames: ReadonlySet<string>;
+  /** Set only on the card of the revealed exchange. */
+  revealed?: EvidenceTarget;
   onToggleExchange(id: ExchangeId, open: boolean): void;
   onToggleFrame(id: string): void;
   onCopy(text: string, what: string): void;
 }
 
-const ExchangeCard = memo(function ExchangeCard({ entry, shown, filtering, filter, open, openFrames, onToggleExchange, onToggleFrame, onCopy }: ExchangeCardProps): ReactElement {
+const ExchangeCard = memo(function ExchangeCard({ entry, shown, filtering, filter, open, openFrames, revealed, onToggleExchange, onToggleFrame, onCopy }: ExchangeCardProps): ReactElement {
   const { exchange } = entry;
   const failed = exchange.transport === 'transport-error';
   const bad = exchangeFailed(exchange);
@@ -183,6 +188,7 @@ const ExchangeCard = memo(function ExchangeCard({ entry, shown, filtering, filte
           className="agui-fr-toggle"
           data-exchange-header={exchange.id}
           aria-expanded={open}
+          aria-current={(revealed !== undefined && revealed.frameId === undefined) || undefined}
           onClick={() => onToggleExchange(exchange.id, !open)}
         >
           <Icon name="chev" size={14} />
@@ -221,7 +227,7 @@ const ExchangeCard = memo(function ExchangeCard({ entry, shown, filtering, filte
           <span className="agui-fr-nocopy" />
         )}
       </div>
-      {open && <ExchangeBody entry={entry} filter={filter} openFrames={openFrames} onToggleFrame={onToggleFrame} onCopy={onCopy} />}
+      {open && <ExchangeBody entry={entry} filter={filter} openFrames={openFrames} {...(revealed?.frameId !== undefined && { revealedFrame: revealed.frameId })} onToggleFrame={onToggleFrame} onCopy={onCopy} />}
     </div>
   );
 });
@@ -261,7 +267,21 @@ function ResponseBody({ exchange }: { exchange: Exchange }): ReactElement | null
   );
 }
 
-function ExchangeBody({ entry, filter, openFrames, onToggleFrame, onCopy }: { entry: ExchangeEntry; filter: FrameFilter; openFrames: ReadonlySet<string>; onToggleFrame(id: string): void; onCopy(text: string, what: string): void }): ReactElement {
+function ExchangeBody({
+  entry,
+  filter,
+  openFrames,
+  revealedFrame,
+  onToggleFrame,
+  onCopy,
+}: {
+  entry: ExchangeEntry;
+  filter: FrameFilter;
+  openFrames: ReadonlySet<string>;
+  revealedFrame?: FrameId;
+  onToggleFrame(id: string): void;
+  onCopy(text: string, what: string): void;
+}): ReactElement {
   const { exchange } = entry;
   const { rows } = useMemo(() => exchangeRows(entry, filter), [entry, filter]);
   // Frames that arrived since the last commit fade in; opening an exchange does not animate what is already there.
@@ -288,7 +308,7 @@ function ExchangeBody({ entry, filter, openFrames, onToggleFrame, onCopy }: { en
           ) : (
             rows.map((row) =>
               row.type === 'frame' ? (
-                <FrameItem key={row.frame.id} frame={row.frame} findings={row.findings} open={openFrames.has(row.frame.id)} fresh={row.frame.index >= before} onToggle={onToggleFrame} onCopy={onCopy} />
+                <FrameItem key={row.frame.id} frame={row.frame} findings={row.findings} open={openFrames.has(row.frame.id)} current={row.frame.id === revealedFrame} fresh={row.frame.index >= before} onToggle={onToggleFrame} onCopy={onCopy} />
               ) : (
                 <div key={row.entry.id} className="agui-fr-item">
                   <DerivedRow entry={row.entry} open={openFrames.has(row.entry.id)} onToggle={onToggleFrame} />
@@ -347,6 +367,8 @@ interface FrameItemProps {
   frame: RawFrame;
   findings: readonly FindingRecord[];
   open: boolean;
+  /** The frame a reference sent the user to. */
+  current: boolean;
   fresh: boolean;
   onToggle(id: string): void;
   onCopy(text: string, what: string): void;
@@ -355,14 +377,14 @@ interface FrameItemProps {
 const sameFindings = (a: readonly FindingRecord[], b: readonly FindingRecord[]) => a === b || (a.length === b.length && a.every((finding, at) => finding === b[at]));
 
 const FrameItem = memo(
-  function FrameItem({ frame, findings, open, fresh, onToggle, onCopy }: FrameItemProps): ReactElement {
+  function FrameItem({ frame, findings, open, current, fresh, onToggle, onCopy }: FrameItemProps): ReactElement {
     const family = frame.classification === 'data' ? familyOf(frame.eventType) : undefined;
     const def = family === undefined ? undefined : familyDef(family);
     const issue = findings[0];
     const classes = ['agui-fr-row', issue && 'agui-fr-row--bad', fresh && 'agui-fresh'].filter(Boolean).join(' ');
     return (
       <div className="agui-fr-item">
-        <button type="button" className={classes} data-frame-row={frame.id} aria-expanded={open} onClick={() => onToggle(frame.id)}>
+        <button type="button" className={classes} data-frame-row={frame.id} aria-expanded={open} aria-current={current || undefined} onClick={() => onToggle(frame.id)}>
           <span className="agui-fr-off">{formatOffset(frame.offsetMs)}</span>
           <span className="agui-fr-ty">
             <FamilyDot family={def?.family ?? 'neutral'} hollow={def?.hollow ?? true} />
@@ -385,7 +407,7 @@ const FrameItem = memo(
       </div>
     );
   },
-  (a, b) => a.frame === b.frame && a.open === b.open && a.fresh === b.fresh && a.onToggle === b.onToggle && a.onCopy === b.onCopy && sameFindings(a.findings, b.findings),
+  (a, b) => a.frame === b.frame && a.open === b.open && a.current === b.current && a.fresh === b.fresh && a.onToggle === b.onToggle && a.onCopy === b.onCopy && sameFindings(a.findings, b.findings),
 );
 
 function FrameDetail({ frame, findings, onCopy }: { frame: RawFrame; findings: readonly FindingRecord[]; onCopy(text: string, what: string): void }): ReactElement {

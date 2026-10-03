@@ -135,6 +135,8 @@
 }
 .agui-fr-row:hover { background: var(--hover); }
 .agui-fr-row[aria-expanded="true"] { background: var(--sunk); }
+.agui-fr-row[aria-current="true"],
+.agui-fr-toggle[aria-current="true"] { background: var(--acc-soft); box-shadow: inset 2px 0 0 var(--acc); }
 .agui-fr-row--bad { background: color-mix(in oklab, var(--err) 7%, var(--bg)); }
 .agui-fr-row--derived {
   width: calc(100% - var(--u) * 6);

@@ -10,7 +10,7 @@
 // here keeps it in React state, storage, the store, a profile or a file.
 import { StrictMode, useCallback, useEffect, useState, useSyncExternalStore, type ReactElement, type ReactNode } from 'react';
 import { createRoot, type Root as ReactRoot } from 'react-dom/client';
-import type { A2uiAction, AppProps, ClientProfileSettings, DeploymentMode, InspectionSession, SessionStore } from '../contracts';
+import type { A2uiAction, AppProps, ClientProfileSettings, DeploymentMode, EvidenceTarget, InspectionSession, SessionStore } from '../contracts';
 import { loadCapabilities } from '../core/config/index';
 import { exportProfile, importProfile, saveProfile, type StorageLike } from '../core/profiles/index';
 import { publishChunkExpansions, type ActivityEntry } from '../core/projection/index';
@@ -106,6 +106,14 @@ function ThemeSwitch(): ReactElement {
 export function App({ settings, connection, conversation, inspection, mode, allowedOrigins = [], allowVisitorTargets = false, capabilities, capturing, notice, onPaneError, recording, renderActivity, warnings = [] }: AppProps & AppExtras): ReactElement {
   const [pane, setPane] = useState<Pane>('conversation');
   const [tab, setTab] = useState<Tab>('inspection');
+  const [reveal, setReveal] = useState<EvidenceTarget>();
+  // One navigation action for every run id and frame reference. It selects the inspection pane and tab; the frames
+  // list then opens and focuses the target. Each request is a new object, so asking for the same target again works.
+  const onReveal = useCallback((target: EvidenceTarget) => {
+    setPane('inspection');
+    setTab('inspection');
+    setReveal({ ...target });
+  }, []);
 
   return (
     <div className="agui-app" data-pane={pane} {...(mode !== undefined && { 'data-mode': mode })}>
@@ -156,7 +164,7 @@ export function App({ settings, connection, conversation, inspection, mode, allo
           <div className="agui-app-column">
             <div className="agui-app-transcript">
               <PaneBoundary pane="conversation" resetKey={conversation.store} onCatch={onPaneError}>
-                <ConversationView {...conversation} {...(renderActivity !== undefined && { renderActivity })} />
+                <ConversationView {...conversation} {...(renderActivity !== undefined && { renderActivity })} onReveal={onReveal} />
                 <RepliesView {...conversation} running={connection.running} />
               </PaneBoundary>
             </div>
@@ -195,13 +203,13 @@ export function App({ settings, connection, conversation, inspection, mode, allo
               recomputes from the store, so it is mounted only while it is the one on screen. */}
           <div className="agui-app-body" hidden={tab !== 'inspection'}>
             <PaneBoundary pane="inspection" resetKey={inspection.store} onCatch={onPaneError}>
-              <InspectionView {...inspection} />
+              <InspectionView {...inspection} reveal={reveal} />
             </PaneBoundary>
           </div>
           {tab === 'state' && (
             <div className="agui-app-body">
               <PaneBoundary pane="state" resetKey={conversation.store} onCatch={onPaneError}>
-                <StateView store={conversation.store} {...(conversation.threadId !== undefined && { threadId: conversation.threadId })} />
+                <StateView store={conversation.store} {...(conversation.threadId !== undefined && { threadId: conversation.threadId })} onReveal={onReveal} />
               </PaneBoundary>
             </div>
           )}

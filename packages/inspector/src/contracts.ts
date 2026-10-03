@@ -447,6 +447,15 @@ export interface ConnectionViewProps {
   onNewThread(): void;
 }
 
+/**
+ * What a reference in a view points at: an exchange, or one frame of it. Frame indices restart in every
+ * exchange, so a frame is named by its recorded id together with the id of its exchange.
+ */
+export interface EvidenceTarget {
+  readonly exchangeId: ExchangeId;
+  readonly frameId?: FrameId;
+}
+
 export interface ConversationViewProps {
   readonly store: SessionStore;
   /** The thread to show, normally the runtime's. Absent: the thread of the latest conversation exchange, as an imported recording shows. */

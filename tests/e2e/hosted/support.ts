@@ -83,6 +83,19 @@ const evidenceEvents = [
   { type: 'SUBAGENT_FINISHED', subagentRunId: 'sub-1', outcome: { type: 'success' } },
 ];
 
+/**
+ * One run of the reveal scenario, whose frame indices are the same on every turn: a state snapshot, a reply in three
+ * deltas, then a valid delta for a message that never started (the projection reports it as "Not shown"). The deltas
+ * carry the turn, so a spec can tell which exchange a revealed frame belongs to.
+ */
+const revealEvents = (turn: number) => [
+  { type: 'STATE_SNAPSHOT', snapshot: { turn } },
+  { type: 'TEXT_MESSAGE_START', messageId: `reply-${turn}`, role: 'assistant' },
+  ...['a', 'b', 'c'].map((part) => ({ type: 'TEXT_MESSAGE_CONTENT', messageId: `reply-${turn}`, delta: `turn ${turn} part ${part}` })),
+  { type: 'TEXT_MESSAGE_END', messageId: `reply-${turn}` },
+  { type: 'TEXT_MESSAGE_CONTENT', messageId: `ghost-${turn}`, delta: `turn ${turn} orphan` },
+];
+
 const sse = (events: readonly object[]) => events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join('');
 
 async function readBody(request: IncomingMessage): Promise<string> {
@@ -101,7 +114,7 @@ const close = (server: Server) =>
   });
 
 /** What every scripted agent answers, on whichever origin it is asked. */
-function answer(pathname: string, input: { threadId?: unknown; runId?: unknown } | undefined, response: ServerResponse, redirectTo: () => string): void {
+function answer(pathname: string, input: { threadId?: unknown; runId?: unknown; messages?: unknown } | undefined, response: ServerResponse, redirectTo: () => string): void {
   if (pathname === '/redirect') {
     response.writeHead(302, { location: `${redirectTo()}/agent` });
     return void response.end();
@@ -116,7 +129,9 @@ function answer(pathname: string, input: { threadId?: unknown; runId?: unknown }
       ? [{ type: 'ACTIVITY_SNAPSHOT', messageId: 'activity-1', activityType: 'a2ui-surface', content: { a2ui_operations: formOperations }, replace: true }]
       : pathname === '/evidence'
         ? evidenceEvents
-        : [{ type: 'TEXT_MESSAGE_START', messageId: 'msg-1', role: 'assistant' }, { type: 'TEXT_MESSAGE_CONTENT', messageId: 'msg-1', delta: AGENT_REPLY }, { type: 'TEXT_MESSAGE_END', messageId: 'msg-1' }];
+        : pathname === '/reveal'
+          ? revealEvents(Array.isArray(input.messages) ? input.messages.filter((message) => (message as { role?: unknown }).role === 'user').length : 1)
+          : [{ type: 'TEXT_MESSAGE_START', messageId: 'msg-1', role: 'assistant' }, { type: 'TEXT_MESSAGE_CONTENT', messageId: 'msg-1', delta: AGENT_REPLY }, { type: 'TEXT_MESSAGE_END', messageId: 'msg-1' }];
   response.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store' });
   response.end(sse([{ type: 'RUN_STARTED', threadId, runId }, ...activity, { type: 'RUN_FINISHED', threadId, runId, outcome: { type: 'success' } }]));
 }

@@ -111,3 +111,28 @@ for (const scheme of ['light', 'dark'] as const) {
     }
   });
 }
+
+// #43: the run id and the frame references became buttons. They keep the evidence color, and the "Not shown" finding
+// paints a tinted background behind its reference, so that one is measured where it is drawn.
+for (const scheme of ['light', 'dark'] as const) {
+  test(`the run id and the frame reference in a "Not shown" finding reach 4.5:1 in the default ${scheme} theme`, async ({ page, openSite }) => {
+    await page.emulateMedia({ colorScheme: scheme });
+    const site = await openSite({ config: (origins) => ({ version: 0, agents: [{ id: 'reveal', name: 'Reveal agent', url: `${origins.agent.origin}/reveal` }] }) });
+    await open(page, site);
+    await expect(page.locator('html')).toHaveCSS('color-scheme', scheme);
+    await send(page, 'Hello there');
+    await expect(page.locator('[data-entry="run"][data-status="finished"]')).toHaveCount(1);
+
+    const evidence: Array<[string, Locator]> = [
+      ['run id', page.locator('[data-entry="run"]').getByRole('button').locator('b')],
+      ['frame reference in a finding', page.getByRole('list', { name: 'Projection issues' }).getByRole('button')],
+    ];
+    for (const [name, locator] of evidence) {
+      await expect(locator, name).toHaveCount(1);
+      for (const { text, size, foreground, background } of await paint(locator)) {
+        const ratio = contrast(foreground, background);
+        expect.soft(ratio, `${name}: "${text}" at ${size}, rgb(${foreground}) on rgb(${background}) in ${scheme}`).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+      }
+    }
+  });
+}

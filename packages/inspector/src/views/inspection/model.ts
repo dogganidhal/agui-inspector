@@ -5,7 +5,7 @@
 // fields do not look like its type falls back to the reader's own summary rather than guessing.
 // Client-derived entries (chunk expansions) are separate rows placed after the frame they came from.
 import { EventType } from '@ag-ui/core';
-import type { DerivedEntry, Exchange, ExchangeId, Finding, FrameId, InspectionSession, RawFrame } from '../../contracts.ts';
+import type { DerivedEntry, EvidenceTarget, Exchange, ExchangeId, Finding, FrameId, InspectionSession, RawFrame } from '../../contracts.ts';
 import type { Family } from '../theme/primitives.tsx';
 
 // ---------------------------------------------------------------------------------------------
@@ -464,3 +464,40 @@ export function countShown(entry: ExchangeEntry, filter: FrameFilter): number {
 
 /** The recording's frames of one exchange as JSON: the original records, in arrival order. */
 export const copyFramesJson = (entry: ExchangeEntry): string => JSON.stringify(entry.frames, null, 2);
+
+// ---------------------------------------------------------------------------------------------
+// Revealing evidence
+// ---------------------------------------------------------------------------------------------
+
+/** What the frames list keeps between renders: the filter and what the user has opened. */
+export interface FramesState {
+  readonly filter: FrameFilter;
+  /** An explicit choice per exchange; without one only the newest exchange is open. */
+  readonly openExchanges: ReadonlyMap<ExchangeId, boolean>;
+  /** Ids of the frames and derived entries whose detail is open. */
+  readonly openFrames: ReadonlySet<string>;
+}
+
+/**
+ * The list state that puts a run or frame reference on screen: its exchange open, its frame's detail open and a
+ * filter that hides neither. A filter that already lists the target is left as the user set it; one that would hide
+ * it is cleared, and `filterCleared` says so. Undefined when the session has no such exchange, or the frame is not
+ * one of that exchange's frames, and then nothing may change.
+ */
+export function revealEvidence(index: SessionIndex, target: EvidenceTarget, from: FramesState): (FramesState & { readonly filterCleared: boolean }) | undefined {
+  const entry = index.newestFirst.find((candidate) => candidate.exchange.id === target.exchangeId);
+  if (entry === undefined) return undefined;
+  const frame = target.frameId === undefined ? undefined : entry.frames.find((candidate) => candidate.id === target.frameId);
+  if (target.frameId !== undefined && frame === undefined) return undefined;
+
+  const { filter } = from;
+  const exchangeHidden = !filter.showPreparation && hideable(entry);
+  const frameHidden = frame !== undefined && !frameMatches(frame, entry.frameFindings.get(frame.id)?.length ?? 0, filter);
+  const filterCleared = exchangeHidden || frameHidden;
+  return {
+    filter: filterCleared ? { ...NO_FILTER, showPreparation: filter.showPreparation || exchangeHidden } : filter,
+    openExchanges: new Map(from.openExchanges).set(entry.exchange.id, true),
+    openFrames: frame === undefined ? from.openFrames : new Set(from.openFrames).add(frame.id),
+    filterCleared,
+  };
+}

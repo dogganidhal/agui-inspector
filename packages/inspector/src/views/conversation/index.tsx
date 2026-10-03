@@ -8,7 +8,7 @@
 // Styling: this module imports no stylesheet, so importing it never changes what the build emits. The
 // assembly loads the theme (views/theme/index.ts) and ./conversation.css; see docs/event-views.md.
 import { useState, type ReactElement, type ReactNode } from 'react';
-import type { ConversationViewProps, FrameId, JsonValue, RawFrame } from '../../contracts';
+import type { ConversationViewProps, EvidenceTarget, FrameId, JsonValue, RawFrame } from '../../contracts';
 import type {
   ActivityEntry,
   ConversationEntry,
@@ -24,12 +24,15 @@ import type {
   ToolCallEntry,
 } from '../../core/projection/index';
 import { Card, CardBody, CardFooter, CardHeader, CodeBlock, FamilyDot, Finding, Icon, Label, SegmentedControl, Tag, type TagVariant } from '../theme/primitives';
-import { DERIVED_NOTE, Disclosure, FrameRef, formatMs, formatOffset, useProjection } from './shared';
+import { DERIVED_NOTE, Disclosure, FrameRef, RevealProvider, formatMs, formatOffset, useProjection, useReveal } from './shared';
 import { SnapshotMarker } from './state';
 
-/** An optional hook for the assembly: draws an activity's content (an A2UI surface) inside its card. */
+/** Optional hooks for the assembly. */
 export interface ConversationViewExtras {
+  /** Draws an activity's content (an A2UI surface) inside its card. */
   renderActivity?(entry: ActivityEntry): ReactNode;
+  /** Shows the evidence a run id or frame reference points at. Without it they stay plain text. */
+  onReveal?(target: EvidenceTarget): void;
 }
 
 type Frames = ReadonlyMap<FrameId, RawFrame>;
@@ -75,6 +78,7 @@ const OUTCOME: Record<RunStatus, { label: string; variant: TagVariant }> = {
 };
 
 function RunHeader({ run }: { run: RunEntry }): ReactElement {
+  const reveal = useReveal();
   const outcome = OUTCOME[run.status];
   const notes = [
     run.interrupts.length > 0 && `${run.interrupts.length} ${run.interrupts.length === 1 ? 'interrupt' : 'interrupts'}`,
@@ -83,7 +87,18 @@ function RunHeader({ run }: { run: RunEntry }): ReactElement {
   return (
     <div className="agui-conv-run" data-entry="run" data-status={run.status}>
       <div className="agui-conv-rulehead">
-        <b className="agui-conv-mono">{run.runId ?? 'run'}</b>
+        {reveal === undefined ? (
+          <b className="agui-conv-mono">{run.runId ?? 'run'}</b>
+        ) : (
+          <button
+            type="button"
+            className="agui-conv-mono agui-conv-ref agui-conv-runref"
+            aria-label={`Show the exchange of ${run.runId === undefined ? 'this run' : `run ${run.runId}`} in the frames list`}
+            onClick={() => reveal({ exchangeId: run.exchangeId })}
+          >
+            <b>{run.runId ?? 'run'}</b>
+          </button>
+        )}
         {run.parentRunId !== undefined && <span className="agui-conv-mono agui-conv-muted" title="Parent run">← {run.parentRunId}</span>}
         <Tag variant={outcome.variant} pulse={run.status === 'streaming'}>{outcome.label}</Tag>
         {run.durationMs !== undefined && <span className="agui-conv-mono agui-conv-muted" title={DERIVED_NOTE}>{formatMs(run.durationMs)}</span>}
@@ -379,7 +394,7 @@ function Entries({ list, frames, extras }: { list: readonly ConversationEntry[];
 }
 
 /** The transcript of the current thread, built from the store and live as frames arrive. */
-export function ConversationView({ store, threadId, renderActivity }: ConversationViewProps & ConversationViewExtras): ReactElement {
+export function ConversationView({ store, threadId, renderActivity, onReveal }: ConversationViewProps & ConversationViewExtras): ReactElement {
   const { model, frames } = useProjection(store, threadId);
   const extras: ConversationViewExtras = { ...(renderActivity && { renderActivity }) };
   return (
@@ -388,7 +403,9 @@ export function ConversationView({ store, threadId, renderActivity }: Conversati
       {model.entries.length === 0 ? (
         <p className="agui-conv-empty">No conversation yet. Runs and messages appear here as events arrive.</p>
       ) : (
-        <Entries list={model.entries} frames={frames} extras={extras} />
+        <RevealProvider value={onReveal}>
+          <Entries list={model.entries} frames={frames} extras={extras} />
+        </RevealProvider>
       )}
     </section>
   );
