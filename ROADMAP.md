@@ -22,7 +22,8 @@ Built and merged on `main`:
   visitor's own HTTPS or `localhost` server. See [public demo](https://dogganidhal.github.io/agui-inspector/docs/demo/).
 - The docs site, <https://dogganidhal.github.io/agui-inspector/docs/>, built from the MDX pages in `website/` and
   deployed with the demo by `pages.yml`.
-- The Python release workflow, `release-python.yml`, which keeps a `chore: version packages` pull request open. See
+- The Python release workflow, `release-python.yml`. It published 0.1.0 to PyPI on 2026-10-03, through trusted
+  publishing with attestations, and keeps a `chore: version packages` pull request open for the next release. See
   [distribution](https://dogganidhal.github.io/agui-inspector/docs/releases/#python-release).
 
 Still to verify:
@@ -36,13 +37,11 @@ Still to verify:
 
 Publication gates:
 
-- Nothing is published. `agui-inspector` was unregistered on npm and PyPI on 2026-10-03. Both npm manifests are private,
-  so there is no npm install. The Python package no longer carries the `Private :: Do Not Upload` classifier, so a PyPI
-  install becomes available once the release below runs.
-- Python: merging the open version pull request is the release. The `minor` changeset in the classifier pull request makes
-  it 0.1.0. The maintainer approves the `pypi` deployment. Registering the trusted publisher on PyPI happens outside this
-  repository, and the maintainer confirms it.
-- npm: not set up. FR-040 asks for a CI build from a tag with npm provenance, and Changesets ignores the npm package
+- Python: 0.1.0 is on [PyPI](https://pypi.org/project/agui-inspector/) since 2026-10-03
+  (`pip install "agui-inspector[embedded]"`). Later releases take the same path: a changeset, the version pull
+  request, and the maintainer's approval of the `pypi` deployment.
+- npm: nothing is published, and both npm manifests are private, so there is no npm install. The release is not set
+  up. FR-040 asks for a CI build from a tag with npm provenance, and Changesets ignores the npm package
   until that exists.
 - G-03, whether upstream accepts the inspector under `apps/inspector`, is open. `@ag-ui/inspector` stays conditional on it.
 - Nothing in this repository authorizes publishing, tagging or releasing. Each remains the maintainer's decision.

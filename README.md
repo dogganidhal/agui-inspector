@@ -10,6 +10,7 @@ A developer tool for [AG-UI](https://docs.ag-ui.com) servers. Point it at an age
 
 [![Pages](https://github.com/dogganidhal/agui-inspector/actions/workflows/pages.yml/badge.svg)](https://github.com/dogganidhal/agui-inspector/actions/workflows/pages.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-0a0a0a.svg)](LICENSE)
+[![PyPI](https://img.shields.io/pypi/v/agui-inspector?color=0a0a0a)](https://pypi.org/project/agui-inspector/)
 [![AG-UI 1.0](https://img.shields.io/badge/AG--UI-1.0-0a0a0a.svg)](https://docs.ag-ui.com)
 [![A2UI v0.9](https://img.shields.io/badge/A2UI-v0.9-0a0a0a.svg)](https://dogganidhal.github.io/agui-inspector/docs/a2ui/)
 
@@ -52,9 +53,18 @@ The playground sends no cookies, so a token in that header is the only credentia
 Python is the first server language with an embedded helper, not the only one: JavaScript helpers for Express, Hono
 and Next.js are planned for 1.0.0, and a server in any language can already use the hosted page or the static assets.
 
-`mount_inspector` serves the inspector page from your Starlette or FastAPI app, on the same origin as your agents. The
-Python package is private and unpublished, and so is the npm package. There is no registry install yet; build the
-package from a source checkout.
+`mount_inspector` serves the inspector page from your Starlette or FastAPI app, on the same origin as your agents.
+Install it from PyPI with the `embedded` extra, which adds Starlette. With pip:
+
+```sh
+pip install "agui-inspector[embedded]"
+```
+
+With uv, in a uv project:
+
+```sh
+uv add "agui-inspector[embedded]"
+```
 
 ### Run the example from a source checkout
 
@@ -95,18 +105,7 @@ the URL.
 
 ### Mount it in your own app
 
-Install the wheel from `packages/python/dist` into your project's environment. Point the path at your checkout; the file
-name carries the version. With pip:
-
-```sh
-pip install "/path/to/agui-inspector/packages/python/dist/agui_inspector-0.1.0-py3-none-any.whl[embedded]"
-```
-
-With uv, in a uv project:
-
-```sh
-uv add "agui-inspector[embedded] @ /path/to/agui-inspector/packages/python/dist/agui_inspector-0.1.0-py3-none-any.whl"
-```
+After installing the package, add this once you have created your app:
 
 ```python
 from agui_inspector import Agent, mount_inspector
@@ -139,7 +138,7 @@ already runs is the planned in-app mode, which is not built.
 | Mode | What it is | Status |
 | --- | --- | --- |
 | Hosted | A static page with a `hosting-config.json` that lists the origins it may reach. The public demo is one. | Available: [live demo](https://dogganidhal.github.io/agui-inspector/), or build the page from a checkout |
-| Python | `mount_inspector` serves the page from a Starlette or FastAPI app, on the same origin as your agents. | Available from a source checkout |
+| Python | `mount_inspector` serves the page from a Starlette or FastAPI app, on the same origin as your agents. | 0.1.0 on [PyPI](https://pypi.org/project/agui-inspector/) |
 | Static assets | `staticAssetsPath` points at the built page, for any other server to serve. | Available from a source checkout |
 | CLI | A local command that serves the page and proxies to a target. | Planned for 1.0.0 |
 | JS helpers | Express, Hono and Next.js route-handler integrations. | Planned for 1.0.0 |
@@ -185,9 +184,9 @@ To report a vulnerability, see [SECURITY.md](SECURITY.md).
 
 ## Status
 
-The 0.1.0 MVP is implemented on `main` and the public demo is live. Nothing is published to PyPI or npm. The
-[current status](ROADMAP.md#current-status) in the roadmap lists what is still to be verified and what a first release
-needs.
+The 0.1.0 MVP is implemented on `main` and the public demo is live. The Python package 0.1.0 is on
+[PyPI](https://pypi.org/project/agui-inspector/) (see the [changelog](packages/python/CHANGELOG.md)). The npm package is not published yet. The
+[current status](ROADMAP.md#current-status) in the roadmap lists what is still to be verified.
 
 ## Documentation
 

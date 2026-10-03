@@ -6,17 +6,18 @@ description: For maintainers. What must be true before a release, how the Python
 This page is for maintainers. To learn what you can rely on today, read
 [Project status and privacy](./status.mdx) instead.
 
-The package name is `agui-inspector` on both npm and PyPI. On 2026-10-02 the name was still unregistered on both.
+The package name is `agui-inspector` on both npm and PyPI. The first release, Python 0.1.0, reached
+[PyPI](https://pypi.org/project/agui-inspector/) on 2026-10-03. The name is still unregistered on npm.
 No command in the repository publishes, tags or releases by itself. A release happens when the maintainer merges the
 version pull request and approves the `pypi` deployment. The roadmap's
-[current status](https://github.com/dogganidhal/agui-inspector/blob/main/ROADMAP.md#current-status) is the one summary of where the release stands. Until a
-release exists, run the package from a source checkout, as
+[current status](https://github.com/dogganidhal/agui-inspector/blob/main/ROADMAP.md#current-status) is the one summary of where the release stands. To run
+changes that are not released yet, use a source checkout, as
 [Embed in Starlette or FastAPI](./embedding.mdx#working-from-a-source-checkout) describes.
 
 ## Current state
 
-- Nothing is published yet. `release-python.yml`, the only workflow that publishes, runs on pushes to `main`, but no
-  tag has run it. The npm release is not set up.
+- Python 0.1.0 is published. `release-python.yml`, the only workflow that publishes, tagged it and uploaded the wheel
+  and the sdist to PyPI with attestations. The [changelog](https://github.com/dogganidhal/agui-inspector/blob/main/packages/python/CHANGELOG.md) lists each release. The npm release is not set up.
 - The npm manifests have `"license": "MIT"` and `"private": true`. The npm `files` list and the Python
   `license-files` include `LICENSE` and `THIRD_PARTY_NOTICES.txt` (see [Dependencies](./dependencies.mdx)), so the
   npm tarball, the wheel and the source distribution (sdist) all contain them.
@@ -112,8 +113,8 @@ decision to publish. `@ag-ui/inspector` still waits for the upstream placement g
 
 ## Build provenance
 
-Published distributions must have verifiable build provenance. Nothing is published yet, so provenance depends on
-the checks below and the release safeguards above. The checks run on a developer machine or in pull request CI. The
+Published distributions must have verifiable build provenance. For the PyPI release, provenance comes from the checks
+below, the release safeguards above, and the attestations PyPI stores with each file. The checks run on a developer machine or in pull request CI. The
 safeguards are the tag check, the strict gate, the minimum permissions and trusted publishing with attestations.
 
 `npm run package:python` (`scripts/package-python.mjs`) does this, in order:
