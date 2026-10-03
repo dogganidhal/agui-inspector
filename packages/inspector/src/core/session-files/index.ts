@@ -21,6 +21,7 @@ import {
   type SessionEnvelope,
   type SessionStore,
 } from '../../contracts.ts';
+import { checkEvent, type EventCheck } from '../frames/index.ts';
 import { createSessionStore, type SessionStoreOptions } from '../store/index.ts';
 
 /** Suggested name for the downloaded file. */
@@ -175,6 +176,16 @@ function unique<T extends { id: string }>(items: readonly T[], collection: strin
 }
 
 const sameJson = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+
+/** The live reader's own schema check. A check that fails to run confirms nothing, so it counts as a miss. */
+function checkParsed(parsed: unknown): EventCheck {
+  try {
+    return checkEvent(parsed);
+  } catch {
+    return { verdict: 'invalid', problems: ['the schema check could not run on this data'] };
+  }
+}
+
 const URL_USERINFO = /^[a-z][a-z0-9+.-]*:\/\/[^/?#]*@/i;
 
 function checkExchange(value: unknown, position: number): Exchange {
@@ -243,6 +254,16 @@ function checkFrame(value: unknown, position: number): RawFrame {
     if (parses !== (f.jsonVerdict === 'valid') || (!parses && f.jsonVerdict !== 'invalid')) fail(`${at}: jsonVerdict "${String(f.jsonVerdict)}" does not match the data text`);
     if (parses) {
       if (f.parsed === undefined || !sameJson(parsed, f.parsed)) fail(`${at}: parsed does not match data`);
+      // The conversation is projected from frames filed as `valid`, so the schema has to agree. Frames it
+      // rejects, and unknown types, are kept as recorded under their own verdicts.
+      if (f.schemaVerdict === 'valid') {
+        const { verdict, problems } = checkParsed(parsed);
+        if (verdict !== 'valid') {
+          fail(
+            `${at}: schemaVerdict "valid" contradicts the data (${problems.join('; ')}). The inspector files a frame the schema rejects as "invalid" and an unknown event type as "unknown-type". Re-export the recording from the inspector that captured it, or correct the verdict if the file was edited.`,
+          );
+        }
+      }
     } else {
       if (f.parsed !== undefined) fail(`${at}: parsed is present but data is not valid JSON`);
       if (f.schemaVerdict !== 'not-applicable') fail(`${at}: schemaVerdict must be "not-applicable" for data that is not JSON`);

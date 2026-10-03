@@ -6,6 +6,7 @@
 // keyboard. It is scoped acceptance: each lane's own suite covers its features, and the whole
 // quickstart runs again on integrated main (docs/hosted.md).
 import { readFileSync } from 'node:fs';
+import type { Page } from '@playwright/test';
 import { AGENT_REPLY, SYNTHETIC_TOKEN, expect, expectAllowlisted, open, send, test } from './support';
 
 const NO_AGENTS = () => null;
@@ -341,6 +342,157 @@ test('an imported recording is inspection only: it sends nothing and nothing can
   await expect(page.getByText(AGENT_REPLY).first()).toBeVisible();
 
   await page.reload();
+  await expect(page.getByRole('textbox', { name: 'Message' })).toBeEnabled();
+});
+
+// Issue #42. Recordings are untrusted input: a file's verdicts are claims, and a pane that cannot render
+// what it was given must not take the inspector with it. Synthetic data only.
+const importFile = (page: Page, text: string, name = 'recording.json') => page.locator('input[type="file"]').first().setInputFiles({ name, mimeType: 'application/json', buffer: Buffer.from(text) });
+
+async function exportText(page: Page): Promise<string> {
+  await page.getByRole('button', { name: 'Export session' }).click();
+  const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('dialog').getByRole('button', { name: 'Export session' }).click()]);
+  return readFileSync((await download.path())!, 'utf8');
+}
+
+/** The recording from the issue: a snapshot the event schema rejects, filed with the verdict "valid". */
+function inconsistentRecording(): string {
+  const event = { type: 'MESSAGES_SNAPSHOT', messages: [{ id: 'bad-message', role: 'assistant', content: [null] }] };
+  const data = JSON.stringify(event);
+  return JSON.stringify({
+    version: 0,
+    session: {
+      id: 'audit',
+      runs: [],
+      findings: [],
+      derived: [],
+      exchanges: [{ id: 'e', kind: 'conversation', method: 'POST', path: '/agent', startedAt: 1, transport: 'completed', frameIds: ['f'] }],
+      frames: [{ id: 'f', exchangeId: 'e', index: 0, classification: 'data', data, envelope: `data: ${data}\n\n`, parsed: event, offsetMs: 1, eventType: event.type, summary: 'invalid snapshot', jsonVerdict: 'valid', schemaVerdict: 'valid', provenance: 'raw' }],
+    },
+  });
+}
+
+test('a recording whose verdict contradicts its data is refused in view, and the live capture stays on screen and exportable', async ({ page, openSite, requested }) => {
+  const site = await openSite({ config: agentConfig((o) => `${o.agent.origin}/agent`) });
+  await open(page, site);
+  await send(page, 'hello');
+  await expect(page.getByText(AGENT_REPLY).first()).toBeVisible();
+  const exported = await exportText(page);
+  const before = { agent: site.agent.seen.length, requests: requested.length };
+
+  await importFile(page, inconsistentRecording());
+
+  const alert = page.getByTestId('inspection-error');
+  await expect(alert).toContainText('Import failed');
+  await expect(alert).toContainText('frames[0]: schemaVerdict "valid" contradicts the data');
+  await expect(alert).toContainText('messages.0.content');
+  // The inspector is still there, showing the live capture and not an opened recording.
+  expect((await page.locator('#root').innerText()).length, 'the page is not blank').toBeGreaterThan(0);
+  await expect(page.getByRole('heading', { name: 'agui-inspector', level: 1 })).toBeVisible();
+  await expect(page.getByText(AGENT_REPLY).first()).toBeVisible();
+  await expect(page.getByRole('contentinfo')).toContainText('1 exchange · 5 frames');
+  await expect(page.getByRole('contentinfo')).not.toContainText('imported recording');
+  await expect(page.getByText('Imported recording: inspection only')).toHaveCount(0);
+  await expect(page.getByRole('textbox', { name: 'Message' })).toBeEnabled();
+  expect(await exportText(page), 'the live capture exports exactly as before').toBe(exported);
+  expect(site.agent.seen.length, 'importing sends nothing').toBe(before.agent);
+  expect(requested.length, 'importing requests nothing').toBe(before.requests);
+
+  await send(page, 'and again');
+  await expect(page.getByRole('contentinfo')).toContainText('2 exchanges');
+});
+
+test('malformed, unknown and non-JSON frames that are labelled correctly import and export byte for byte', async ({ page, openSite }) => {
+  const site = await openSite({ config: agentConfig((o) => `${o.agent.origin}/agent`) });
+  await open(page, site);
+  await send(page, 'hello');
+  await expect(page.getByText(AGENT_REPLY).first()).toBeVisible();
+
+  const file = JSON.parse(await exportText(page)) as { session: { exchanges: Array<{ id: string; frameIds: string[] }>; frames: Array<Record<string, unknown> & { offsetMs: number }> } };
+  const exchange = file.session.exchanges[0]!;
+  const start = file.session.frames.length;
+  const snapshot = { type: 'MESSAGES_SNAPSHOT', messages: [{ id: 'bad-message', role: 'assistant', content: [null] }] };
+  const kept = [
+    { data: 'this is not json', jsonVerdict: 'invalid', schemaVerdict: 'not-applicable', summary: 'Not valid JSON' },
+    { data: '{"type":"NOT_AN_EVENT"}', parsed: { type: 'NOT_AN_EVENT' }, eventType: 'NOT_AN_EVENT', jsonVerdict: 'valid', schemaVerdict: 'unknown-type', summary: 'NOT_AN_EVENT' },
+    { data: JSON.stringify(snapshot), parsed: snapshot, eventType: snapshot.type, jsonVerdict: 'valid', schemaVerdict: 'invalid', summary: snapshot.type },
+  ];
+  kept.forEach((frame, at) => {
+    const id = `${exchange.id}:frame-${start + at}`;
+    file.session.frames.push({
+      id,
+      exchangeId: exchange.id,
+      index: start + at,
+      classification: 'data',
+      envelope: `data: ${frame.data}\n\n`,
+      data: frame.data,
+      offsetMs: file.session.frames.at(-1)!.offsetMs,
+      ...(frame.eventType !== undefined && { eventType: frame.eventType }),
+      summary: frame.summary,
+      jsonVerdict: frame.jsonVerdict,
+      schemaVerdict: frame.schemaVerdict,
+      ...(frame.parsed !== undefined && { parsed: frame.parsed }),
+      provenance: 'raw',
+    });
+    exchange.frameIds.push(id);
+  });
+  const recording = JSON.stringify(file, null, 2);
+
+  await importFile(page, recording);
+  await expect(page.getByText('Imported recording: inspection only')).toBeVisible();
+  await expect(page.getByTestId('inspection-error')).toHaveCount(0);
+  await expect(page.getByRole('contentinfo')).toContainText('1 exchange · 8 frames');
+  expect(await exportText(page)).toBe(recording);
+});
+
+// A render failure is injected at the browser, not in the page's code: text that holds the marker cannot be
+// measured, and the inspection pane measures every request body it lists. Nothing else holds the marker.
+const FAULT = 'inject-render-fault-7c1e';
+async function injectRenderFault(page: Page): Promise<void> {
+  await page.addInitScript((marker) => {
+    const encode = TextEncoder.prototype.encode;
+    TextEncoder.prototype.encode = function (this: TextEncoder, input?: string) {
+      if (typeof input === 'string' && input.includes(marker)) throw new Error('injected render fault');
+      return encode.call(this, input);
+    };
+  }, FAULT);
+}
+
+test('a recording that passes the checks but cannot be rendered puts the live capture back instead of blanking the page', async ({ page, openSite }) => {
+  await injectRenderFault(page);
+  const site = await openSite({ config: agentConfig((o) => `${o.agent.origin}/agent`) });
+  await open(page, site);
+  await send(page, 'hello');
+  await expect(page.getByText(AGENT_REPLY).first()).toBeVisible();
+  const exported = await exportText(page);
+
+  const file = JSON.parse(exported) as { session: { exchanges: object[] } };
+  file.session.exchanges.push({ id: 'exchange-fault', kind: 'raw', method: 'POST', path: '/agent', requestBody: FAULT, startedAt: 9, transport: 'completed', frameIds: [] });
+  await importFile(page, JSON.stringify(file, null, 2));
+
+  const alert = page.getByTestId('inspection-error');
+  await expect(alert).toContainText('Import failed: the recording could not be shown');
+  await expect(alert).toContainText('injected render fault');
+  await expect(page.getByRole('heading', { name: 'agui-inspector', level: 1 })).toBeVisible();
+  await expect(page.getByText(AGENT_REPLY).first()).toBeVisible();
+  await expect(page.getByRole('contentinfo')).toContainText('1 exchange · 5 frames');
+  await expect(page.getByRole('contentinfo')).not.toContainText('imported recording');
+  await expect(page.getByRole('textbox', { name: 'Message' })).toBeEnabled();
+  expect(await exportText(page)).toBe(exported);
+});
+
+test('a pane that fails on the live capture shows its own error and leaves the rest of the inspector working', async ({ page, openSite }) => {
+  await injectRenderFault(page);
+  const site = await openSite({ config: agentConfig((o) => `${o.agent.origin}/agent`) });
+  await open(page, site);
+  await send(page, `hello ${FAULT}`);
+
+  const failed = page.locator('[data-pane-error="inspection"]');
+  await expect(failed).toContainText('The inspection pane could not be shown');
+  await expect(failed).toContainText('injected render fault');
+  await expect(page.getByRole('heading', { name: 'agui-inspector', level: 1 })).toBeVisible();
+  await expect(page.getByText(AGENT_REPLY).first()).toBeVisible();
+  await expect(page.getByRole('contentinfo')).toContainText('1 exchange');
   await expect(page.getByRole('textbox', { name: 'Message' })).toBeEnabled();
 });
 

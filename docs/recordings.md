@@ -99,14 +99,27 @@ exactly as it was.
   from zero within the exchange and `offsetMs` never goes backwards.
 - Times are finite numbers of zero or more, and a run does not end before it starts.
 - A frame agrees with itself: its JSON verdict matches whether the data text parses, `parsed`
-  equals the data text, and control or partial evidence has no data and no verdicts.
+  equals the data text, and control or partial evidence has no data and no verdicts. A frame whose
+  schema verdict is `valid` must also pass the AG-UI event schema, checked with the same function the
+  live reader uses. The conversation is projected from those frames, so a `valid` label on data the
+  schema rejects is refused, not trusted.
 - A run's input is a run input, an interrupt outcome holds interrupts, and a path holds no URL
   credentials.
 
 Exchange start times are wall-clock values and are not required to increase, because a clock can
 be adjusted during a session.
 
+Frames that the schema rejects, unknown event types and data that is not JSON are evidence, and they import
+as recorded when their verdicts say so (`invalid`, `unknown-type`, or `not-applicable` for non-JSON data). Only a
+verdict that contradicts its data is an error, and the message names the frame. The inspector does not
+correct the verdict or the data: fix the file, or export it again from the session that recorded it.
+
 An opened recording is inspect-only. Filters, raw expansion and copying work as for a live capture.
+
+A recording can pass every check and still fail to render. A pane that throws shows its own error and the
+rest of the page keeps working. If that happens while a recording is open, the inspector puts the previous
+capture back on screen and reports `Import failed` with the pane's name and the error, so the live capture
+stays usable and can still be exported.
 
 ## Pre-stable format and migration
 
