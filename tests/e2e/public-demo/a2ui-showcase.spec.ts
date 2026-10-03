@@ -373,7 +373,8 @@ test('sandbox probe: media, openUrl, an unknown component, an unknown catalog, v
   ]) {
     await expect(view.getByText(message)).toBeVisible();
   }
-  await expect(view.getByText('Unknown component type: Hologram', { exact: true })).toBeVisible();
+  // The inspector's own error line, in place of the renderer's (FX15).
+  await expect(view.getByRole('alert').filter({ hasText: 'Unknown component type: Hologram.' })).toBeVisible();
   await expect(view.getByText('Survivor', { exact: true })).toBeVisible();
   // Text is plain: markup and Markdown stay as typed.
   await expect(surface(page, 'plain')).toContainText('<b>not bold</b> **not bold** [not a link](http://third-party.invalid/page) ![not a picture](http://third-party.invalid/picture.png)');
