@@ -183,7 +183,7 @@ export function App({ settings, connection, conversation, inspection, mode, allo
           </div>
           {tab === 'state' && (
             <div className="agui-app-body">
-              <StateView store={conversation.store} />
+              <StateView store={conversation.store} {...(conversation.threadId !== undefined && { threadId: conversation.threadId })} />
             </div>
           )}
           <div className="agui-app-body" hidden={tab !== 'settings'}>
@@ -330,6 +330,9 @@ function Root({ started, storage }: { started: Started; storage?: StorageLike })
     },
     conversation: {
       store: shown,
+      // The conversation follows the runtime's thread, so New thread empties it before any run is recorded.
+      // An imported recording has no live thread: it shows its own latest one.
+      ...(!recording && { threadId: state.threadId }),
       interrupts: state.interrupts,
       toolResults: state.toolResults,
       onDraftInterrupt: runtime.draftInterrupt,

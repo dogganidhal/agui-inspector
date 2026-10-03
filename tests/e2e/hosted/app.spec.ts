@@ -343,6 +343,39 @@ test('an imported recording is inspection only: it sends nothing and nothing can
   await expect(page.getByRole('textbox', { name: 'Message' })).toBeEnabled();
 });
 
+test('New thread empties the conversation at once without touching what was recorded, and an exported session still shows its last thread', async ({ page, openSite }, info) => {
+  const site = await openSite({ config: agentConfig((o) => `${o.agent.origin}/agent`) });
+  await open(page, site);
+  await send(page, 'first thread');
+  await expect(page.getByText(AGENT_REPLY).first()).toBeVisible();
+  const footer = page.getByRole('contentinfo');
+  await expect(footer).toContainText('1 exchange · 5 frames');
+
+  await page.getByRole('button', { name: 'New thread' }).click();
+  const conversation = page.locator('[data-view="conversation"]');
+  await expect(conversation).toContainText('No conversation yet');
+  await expect(conversation.getByText(AGENT_REPLY)).toHaveCount(0);
+  await expect(footer, 'the exchange and its frames stay in the inspection pane').toContainText('1 exchange · 5 frames');
+  await expect(page.getByRole('button', { name: /RUN_FINISHED/ })).toBeVisible();
+
+  await send(page, 'second thread');
+  await expect(conversation.getByText(AGENT_REPLY)).toHaveCount(1);
+  await expect(conversation.getByText('first thread')).toHaveCount(0);
+  const [first, second] = site.agent.seen.map((request) => JSON.parse(request.body) as { threadId: string; messages: Array<{ content: string }> });
+  expect(second?.threadId).not.toBe(first?.threadId);
+  expect(second?.messages.map((message) => message.content)).toEqual(['second thread']);
+
+  // A recording has no live thread: it shows the last one, as before.
+  await page.getByRole('button', { name: 'Export session' }).click();
+  const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('dialog').getByRole('button', { name: 'Export session' }).click()]);
+  const file = info.outputPath('session.json');
+  await download.saveAs(file);
+  await page.locator('input[type="file"]').first().setInputFiles(file);
+  await expect(page.getByText('Imported recording: inspection only')).toBeVisible();
+  await expect(conversation.getByText('second thread')).toBeVisible();
+  await expect(conversation.getByText('first thread')).toHaveCount(0);
+});
+
 // ---------------------------------------------------------------------------------------------
 // Wiring across lanes
 // ---------------------------------------------------------------------------------------------

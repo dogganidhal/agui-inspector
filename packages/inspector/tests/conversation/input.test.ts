@@ -93,6 +93,19 @@ test('starting a new thread clears the conversation, and the earlier exchanges s
   assert.equal(h.session().exchanges.length, 2);
 });
 
+test('a thread named by the caller is shown at once, even before any exchange of it exists, and the earlier thread stays reachable', () => {
+  const h = harness();
+  h.open('ex1', { input: { threadId: 'old', runId: 'r1', messages: [{ id: 'u1', role: 'user', content: 'old thread' }] } });
+  h.push('ex1', started('r1', 'old'), 10);
+  h.push('ex1', { type: 'STATE_SNAPSHOT', snapshot: { old: true } }, 20);
+  h.close('ex1');
+  const fresh = projectConversation(h.session(), 'fresh');
+  assert.deepEqual([fresh.threadId, fresh.entries, fresh.state.current, fresh.state.changes, fresh.derived, fresh.issues], ['fresh', [], undefined, [], [], []]);
+  assert.equal(h.session().exchanges.length, 1, 'the retained exchange is untouched');
+  assert.deepEqual(projectConversation(h.session(), 'old').entries.filter((entry) => entry.kind === 'message').length, 1);
+  assert.equal(projectConversation(h.session()).threadId, 'old', 'without a named thread the latest recorded one shows, as for an imported recording');
+});
+
 test('an exchange with no frames yet shows its run as streaming, and a failed connection says so without an outcome', () => {
   const h = harness();
   h.open('ex1', { input: { threadId: 't1', runId: 'r1' }, transport: 'sending' });

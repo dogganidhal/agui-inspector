@@ -56,8 +56,8 @@ function Change({ change, frames }: { change: StateChange; frames: ReadonlyMap<F
 }
 
 /** The current state as the next run will carry it, and every snapshot and delta that built it. */
-export function StateView({ store }: { store: SessionStore }): ReactElement {
-  const { model, frames } = useProjection(store);
+export function StateView({ store, threadId }: { store: SessionStore; threadId?: string }): ReactElement {
+  const { model, frames } = useProjection(store, threadId);
   const { current, changes } = model.state;
   return (
     <section aria-labelledby="state-heading" data-view="state" className="agui-conv-state">

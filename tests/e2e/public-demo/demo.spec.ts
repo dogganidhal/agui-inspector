@@ -245,7 +245,7 @@ function expectProducedBytes(session: Session): void {
   }
 }
 
-const runBody = (exchange: { requestBody?: string }) => JSON.parse(exchange.requestBody ?? '') as RunInput & { parentRunId?: string; threadId: string; messages: Array<{ role: string; content?: string; toolCallId?: string }>; forwardedProps?: Record<string, unknown> };
+const runBody = (exchange: { requestBody?: string }) => JSON.parse(exchange.requestBody ?? '') as RunInput & { parentRunId?: string; threadId: string; state?: unknown; messages: Array<{ role: string; content?: string; toolCallId?: string }>; forwardedProps?: Record<string, unknown> };
 
 /** After each test: the page may have asked its own origin for the demo's files and a visitor's server, and nothing else. */
 function onlyOwnOrigin(urls: readonly string[], origin: string, allowed: readonly string[] = []): void {
@@ -427,6 +427,40 @@ test('tools: no run starts on a subset of replies, and every result rides in the
     ['c-size', '3'],
   ]);
   expect(second?.parentRunId).toBe(first?.runId);
+  expect(site.requests.filter((request) => request.method !== 'GET')).toEqual([]);
+});
+
+test('New thread empties the conversation and state at once, keeps every exchange, and the next run and its session preparation use the new thread', async ({ page, open, requested }) => {
+  const site = await open();
+  await openDemo(page, site);
+  await quick(page, 'state').click();
+  await idle(page);
+  const footer = page.locator('[data-view="footer"]');
+  await expect(footer).toContainText('3 exchanges');
+  await page.getByRole('button', { name: 'State', exact: true }).click();
+  await expect(page.getByText(/"counter": 2/).filter({ visible: true }).first()).toBeVisible();
+
+  await page.getByRole('button', { name: 'New thread' }).click();
+  await expect(page.locator('[data-view="state"]')).toContainText('No state yet');
+  await expect(page.locator('[data-view="conversation"]')).toContainText('No conversation yet');
+  await expect(page.locator('[data-view="conversation"] [data-entry]')).toHaveCount(0);
+  await expect(footer, 'the inspection pane keeps what was recorded').toContainText('3 exchanges');
+  await page.getByRole('button', { name: 'Inspection', exact: true }).first().click();
+
+  await quick(page, 'Hello there').click();
+  await expect(reply(page)).toBeVisible();
+  await idle(page);
+  const session = await exportSession(page);
+  const [first, second] = conversations(session).map(runBody);
+  expect(conversations(session)).toHaveLength(2);
+  expect(second?.threadId).not.toBe(first?.threadId);
+  expect(second?.messages.map((message) => message.content)).toEqual(['Hello there']);
+  expect(second?.parentRunId).toBeUndefined();
+  expect(second?.state).toEqual({});
+  expect(exampleRequests(requested).filter((url) => url.includes('/prepare/sessions/'))).toEqual([
+    `${site.base}__demo__/prepare/sessions/${first?.threadId}`,
+    `${site.base}__demo__/prepare/sessions/${second?.threadId}`,
+  ]);
   expect(site.requests.filter((request) => request.method !== 'GET')).toEqual([]);
 });
 

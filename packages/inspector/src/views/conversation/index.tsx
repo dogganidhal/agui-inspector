@@ -356,8 +356,8 @@ function Entries({ list, frames, extras }: { list: readonly ConversationEntry[];
 }
 
 /** The transcript of the current thread, built from the store and live as frames arrive. */
-export function ConversationView({ store, renderActivity }: ConversationViewProps & ConversationViewExtras): ReactElement {
-  const { model, frames } = useProjection(store);
+export function ConversationView({ store, threadId, renderActivity }: ConversationViewProps & ConversationViewExtras): ReactElement {
+  const { model, frames } = useProjection(store, threadId);
   const extras: ConversationViewExtras = { ...(renderActivity && { renderActivity }) };
   return (
     <section aria-labelledby="conversation-heading" data-view="conversation" className="agui-conv">

@@ -317,17 +317,21 @@ test('Stop ends the connection, keeps the partial recording and makes up no term
 });
 
 test('New thread starts clean without rewriting what was recorded', async ({ page, servers }) => {
-  await open(page, servers, { agent: 'plain' });
+  await open(page, servers, { agent: 'support' });
   await send(page, 'old thread');
+  await expect(page.getByText('Hello from the reference agent.')).toBeVisible();
   await settled(page, 1);
   const before = await session(page);
   await page.getByRole('button', { name: 'New thread' }).click();
+  await expect(page.locator('[data-view="conversation"]')).toContainText('No conversation yet');
+  await expect(page.getByText('Hello from the reference agent.')).toHaveCount(0);
   await send(page, 'new thread');
   await settled(page, 2);
   const [first, second] = runs(servers.site).map(bodyOf);
   expect(second?.threadId).not.toBe(first?.threadId);
   expect(second?.messages.map((message) => message.content)).toEqual(['new thread']);
   expect(second?.state).toEqual({});
+  expect(preparations(servers.site).filter((request) => request.method === 'PUT').map((request) => request.path)).toEqual([`/prepare/sessions/${first?.threadId}`, `/prepare/sessions/${second?.threadId}`]);
   const after = await session(page);
   expect(after.exchanges[0]).toEqual(before.exchanges[0]);
   expect(after.frames.slice(0, before.frames.length)).toEqual(before.frames);

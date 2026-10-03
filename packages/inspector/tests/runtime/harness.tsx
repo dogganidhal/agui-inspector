@@ -86,6 +86,7 @@ function Page(): ReactElement {
   const { toasts, toast } = useToasts();
   const replies: ConversationViewProps = {
     store,
+    threadId: state.threadId,
     interrupts: state.interrupts,
     toolResults: state.toolResults,
     onDraftInterrupt: (id, draft) => runtime.draftInterrupt(id, draft),
