@@ -1,7 +1,9 @@
 # Development
 
 `agui-inspector` is the approved package name on npm and PyPI, unregistered on 2026-10-02. Both manifests are
-private. Nothing here publishes, tags or releases anything.
+private. Nothing here publishes, tags or releases anything. The Python release workflow does, after the maintainer merges
+the version pull request that Changesets opens and approves the `pypi` deployment (see
+[distribution](distribution.md#python-release)).
 
 ## Prerequisites
 
@@ -29,6 +31,7 @@ Run from the repository root.
 | `node scripts/build-demo.mjs --outdir .build/public-demo --base-path /agui-inspector/` | Builds the public demo into its own directory under `.build`. `--origin` names the site's origin and defaults to the Pages site. It never touches `packages/inspector/dist`. See [public demo](public-demo.md). |
 | `node scripts/bundle-budget.mjs --dir .build/public-demo` | The same budget as `check:bundle`, on the complete demo asset set. |
 | `npm run package:python` | Builds the assets, stages them into `packages/python`, checksums them and runs `uv build`. See [embedding](embedding.md) and [build provenance](build-provenance.md). |
+| `npx changeset` | Adds a changeset for a change to the Python package (see [Changesets](#changesets)). |
 | `npm run check:ci` | Runs the pull request gate locally (see below). |
 | `npm run check:ci -- --strict` | The same gate, but suites that are not introduced yet fail it. |
 
@@ -117,9 +120,30 @@ commit SHA; bump a pin only after reading the new release.
 The end-to-end step also runs `tests/e2e/public-demo`, which builds the demo itself, serves it under `/agui-inspector/` and drives the
 real service worker in Chromium. The unit and Python steps check that no demo file reaches the npm package, the wheel or the sdist.
 
-`.github/workflows/pages.yml` is the only other workflow. It runs on `main` only, builds and checks the demo the same way and deploys it
+`.github/workflows/pages.yml` runs on `main` only, builds and checks the demo the same way and deploys it
 with Pages-scoped permissions; it never runs for a pull request and `ci.yml` gains no deployment permission. See
 [public demo](public-demo.md#deployment-and-who-authorizes-it).
+
+`.github/workflows/release-python.yml` is the third workflow. It runs on `main` and is the only one that publishes. It
+keeps the Changesets version pull request up to date and, once that is merged, runs `npm run check:ci -- --strict`,
+builds the wheel and sdist with `npm run package:python` and publishes them to PyPI through trusted publishing. See
+[distribution](distribution.md#python-release).
+
+## Changesets
+
+Changesets version the Python package. Add one to any pull request that changes what the package does or ships. The wheel
+bundles the inspector assets, so that includes user-visible changes to the inspector:
+
+```sh
+npx changeset
+```
+
+Pick `agui-inspector-python`, the bump type (before 1.0.0, `minor` for a change that needs a migration or adds a feature,
+`patch` for a fix) and write the line the changelog will show. The command writes a markdown file under `.changeset/`;
+commit it with the change. A pull request with nothing to release, such as a docs or test change, needs none.
+`agui-inspector` (the npm manifest) is ignored until its release is set up. Never edit a version by hand: the release
+workflow's version pull request moves `packages/python/package.json`, `pyproject.toml`, `uv.lock` and `CHANGELOG.md`
+together, and `tests/release/changeset.test.ts` fails when they differ.
 
 A suite that is not introduced yet is printed as `PENDING` with the reason. It has no command, so
 it cannot report success, and the summary says that pending suites do not count as passing. Once a
@@ -135,8 +159,8 @@ integrated main branch. Run `npm run check:ci -- --strict` there: it behaves lik
 but exits non-zero while any suite is pending, so an absent bundle-budget check, an absent
 end-to-end suite or an absent Python package blocks the release instead of being skipped. The
 5,000-frame responsiveness check is not part of this gate. It needs the physical runner described in
-the benchmark profile, and the portable CI run cannot certify it. Publishing is
-a separate, blocked step; see `docs/distribution.md`.
+the benchmark profile, and the portable CI run cannot certify it. The Python release workflow reruns the strict gate
+on the tagged commit; publishing is still the maintainer's decision, see `docs/distribution.md`.
 
 ## What exists and what is still missing
 

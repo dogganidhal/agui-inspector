@@ -9,7 +9,7 @@ const root = process.cwd();
 const read = (file: string) => readFileSync(path.join(root, file), 'utf8');
 const json = (file: string) => JSON.parse(read(file)) as Record<string, any>;
 
-const manifests = ['package.json', 'packages/inspector/package.json'];
+const manifests = ['package.json', 'packages/inspector/package.json', 'packages/python/package.json'];
 const lifecycle = ['preinstall', 'install', 'postinstall', 'prepare', 'prepublish', 'prepublishOnly', 'prepack', 'postpack', 'publish', 'postpublish'];
 
 function directDependencies(): Array<[name: string, version: string, manifest: string]> {
@@ -32,7 +32,7 @@ test('manifests are private MIT packages with no bin, publish config or lifecycl
     for (const script of lifecycle) assert.equal(script in (pkg.scripts ?? {}), false, `${manifest} has no ${script} script`);
   }
   assert.equal(json('packages/inspector/package.json').name, 'agui-inspector');
-  assert.deepEqual(json('package.json').workspaces, ['packages/inspector']);
+  assert.deepEqual(json('package.json').workspaces, ['packages/inspector', 'packages/python']);
 });
 
 test('LICENSE is MIT with the exact copyright line and the package copies equal the root files', () => {

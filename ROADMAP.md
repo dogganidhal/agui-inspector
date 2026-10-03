@@ -8,7 +8,8 @@ and planning input.
 ## 0.1.0 MVP
 
 Status: implemented on main (W1/W2, PRs #3-#18). Release verification pending: SC-009 on the
-physical runner, a manual smoke run in all MVP distribution modes, and publishing (not authorized).
+physical runner, a manual smoke run in all MVP distribution modes, and the first publish (the Python release
+workflow is in place and waits for the maintainer's tag; npm is not set up).
 Three approved W3 follow-ups remain in [tasks](specs/001-inspector-mvp/tasks.md#wave-w3-release-decision-follow-ups).
 The public-demo companion is planned in [feature 002](specs/002-public-demo/spec.md); its
 implementation waits for all three W3 slices to merge and does not authorize package publication.
@@ -54,6 +55,15 @@ bundle is limited to 2 MB minified and 600 KB gzipped.
 
 Each W3 slice is one PR depending only on main after the decision-recording PR, with disjoint
 ownership. Manifests remain private: no publishing, tags or releases are authorized. FR-040 remains.
+
+### Python release workflow (2026-10-03)
+
+Changesets drive the Python release. `.github/workflows/release-python.yml` keeps a `chore: version packages` pull request
+up to date on `main`; merging it tags the version, runs the strict gate and publishes to PyPI through trusted
+publishing, with no stored token. Nothing has run it: the maintainer still registers the trusted publisher, the `pypi`
+environment and the repository setting that lets the version pull request open, and the manifests stay private (the
+Python classifier included) until the first release PR. The npm release (provenance, a workflow of its own) is not set
+up. See [distribution](docs/distribution.md).
 
 ### Public demo companion (2026-10-02)
 

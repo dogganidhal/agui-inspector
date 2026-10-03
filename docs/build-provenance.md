@@ -2,8 +2,8 @@
 
 `agui-inspector` is the approved name (unregistered on npm and PyPI on 2026-10-02) and nothing is published. FR-040 requires published distributions
 to have verifiable build provenance. Since there is no published distribution yet, this page covers
-the checks that already run on a developer machine or in pull request CI, and the safeguards that
-remain required before a release. The release process is listed in [distribution](distribution.md).
+the checks that already run on a developer machine or in pull request CI, and the safeguards a release
+adds. The Python release workflow is described in [distribution](distribution.md#python-release).
 
 ## What the local build proves
 
@@ -54,19 +54,27 @@ The staged copy and the checksum file are git-ignored build output. Nothing gene
 Pull request CI runs `npm run check:ci`, which runs the Python tests and the browser tests that rely
 on these inputs. It requests read-only access, uses no secrets and publishes nothing.
 
-## Safeguards retained for a release
+## Safeguards for a release
 
-None of these is implemented. They are listed so that a release cannot skip them:
+For Python, `.github/workflows/release-python.yml` implements these, and `test_distribution.py` fails if one
+is loosened:
 
-- Build releases in CI from a reviewed version tag, with every action pinned to a full commit SHA
-  and the minimum permissions.
-- Publish to npm with provenance and to PyPI through trusted publishing, with no long-lived token
-  stored in the repository.
-- Compare the wheel's `static.sha256` with the npm package's files before publishing, as the local
-  tests do now.
-- Remove the `Private :: Do Not Upload` classifier and the npm `"private": true` flag only with an explicit
-  decision to publish. G-01 (MIT) and G-02 (`agui-inspector`) are closed, but neither authorizes registering a name
-  or publishing. The conditional `@ag-ui/inspector` name depends on G-03 (upstream adoption), which is open.
-- Pass `npm run check:ci -- --strict` on the integrated main branch.
+- It builds only a commit that carries the `agui-inspector-python@<version>` tag Changesets just pushed for the
+  version in `pyproject.toml`, with every action pinned to a full commit SHA and the minimum permissions per job.
+  Only the job that opens the version pull request and pushes tags can write to the repository.
+- It runs `npm run check:ci -- --strict` before it builds. That gate includes the comparison of the wheel's
+  `static.sha256` with the npm assets that the local tests make.
+- It publishes through PyPI trusted publishing, with no token stored in the repository. The publish job runs
+  no repository code, and the action uploads PEP 740 attestations naming the workflow and commit.
 
-No command in this repository publishes, tags or releases, and this slice adds no workflow that does.
+Still required, and not implemented:
+
+- Publish the npm package with provenance, from a CI build of its own.
+- Remove the npm `"private": true` flag, and the Python `Private :: Do Not Upload` classifier, only with an
+  explicit decision to publish. The classifier is what stops an accidental PyPI upload until then; the release
+  workflow refuses a package that still has it. G-01 (MIT) and G-02 (`agui-inspector`) are closed. The conditional
+  `@ag-ui/inspector` name depends on G-03 (upstream adoption), which is open.
+- Pass the headed benchmark on the physical runner, which CI cannot do.
+
+No command in this repository publishes, tags or releases on its own. A release happens when the maintainer merges the
+version pull request and approves the `pypi` deployment.
