@@ -248,7 +248,7 @@ Then open `http://localhost:3000/agui-inspector/docs/`. `npm run build --prefix 
 - Pages are MDX files in `website/content/docs/`. `meta.json` there sets the sidebar order and its four groups: Start
   here, Use it, Set it up and Contribute. The repository's `docs/` directory keeps only the frozen product brief,
   `docs/reference/product-brief.md`, and the screenshots in `docs/images/`. Each screenshot has a light and a dark
-  version, and the README and the pages share them. A page imports both and shows them with the `Screenshot`
+  version. The pages use the screenshots, and the README shows only the showcase animation. A page imports both and shows them with the `Screenshot`
   component, which picks the one that matches the reader's theme.
 - A Python install or run command comes in two versions, pip and uv, as consecutive code blocks with
   `tab="pip"` and `tab="uv"` and the same `tab-group="python-installer"`. Fumadocs turns them into tabs, and the
