@@ -12,7 +12,8 @@ received. Either can contain personal data, business data or secrets, for exampl
 with a customer record, or a server that repeats a credential back in its answer. The inspector
 does not edit, mask or filter received bytes, so the file contains whatever crossed the wire.
 
-- The export dialog warns about this each time and only then writes the file.
+- The export dialog says this each time: payloads can contain credentials and other secrets, including a token the
+  server echoed back, and headers are not captured or exported. The file is written only after you confirm.
 - Treat the file like the traffic it came from. Check it before you attach it to a ticket, a chat
   or a public issue, and prefer synthetic data when you can reproduce a problem with it.
 - If you find a secret in a recording, rotate the secret. Deleting the file does not recall copies.
@@ -33,15 +34,17 @@ A credential can end up near a recording in two ways. The inspector treats them 
   does not redact, mask or hash them, and it does not check the file for your token.
 
 So an exported file can contain your token if, and only if, the server sent it back. The export dialog
-warns about that each time. If you find a token in a file, rotate it before you share the file.
+and the authentication popover both say so: headers are not recorded or exported, and a payload that
+repeats the token is kept as received. If you find a token in a file, rotate it before you share the file.
 
 `tests/e2e/inspection/credential-echo.spec.ts` covers both. A scripted target
 (`examples/reference-agent/credential-echo.ts`) repeats a synthetic token in one frame with unusual
 spacing, non-ASCII text and `\r\n` delimiters. The test checks that the frame is identical on the
-clipboard and in the exported file, and that the warning appears before the download. It also checks
-that the token is absent from the configuration, the exported profile, browser storage, all requests
-except the chosen header on the one request to the target, the exchanges and runs in the file, and
-every field name that could hold a header.
+clipboard and in the exported file. It checks that the warning appears before the download and says
+that payloads can hold an echoed credential while headers are not captured, and that the popover makes
+no promise that the recording never holds the token. It also checks that the token is absent from the
+configuration, the exported profile, browser storage, all requests except the chosen header on the one
+request to the target, the exchanges and runs in the file, and every field name that could hold a header.
 
 ## What a file contains
 

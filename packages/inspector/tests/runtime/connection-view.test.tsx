@@ -93,10 +93,13 @@ test('authentication shows the header name and a mask, never the token, and defa
   assert.ok(!visible.includes(TOKEN), 'the token is not part of any text, label or attribute outside its own password field');
 });
 
-test('the popover says where the token lives and what clears it', () => {
+test('the popover says where the token lives, what clears it and that a target can still echo it into a recording', () => {
   const markup = renderToStaticMarkup(<TargetControls connection={{}} onChangeTarget={spy()} onChangeAuth={spy()} />);
   assert.match(markup, /popover/);
-  assert.match(markup, /The token stays in memory\. It is cleared on reload or when the target changes, and it is never recorded or exported\./);
+  assert.match(markup, /The token stays in memory and is cleared on reload or when the target changes\./);
+  assert.match(markup, /It is sent as a request header, and headers are not recorded or exported\./);
+  assert.match(markup, /If the target repeats the token in a payload, the recording keeps it as received\./);
+  assert.doesNotMatch(markup, /never recorded or exported/);
   assert.match(markup, /Clear token/);
 });
 

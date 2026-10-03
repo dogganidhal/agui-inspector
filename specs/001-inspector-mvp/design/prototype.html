@@ -449,7 +449,7 @@ dialog.modal::backdrop{background:rgb(0 0 0 / .28)}
       <input class="field mono" id="hdrName" value="Authorization" aria-label="Header name" style="width:130px">
       <input class="field mono" id="tokenInput" type="password" placeholder="Bearer …" aria-label="Token" style="flex:1" autocomplete="off">
     </div>
-    <div class="row muted" style="font-size:12px;flex-wrap:nowrap;align-items:flex-start"><span data-ic="lock"></span><span>Kept in memory only. Cleared on reload or when you change agents. Never recorded, shown in frames, or exported.</span></div>
+    <div class="row muted" style="font-size:12px;flex-wrap:nowrap;align-items:flex-start"><span data-ic="lock"></span><span>Kept in memory only. Cleared on reload or when you change agents. Sent as a request header, and headers are not recorded or exported. If the target repeats the token in a payload, the recording keeps it as received.</span></div>
   </div>
 </div>
 
@@ -486,7 +486,7 @@ dialog.modal::backdrop{background:rgb(0 0 0 / .28)}
   <div class="modal-b">
     <h2>Export this session?</h2>
     <p>The file holds every exchange, frame and run input exactly as received. Raw frames can contain personal or sensitive data from your test conversations.</p>
-    <p>Headers and tokens are never included.</p>
+    <p>Raw frames can contain credentials and other secrets, such as a token the target echoed back. They are exported as received. Headers, including the authentication header, are not captured or exported.</p>
     <div class="row mono muted" style="font-size:12px" id="exportSummary"></div>
   </div>
   <div class="modal-f"><button class="btn" value="cancel" id="exportCancel">Cancel</button><button class="btn primary" id="exportGo">Export session</button></div>

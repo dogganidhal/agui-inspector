@@ -90,7 +90,7 @@ function Authentication({ auth, onChange }: { auth: ConnectionViewProps['connect
             <Field id={tokenId} type="password" autoComplete="off" spellCheck={false} value={auth?.token ?? ''} onChange={(event) => apply(headerName, event.target.value)} />
           </label>
           <p className="agui-conn-note">
-            The token stays in memory. It is cleared on reload or when the target changes, and it is never recorded or exported.
+            The token stays in memory and is cleared on reload or when the target changes. It is sent as a request header, and headers are not recorded or exported. If the target repeats the token in a payload, the recording keeps it as received.
           </p>
           <div className="agui-conn-actions">
             <Button small disabled={auth === undefined} onClick={() => onChange(undefined)}>
