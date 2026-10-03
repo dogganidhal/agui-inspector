@@ -62,6 +62,22 @@ These come from the pinned baseline and are recorded here rather than worked aro
   import to a small browser stand-in (`randomUUID` from Web Crypto; `createHash` throws).
 - `clarinet`, which the middleware depends on, calls `require("stream")` inside a try/catch. The
   browser bundle keeps that guarded call.
-- `@ag-ui/client` splits SSE events on `\n\n` only, so CRLF or CR delimited streams make the client
-  fail. The recorder's own frame reader has to handle all three delimiters (slice F05) while the
-  recording branch keeps draining.
+- **CRLF and CR event streams (issue #49).** `@ag-ui/client` 1.0.1 frames events with `split(/\n\n/)`, so a stream
+  whose lines end in CRLF or a bare CR fails in its parser. The run is lost to the client, and the next request
+  carries neither the assistant reply nor the updated state, although the recording and the projected conversation
+  look correct. Checked on 2026-10-03: `npm view @ag-ui/client versions` ends at 1.0.1 (published 2026-09-29), with
+  no later version or dist-tag, and the 1.0.1 tarball still has the LF-only split. The upstream fix is
+  [ag-ui-protocol/ag-ui#2939](https://github.com/ag-ui-protocol/ag-ui/pull/2939), opened on 2026-10-02. At the time
+  of writing it is unreviewed, unmerged and unreleased, so the pin stays at 1.0.1.
+  Until a release contains it, the runtime gives the client a copy of the response whose CRLF and CR line endings
+  are LF (`packages/inspector/src/core/runtime/line-endings.ts`). The recorder cloned the response first, so recorded
+  envelopes, arrival order and findings keep the server's bytes, and nothing else about the client's input changes.
+  This is a narrow exception to "the client's stream is untouched", recorded in constitution principle I and in
+  [inspection](inspection.md#how-the-client-branch-stays-untouched). LF, CRLF, CR and streams that mix them leave the
+  same messages, state and outcomes, including interrupt and client tool continuations. No other line ending is
+  supported. A frame that is not valid JSON still ends the client's run as a finding while capture goes on.
+  Compatibility evidence: `packages/inspector/tests/runtime/line-endings.test.ts` asserts the next request body
+  (state and message roles) after a run over each ending, and
+  `packages/inspector/tests/foundation/compatibility.test.ts` pins the client's LF-only framing. When the second
+  one fails after a bump, delete `line-endings.ts` and its call in `runtime/index.ts`, drop the exception from
+  principle I, FR-009 and `inspection.md`, and remove this entry.

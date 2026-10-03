@@ -1,17 +1,18 @@
 <!--
 Sync Impact Report
-Version: 1.0.3 -> 1.1.0 (MINOR expanded hosting guidance).
-Approval: project maintainer, 2026-10-02.
-Modified principle: IV. Local-only operation and credential privacy (title unchanged).
-Affected sections: principle IV; hosted connect-src architecture constraint.
+Version: 1.1.0 -> 1.2.0 (MINOR narrow exception to principle I).
+Approval: pending, project maintainer review of the pull request that carries this change.
+Modified principle: I. The wire comes first (the protocol client's stream).
+Affected sections: principle I; MVP FR-009; docs/inspection.md; docs/dependencies.md.
 Added/removed sections: none.
-Rationale: explicit hosted-deployer opt-in permits visitor-selected HTTPS and loopback HTTP targets.
-Compatibility impact: restrictive default and embedded behavior unchanged; no credential persistence,
-wire changes, redaction, proxy, automatic third-party traffic or package publishing.
-Dependent artifacts: specs/002-public-demo; MVP FR-037/FR-038 cross-references; ROADMAP synchronized.
-Historical MVP design/plan/contracts are not rewritten; feature 002 governs the opt-in extension.
-Follow-up: W4 implementation after W3; exact loopback CSP browser proof and Pages enablement gates
-are tracked in specs/002-public-demo/plan.md. IPv6 support is not claimed without browser proof.
+Rationale: the pinned @ag-ui/client cuts events on two LF only, so a valid CRLF or CR stream fails in it and
+the next request loses the assistant reply and the state (issue #49). Principle I allows the client's own
+copy of an event stream to have its CRLF and CR line endings rewritten as LF. Nothing else may differ.
+Compatibility impact: recorded bytes, frames, arrival order and findings unchanged; the exception ends when
+the pinned client is bumped to the first release that contains ag-ui-protocol/ag-ui#2939.
+Dependent artifacts: MVP FR-009; docs/inspection.md; docs/dependencies.md.
+Historical MVP design/plan/contracts are not rewritten.
+Follow-up: remove the exception and delete the copy (runtime/line-endings.ts) on that bump.
 Deferred governance placeholders: none.
 -->
 # agui-inspector Constitution
@@ -23,7 +24,11 @@ Deferred governance placeholders: none.
 The inspector MUST keep every received frame in arrival order with raw content and timing,
 including non-JSON frames, schema failures, and sequence violations. Validation MUST flag issues on
 the relevant frame or run without dropping, repairing, reordering, or stopping capture. Recording
-MUST leave the protocol client's stream untouched. Raw evidence MUST stay distinguishable from
+MUST leave the protocol client's stream untouched. The one exception is temporary: the client's own
+copy of an event stream may have its CRLF and bare CR line endings rewritten as LF, because the pinned
+`@ag-ui/client` cannot frame them. Nothing else about that copy may differ, and the recorded branch
+keeps the bytes as received. The exception ends when the pinned client frames every line ending
+itself. Raw evidence MUST stay distinguishable from
 client-derived state and expanded chunk events. The raw request editor MUST flag invalid run inputs
 and allow the supplied JSON to be sent unchanged.
 
@@ -154,4 +159,4 @@ approval, reviewers MUST check applicable protocol, privacy, dependency, coverag
 and identify unresolved violations. Requirement changes MUST update acceptance criteria and
 documentation in the same change.
 
-**Version**: 1.1.0 | **Ratified**: 2026-10-01 | **Last Amended**: 2026-10-02
+**Version**: 1.2.0 | **Ratified**: 2026-10-01 | **Last Amended**: 2026-10-03

@@ -72,7 +72,15 @@ bytes independently, so:
   delay the client;
 - a client that rejects the stream, for example on a malformed frame or a sequence violation, does
   not stop recording, and the rest of the stream is still captured;
-- the client gets the original `Response`, unread and unlocked.
+- the client gets the response unread and unlocked, apart from the line endings described below.
+
+The only change to the client's copy is made by the runtime after the recorder has cloned the response. The
+pinned `@ag-ui/client` cuts events on two LF characters, so it cannot read a stream that ends its lines with CRLF
+or a bare CR, although both are valid server-sent events. Before the client reads its copy, the runtime turns each
+CRLF and each lone CR into one LF. Every other byte stays as received, in the same order. The recording comes from
+the other branch: its envelopes keep the delimiters the server used, and the frames list shows them. The rewrite
+is temporary and ends when the pinned client is bumped to the first release that contains
+ag-ui-protocol/ag-ui#2939 (see [dependencies](dependencies.md#known-upstream-findings)).
 
 Capture also has its own end. It is over when the response ends, fails or is stopped, not when the call
 that sent the request returns or the client gives up on the stream. The runtime hands the recorder the
