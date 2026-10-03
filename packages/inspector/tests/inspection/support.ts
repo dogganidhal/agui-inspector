@@ -39,12 +39,14 @@ async function untilEnded(store: SessionStore, id: string) {
   }
 }
 
-/** Plays scenarios one after another and resolves once every exchange has ended. */
+/** Plays scenarios one after another and resolves once every exchange has ended. A scenario with no response still rejects for the client; here that is its expected end. */
 export async function capture(...scenarios: RecorderScenario[]): Promise<SessionStore> {
   const { store, recorder } = pipeline();
   for (const [index, scenario] of scenarios.entries()) {
-    const response = await recorder.record(scenario.request, scenarioSend(scenario));
-    await response.arrayBuffer();
+    const response = await recorder.record(scenario.request, scenarioSend(scenario)).catch((error: unknown) => {
+      if (scenario.ending !== 'no-response') throw error;
+    });
+    await response?.arrayBuffer();
     await untilEnded(store, `exchange-${index + 1}`);
   }
   return store;

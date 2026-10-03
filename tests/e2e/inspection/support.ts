@@ -49,7 +49,7 @@ function agent(pageOrigin: string, received: Received[], extra?: (path: string, 
       response.setHeader('vary', 'Origin');
     }
     if (request.method === 'OPTIONS') {
-      response.setHeader('access-control-allow-methods', 'POST');
+      response.setHeader('access-control-allow-methods', 'POST, PUT');
       response.setHeader('access-control-allow-headers', 'content-type, authorization');
       response.writeHead(204);
       return void response.end();
@@ -58,6 +58,12 @@ function agent(pageOrigin: string, received: Received[], extra?: (path: string, 
     received.push({ path: pathname, body, authorization: request.headers.authorization });
 
     if (extra?.(pathname, response)) return;
+    // Preparation requests: any /prepare/ path answers 200, except the one that stands for a broken one.
+    if (pathname.startsWith('/prepare/')) {
+      const broken = pathname === '/prepare/broken';
+      response.writeHead(broken ? 500 : 200, { 'content-type': 'application/json' });
+      return void response.end(broken ? '{"error":"warm-up failed"}' : '{"ok":true}');
+    }
     const scenario = pathname.startsWith('/scenario/') ? (protocolScenarios as Record<string, (typeof protocolScenarios)[keyof typeof protocolScenarios]>)[pathname.slice('/scenario/'.length)] : undefined;
     if (scenario) {
       response.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store' });
@@ -178,6 +184,10 @@ export async function open(page: Page, site: Site): Promise<void> {
   await expect(page.getByRole('heading', { name: 'Inspection' })).toBeVisible();
   await page.waitForFunction(() => '__host' in window);
 }
+
+/** Records a preparation exchange against the scripted agent and returns its exchange id. */
+export const prepare = (page: Page, method: string, path: string) =>
+  page.evaluate(([verb, target]) => (window as unknown as { __host: { prepare(method: string, path: string): Promise<string> } }).__host.prepare(verb!, target!), [method, path]);
 
 /** Records a scripted conversation exchange and returns its exchange id. */
 export const run = (page: Page, scenario: string) =>

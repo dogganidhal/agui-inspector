@@ -194,6 +194,30 @@ straight in, chunks go through a frame reader, and an exchange's reader ends bef
 that the exchange is over. Finding ids from the reader are derived from frame and exchange ids, so
 they cannot collide with the recorder's `finding-N` ids.
 
+## Hiding preparation exchanges in the list
+
+A preset's preparation requests run before every run, so a long session lists them between the runs
+they belong to. The Preparation chip in the filter row of the frames list hides them. It shows how
+many preparation exchanges the session holds, it is pressed while they are listed, and it starts
+pressed. The choice lives in the page only and is not written to storage, so a reload lists
+preparation again.
+
+Hiding changes what the list shows and nothing else. The recording, the exchange and frame counts,
+the link between a run and its exchange, and the export are as they were, and an export holds the
+preparation exchanges whether the list shows them or not.
+
+Two rules decide what stays visible:
+
+- A failed preparation exchange is never hidden. One that ended in a transport error, got a status of
+  400 or above, or carries a finding is the reason a run was not sent, and a list that hid it would
+  say nothing about why the run is missing. While one exists the chip turns red, as the Issues chip
+  does.
+- The text filter, the family chips and Issues narrow the frames inside exchanges. They do not add or
+  remove an exchange, so they cannot hide a preparation exchange or bring a hidden one back.
+
+The newest exchange that is listed opens first. When the session holds only hidden preparation
+exchanges, the list says so instead of saying that no exchange exists yet.
+
 ## Protocol fixtures
 
 `examples/reference-agent/protocol-fixtures.ts` holds the F05 scenarios, deterministic and offline.

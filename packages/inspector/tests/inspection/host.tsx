@@ -16,6 +16,8 @@ import { InspectionView } from '../../src/views/inspection/index.tsx';
 export interface HostApi {
   /** Records one conversation exchange against the scripted target and reads it like a client. */
   run(path: string, body?: object): Promise<string>;
+  /** Records one preparation exchange, the way a preset's preparation request is recorded, and returns its id. */
+  prepare(method: string, path: string, body?: string): Promise<string>;
   /** Plays the ten benchmark exchanges one after another. */
   runBenchmark(): Promise<void>;
   /** Sets the in-memory token that the transport sends as a header. Nothing records it. */
@@ -42,15 +44,27 @@ function createLive(initialTarget: string) {
   let token: string | undefined;
   let runs = 0;
 
-  const post = (kind: ExchangeKind, path: string, body: string, responseKind: ResponseKind, runId?: string) =>
-    recorder.record({ kind, method: 'POST', path, body, responseKind, ...(runId !== undefined && { runId }) }, () =>
+  const post = (kind: ExchangeKind, path: string, body: string, responseKind: ResponseKind, runId?: string, method = 'POST') =>
+    recorder.record({ kind, method, path, body, responseKind, ...(runId !== undefined && { runId }) }, () =>
       fetch(`${target}${path}`, {
-        method: 'POST',
+        method,
         body,
         credentials: 'omit',
         headers: { 'content-type': 'application/json', ...(token !== undefined && { authorization: `Bearer ${token}` }) },
       }),
     );
+
+  async function ended(): Promise<string> {
+    const id = `exchange-${store.snapshot().exchanges.length}`;
+    while (!TERMINAL.includes(store.snapshot().exchanges.find((exchange) => exchange.id === id)?.transport ?? '')) await new Promise((resolve) => setTimeout(resolve, 5));
+    return id;
+  }
+
+  async function prepare(method: string, path: string, body = '{}'): Promise<string> {
+    const response = await post('preparation', path, body, 'response', undefined, method);
+    await response.arrayBuffer();
+    return ended();
+  }
 
   async function run(path: string, input: object = {}): Promise<string> {
     runs += 1;
@@ -60,8 +74,7 @@ function createLive(initialTarget: string) {
     const record = `record-${runs}`;
     const response = await post('conversation', path, JSON.stringify(full), 'sse', record);
     await response.arrayBuffer();
-    const id = `exchange-${store.snapshot().exchanges.length}`;
-    while (!TERMINAL.includes(store.snapshot().exchanges.find((exchange) => exchange.id === id)?.transport ?? '')) await new Promise((resolve) => setTimeout(resolve, 5));
+    const id = await ended();
     const exchange = store.snapshot().exchanges.find((candidate) => candidate.id === id)!;
     const entry: Run = { id: record, threadId, runId, input: full as Run['input'], exchangeId: id, startedAt: exchange.startedAt, outcome: { kind: 'unknown' } };
     store.upsertRun(entry);
@@ -72,6 +85,7 @@ function createLive(initialTarget: string) {
     store,
     post,
     run,
+    prepare,
     setToken: (value: string | undefined) => (token = value),
     setTarget: (url: string) => (target = url),
     async runBenchmark() {
@@ -92,6 +106,7 @@ function Host({ target }: { target: string }): ReactElement {
     const current = live.current!;
     window.__host = {
       run: current.run,
+      prepare: current.prepare,
       runBenchmark: current.runBenchmark,
       setToken: current.setToken,
       setTarget: current.setTarget,

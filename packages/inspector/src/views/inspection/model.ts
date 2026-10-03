@@ -231,9 +231,13 @@ export interface FrameFilter {
   /** Empty means every family. */
   readonly families: ReadonlySet<FamilyKey>;
   readonly issuesOnly: boolean;
+  /** Preparation exchanges are listed unless the user hides them; see `listExchanges` for what stays. */
+  readonly showPreparation: boolean;
 }
 
-export const NO_FILTER: FrameFilter = { query: '', families: new Set(), issuesOnly: false };
+export const NO_FILTER: FrameFilter = { query: '', families: new Set(), issuesOnly: false, showPreparation: true };
+// Hiding preparation chooses which exchanges are listed, not which frames of a listed one match, so it
+// is not "filtering" in the sense of the shown/total frame counts.
 export const isFiltering = (filter: FrameFilter) => filter.query !== '' || filter.families.size > 0 || filter.issuesOnly;
 
 const haystacks = new WeakMap<object, string>();
@@ -290,6 +294,16 @@ export interface ExchangeEntry {
   readonly issues: number;
 }
 
+/** The transport failed or the server answered with an error status. */
+export const exchangeFailed = (exchange: Exchange): boolean =>
+  exchange.transport === 'transport-error' || (exchange.status !== undefined && exchange.status >= 400);
+
+/**
+ * A preparation exchange the user may hide: one that went well. A failed one explains why a run was not
+ * sent, so it stays listed whatever the filter says.
+ */
+const hideable = (entry: ExchangeEntry): boolean => entry.exchange.kind === 'preparation' && !exchangeFailed(entry.exchange) && entry.issues === 0;
+
 export interface SessionIndex {
   readonly session: InspectionSession;
   /** Newest first, as the list shows them. */
@@ -297,6 +311,10 @@ export interface SessionIndex {
   readonly dataFrames: number;
   readonly issues: number;
   readonly familyCounts: ReadonlyMap<FamilyKey, number>;
+  /** Preparation exchanges in the session, whether or not the list shows them. */
+  readonly preparations: number;
+  /** Those among them that failed or carry findings; the list shows these even when preparation is hidden. */
+  readonly failedPreparations: number;
   /** Derived entries whose source frame is unknown; shown apart, never attached to a guess. */
   readonly unattributed: readonly DerivedEntry[];
   issuesOf(frame: RawFrame): number;
@@ -368,15 +386,43 @@ export function indexSession(session: InspectionSession): SessionIndex {
     };
   });
 
+  const preparation = entries.filter((entry) => entry.exchange.kind === 'preparation');
+
   return {
     session,
     newestFirst: entries.reverse(),
     dataFrames,
     issues,
     familyCounts,
+    preparations: preparation.length,
+    failedPreparations: preparation.filter((entry) => !hideable(entry)).length,
     unattributed,
     issuesOf: (frame) => frameFindings.get(frame.id)?.length ?? 0,
   };
+}
+
+export interface ListedExchange {
+  readonly entry: ExchangeEntry;
+  /** How many of its data frames match the filter. */
+  readonly shown: number;
+}
+
+/**
+ * The exchanges the list shows, newest first, and how many data frames match across them. Hiding
+ * preparation drops only the preparation exchanges that went well; the text filter, the family chips
+ * and Issues narrow frames and never remove an exchange, so they cannot hide a failed preparation.
+ * One pass over the exchanges, with the frame counts.
+ */
+export function listExchanges(index: SessionIndex, filter: FrameFilter): { readonly exchanges: ListedExchange[]; readonly shown: number } {
+  const exchanges: ListedExchange[] = [];
+  let shown = 0;
+  for (const entry of index.newestFirst) {
+    if (!filter.showPreparation && hideable(entry)) continue;
+    const count = countShown(entry, filter);
+    shown += count;
+    exchanges.push({ entry, shown: count });
+  }
+  return { exchanges, shown };
 }
 
 export type Row =

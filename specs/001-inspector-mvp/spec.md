@@ -68,8 +68,9 @@ Exercise valid and invalid streams without presets, embedding, or imported recor
 3. **Given** fixtures covering all 31 event types in the supported baseline, **When** they are
    received, **Then** every type has its required frame view and conversation presentation.
 4. **Given** several recorded exchanges, **When** the developer filters by type, content, or issue,
-   expands raw data, or copies an exchange's frames, **Then** the displayed and copied data matches
-   the recording; exchanges appear newest first with the newest expanded initially.
+   hides preparation exchanges, expands raw data, or copies an exchange's frames, **Then** the
+   displayed and copied data matches the recording; exchanges appear newest first with the newest
+   listed one expanded initially.
 5. **Given** a run containing 5,000 frames, **When** the developer uses inspection controls during
    capture, **Then** all frames remain available and interaction performance meets SC-009.
 6. **Given** an active conversation, **When** the developer stops the run or starts a new thread,
@@ -209,7 +210,7 @@ responses. Check state, raw submission, and export/import without presets or int
   without introducing a proxy or bypass.
 - A preset JSON value fills an entire template string: insert JSON, not its string representation.
 - Preparation fails before a continuation: preserve the preparation exchanges and do not send that
-  continuation's run input.
+  continuation's run input. The failed exchange stays listed even while preparation is hidden.
 - Capabilities contradict observed events: show both in the MVP; capability-consistency diagnostics
   remain outside this release.
 - A2UI rendering is disabled or an activity has another type: keep its data inspectable as JSON.
@@ -262,9 +263,11 @@ Its section 10 supplies the release baseline; the recorded clarifications resolv
   A stream ending without `RUN_FINISHED` or `RUN_ERROR` MUST receive a terminal-event finding.
   Validation MUST NOT stop capture, repair received data, or alter the stream delivered to the
   protocol client. (Sources: 2, 7, 10.)
-- **FR-010**: Exchanges MUST appear newest first, initially expanding the newest. Users MUST be
-  able to filter frames by type, content, and issues, inspect raw content, and copy an exchange's
-  frames as JSON. (Source: 8.4.)
+- **FR-010**: Exchanges MUST appear newest first, initially expanding the newest listed one. Users
+  MUST be able to filter frames by type, content, and issues, inspect raw content, and copy an
+  exchange's frames as JSON. Users MUST also be able to hide and show preparation exchanges in the
+  list, with them shown by default. Hiding is a view choice only: the recording, counts, run links
+  and exports do not change, and a failed preparation exchange MUST stay listed. (Source: 8.4.)
 - **FR-011**: Users MUST be able to start a new thread, stop an active run, and send preset-provided
   one-click messages. These controls MUST NOT manufacture received protocol events. (Sources: 2, 8.2.)
 

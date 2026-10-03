@@ -6,6 +6,7 @@ import { test } from 'node:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { EventType } from '@ag-ui/core';
+import { recorderScenarios, type RecorderScenario } from '../../../../examples/reference-agent/recorder-fixtures.ts';
 import type { InspectionSession, RawFrame } from '../../src/contracts.ts';
 import {
   FAMILIES,
@@ -15,6 +16,8 @@ import {
   familyOf,
   frameMatches,
   indexSession,
+  isFiltering,
+  listExchanges,
   summarizeFrame,
   typeLabel,
   type FrameFilter,
@@ -353,4 +356,100 @@ test('the list carries the state a measurement needs: totals, shown and the inte
   assert.match(html, /data-testid="frames"[^>]*data-generation="7"/);
   assert.match(html, /data-frame-total="\d+"/);
   assert.match(html, /data-frame-shown="\d+"/);
+});
+
+// ---------------------------------------------------------------------------------------------
+// FX7: hiding the preparation exchanges
+// ---------------------------------------------------------------------------------------------
+
+const prepared = (path: string): RecorderScenario => ({
+  name: 'prepare-ok',
+  request: { kind: 'preparation', method: 'POST', path, body: '{}', responseKind: 'response' },
+  status: 200,
+  announcedContentType: 'application/json',
+  chunks: [new TextEncoder().encode('{"ok":true}')],
+  ending: 'close',
+});
+const idsOf = (listed: ReturnType<typeof listExchanges>) => listed.exchanges.map(({ entry }) => entry.exchange.id);
+const hidePreparation = filter({ showPreparation: false });
+
+test('hiding preparation drops only the preparation exchanges that went well, and no count moves', async () => {
+  const session = await richSession();
+  const index = indexSession(session);
+  const every = listExchanges(index, NO_FILTER);
+  assert.deepEqual(idsOf(every), index.newestFirst.map((entry) => entry.exchange.id), 'preparation is listed by default');
+
+  const hidden = listExchanges(index, hidePreparation);
+  assert.deepEqual(idsOf(hidden), index.newestFirst.filter((entry) => entry.exchange.kind !== 'preparation').map((entry) => entry.exchange.id));
+  assert.equal(hidden.exchanges.length, every.exchanges.length - 1);
+  assert.deepEqual(hidden.exchanges.map(({ shown }) => shown), every.exchanges.filter(({ entry }) => entry.exchange.kind !== 'preparation').map(({ shown }) => shown));
+  assert.equal(hidden.shown, every.shown);
+
+  // A view-only choice: the index, and so every total, is the recording's.
+  assert.equal(index.preparations, 1);
+  assert.equal(index.failedPreparations, 0);
+  assert.equal(index.newestFirst.length, session.exchanges.length);
+  assert.equal(index.dataFrames, session.frames.filter((frame) => frame.classification === 'data').length);
+  assert.equal(isFiltering(hidePreparation), false, 'frame counts keep their plain form');
+});
+
+test('a failed preparation stays listed while preparation is hidden, and no other filter can drop an exchange', async () => {
+  const store = await capture(
+    prepared('/ok'),
+    recorderScenarios.errorTextBody,
+    { ...recorderScenarios.transportFailure, request: { kind: 'preparation', method: 'POST', path: '/down', responseKind: 'response' } },
+    wireScenario('run', conversationRequest('{}'), wireOf(JSON.stringify(eventFixtures.RUN_STARTED))),
+    prepared('/flagged'),
+    prepared('/ok-too'),
+  );
+  store.addFinding({ id: 'f-flagged', kind: 'capture', message: 'Response body could not be captured', subject: { type: 'exchange', id: 'exchange-5' } });
+  const index = indexSession(store.snapshot());
+
+  assert.equal(index.preparations, 5);
+  assert.equal(index.failedPreparations, 3, 'a 503, a transport failure and a finding');
+  // Newest first. Only the two clean preparation exchanges (1 and 6) go.
+  assert.deepEqual(idsOf(listExchanges(index, hidePreparation)), ['exchange-5', 'exchange-4', 'exchange-3', 'exchange-2']);
+
+  // Text, family and Issues narrow frames. They never decide which exchanges are listed.
+  const narrowed = filter({ query: 'zzz-matches-nothing', families: new Set(['tool']), issuesOnly: true });
+  assert.deepEqual(idsOf(listExchanges(index, narrowed)), idsOf(listExchanges(index, NO_FILTER)));
+  assert.deepEqual(idsOf(listExchanges(index, { ...narrowed, showPreparation: false })), ['exchange-5', 'exchange-4', 'exchange-3', 'exchange-2']);
+});
+
+const chip = (html: string) => html.match(/<button[^>]*data-preparation-chip[^>]*>[\s\S]*?<\/button>/)?.[0] ?? '';
+
+test('the Preparation chip counts the preparation exchanges and toggles with aria-pressed', async () => {
+  const session = await richSession();
+  const on = chip(render(session));
+  assert.match(on, /aria-pressed="true"/, 'shown by default');
+  assert.match(on, />Preparation<span class="agui-count">1<\/span>/);
+  assert.doesNotMatch(on, /data-has-issues="true"/);
+
+  const off = render(session, { filter: hidePreparation });
+  assert.match(chip(off), /aria-pressed="false"/);
+  assert.match(chip(off), /agui-count">1</, 'the count is the session\'s, not the list\'s');
+  assert.doesNotMatch(off, /data-exchange-header="exchange-1"/);
+  assert.match(off, /data-exchange-header="exchange-2"/);
+  assert.match(render(session), /data-exchange-header="exchange-1"/);
+});
+
+test('the chip turns red for a failed preparation, which stays in the list', async () => {
+  const store = await capture(recorderScenarios.errorTextBody);
+  const html = render(store.snapshot(), { filter: hidePreparation });
+  assert.match(chip(html), /data-has-issues="true"/);
+  assert.match(html, /data-exchange-header="exchange-1"/);
+  assert.match(html, /503/);
+  assert.doesNotMatch(html, /Only preparation requests/);
+});
+
+test('hidden preparation does not leave the newest listed exchange collapsed, and an all-preparation session says why', async () => {
+  const store = await capture(wireScenario('run', conversationRequest('{}'), wireOf(JSON.stringify(eventFixtures.RUN_STARTED))), prepared('/ok'));
+  const session = store.snapshot();
+  const opens = (html: string) => [...html.matchAll(/data-exchange-header="([^"]+)"[^>]*aria-expanded="(true|false)"/g)].map((match) => `${match[1]}:${match[2]}`);
+  assert.deepEqual(opens(render(session)), ['exchange-2:true', 'exchange-1:false']);
+  assert.deepEqual(opens(render(session, { filter: hidePreparation })), ['exchange-1:true']);
+
+  const only = render((await capture(prepared('/ok'))).snapshot(), { filter: hidePreparation });
+  assert.match(only, /Only preparation requests so far, and they are hidden\. Turn on the Preparation chip/);
+  assert.doesNotMatch(only, /No exchanges yet/);
 });
