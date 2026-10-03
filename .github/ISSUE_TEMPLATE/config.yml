@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/dogganidhal/agui-inspector/security/advisories/new
+    about: Report it privately, not in a public issue.
+  - name: AG-UI protocol question
+    url: https://docs.ag-ui.com
+    about: Questions about the protocol itself belong with the AG-UI project.

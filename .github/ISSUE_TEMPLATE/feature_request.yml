@@ -1,0 +1,27 @@
+name: Feature request
+description: Something the inspector should show, check or send.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Check the [roadmap](https://github.com/dogganidhal/agui-inspector/blob/main/ROADMAP.md) first. Many 1.0.0 items are planned but not specified yet, and an issue is the place to shape them.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What you were trying to do with your AG-UI server, and where the inspector fell short.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: What you would like to see. Mention the protocol events, A2UI components or distribution mode involved.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Workarounds and alternatives
+      description: How you work around it today, if at all.

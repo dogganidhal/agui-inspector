@@ -6,6 +6,7 @@ The mark is an agent (the solid dot) joined to a UI (the outlined square). The l
 | --- | --- |
 | `mark.svg` | The glyph alone, drawn in `currentColor` on a 24 px grid. Inline it, or use it as an `<img>` on a light page. |
 | `icon.svg` | The glyph in white on a rounded black square. It is the favicon, the README logo and the source for any social or app image. |
+| `social-preview.png` | The 1280 by 640 card GitHub shows when the repository is linked, rendered at 2x from `icon.svg`. Upload it under Settings, General, Social preview. |
 
 - The repo's own assets stay black and white. Don't add a color, gradient or outline to the mark.
 - The inspector's top bar draws the mark in `--agui-accent`, so an adopter's theme recolors it there. See [theming](../docs/theming.md).
