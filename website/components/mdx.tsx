@@ -14,8 +14,20 @@ function Screenshot({ light, dark, alt }: { light: Img; dark: Img; alt: string }
   );
 }
 
+// A recording in the reader's theme, like Screenshot. The files are in website/public/docs, served under the base path.
+// Controls, so a reader can pause the loop.
+function Video({ light, dark, label }: { light: string; dark: string; label: string }) {
+  const src = (file: string) => `${process.env.BASE_PATH}/docs/${file}`;
+  return (
+    <span className="not-prose my-6 block overflow-hidden rounded-xl border">
+      <video src={src(light)} width={2400} height={1560} aria-label={label} autoPlay muted loop playsInline controls className="block h-auto w-full dark:hidden" />
+      <video src={src(dark)} width={2400} height={1560} aria-label={label} autoPlay muted loop playsInline controls className="hidden h-auto w-full dark:block" />
+    </span>
+  );
+}
+
 export function getMDXComponents(components?: MDXComponents) {
-  return { ...defaultMdxComponents, Screenshot, Step, Steps, ...components } satisfies MDXComponents;
+  return { ...defaultMdxComponents, Screenshot, Step, Steps, Video, ...components } satisfies MDXComponents;
 }
 
 export const useMDXComponents = getMDXComponents;

@@ -3,19 +3,18 @@ title: Introduction
 description: See the requests and event streams of your AG-UI server frame by frame, with every protocol problem reported.
 ---
 
-import runLight from '../../../docs/images/run-light.webp';
-import runDark from '../../../docs/images/run-dark.webp';
-
 When your [AG-UI](https://docs.ag-ui.com) agent stops replying or a client rejects its events, agui-inspector shows you
 the request and the stream. It sends runs to your server, keeps each frame it receives in order with its timing, and
 reports JSON, schema and event-sequence problems. You can compare the conversation with the recorded frames and answer
 interrupts, tool calls and A2UI surfaces as a client does. You can also send a raw JSON request to test how your server
 handles invalid input.
 
-<Screenshot light={runLight} dark={runDark} alt="The inspector after an A2UI run: the deploy board the agent drew on the left, and on the right the run's ten frames, each with its arrival time and a passing check." />
+<Video light="showcase-light.mp4" dark="showcase-dark.mp4" label="The public demo in three runs: a plain reply with one frame's raw bytes and its request, a slow reply streaming in frame by frame, and an A2UI support form filled in and sent." />
 
-On the left is the conversation, with the surface the agent drew. On the right, the frames list shows one exchange: its
-request, a timeline, and each frame with its arrival time in seconds and its check.
+The recording uses the public demo. In the first run, one frame opens to show its bytes as received, then the request
+that started the run. The second run is a slow reply, and its frames appear on the timeline and in the list as they
+arrive. In the third, the A2UI showcase draws a support form, and sending the form starts another run that carries its
+action.
 
 ## Start with the demo
 
