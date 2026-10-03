@@ -650,15 +650,15 @@ test('the four example agents are one choice away in the top bar, and a typed en
   await picker('Interactive scenarios (browser-local example)').click();
   const options = page.getByRole('banner').getByRole('listitem');
   await expect(options).toHaveCount(4);
-  await options.getByRole('button', { name: /A2UI form/ }).click();
-  await expect(picker('A2UI form (browser-local example)')).toBeVisible();
+  await options.getByRole('button', { name: /A2UI showcase/ }).click();
+  await expect(picker('A2UI showcase (browser-local example)')).toBeVisible();
   await expect(endpoint).toHaveValue(`${site.base}__demo__/agent/a2ui`);
   await expect(quick(page, 'Show the order form')).toBeVisible();
   await expect(quick(page, 'Hello there')).toHaveCount(0);
 
   // Settings is the same selection, from the other side.
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
-  await expect(page.locator('[data-view="settings"]').getByRole('button', { name: 'A2UI form (browser-local example)', exact: true })).toBeVisible();
+  await expect(page.locator('[data-view="settings"]').getByRole('button', { name: 'A2UI showcase (browser-local example)', exact: true })).toBeVisible();
 
   await endpoint.fill(`${site.origin}/my-own-agent`);
   await page.getByRole('button', { name: 'Use endpoint' }).click();
