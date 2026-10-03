@@ -85,11 +85,15 @@ session holds the same input. A message that failed before it was sent is not ad
 
 ### Stop, New thread, quick messages
 
-- Stop ends the connection of the active run, or of a preparation in flight. The exchange is
-  recorded as stopped by the user, the frames received so far stay, and no terminal event is made up:
-  the run's outcome stays unknown and the missing `RUN_FINISHED` or `RUN_ERROR` is reported as a
-  finding on the run. Stop is a transport control. It does not answer an interrupt.
-- New thread stops any active run, then starts a new thread: new `threadId`, empty transcript, empty
+- Stop ends every connection that is still open: the active run, a preparation in flight, a raw
+  submission whose answer is still streaming, and a run's answer that the recorder is still reading
+  after the protocol client rejected it. It stays available as long as one of them is open, which can
+  be after the run itself has ended. Each exchange is recorded as stopped by the user and keeps the
+  frames received so far. Anything the server sends afterwards is not kept, and
+  no terminal event is made up: the run's outcome stays unknown and the missing `RUN_FINISHED` or
+  `RUN_ERROR` is reported as a finding on the run. Stop is a transport control. It does not answer
+  an interrupt.
+- New thread stops every open connection the same way, then starts a new thread: new `threadId`, empty transcript, empty
   state, nothing waiting. The exchanges and frames already recorded are not touched. The conversation
   and State views switch to the new thread at once, before it has a run; the Inspection pane keeps
   every exchange. Selecting another agent or endpoint starts a new thread the same way.
@@ -107,6 +111,10 @@ the stream, it stops processing, but the recording carries on to the end of the 
 | A frame it cannot parse as JSON | A `json` finding on the run, and the frame's own finding. |
 | A frame that fails the event schema | A `schema` finding on the run, and the frame's own finding. |
 | A connection or HTTP error | The exchange's status or transport error, and a message beside the composer. |
+
+After the client rejects a stream, the run is over and a new message can be sent. The response is
+still being recorded, so the exchange stays live and Stop stays available until the response ends or
+you press it.
 
 The observed outcome of a run (`success` with its result and pending tool calls, `interrupt`,
 `cancelled`, `error`) is what a valid terminal event said. A stream that ends without one has the
@@ -165,7 +173,7 @@ preparations like any other, and adds no user message.
 it is not sent and the error says so. Any valid JSON is sent exactly as typed, to the current target,
 as its own exchange. There is no preset, profile, preparation or conversation update, and no schema
 check beyond what the editor shows. The server's answer, an error answer included, is kept on the
-exchange.
+exchange. An answer that streams is recorded until it ends or you press Stop.
 
 ## Wiring it into a page
 

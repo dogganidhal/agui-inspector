@@ -48,6 +48,19 @@ export function eventStream(text: string, options: { hold?: boolean; signal?: Ab
   );
 }
 
+/**
+ * A native event-stream Response the test feeds by hand. Its source never looks at the abort signal, like a
+ * server that keeps the connection open, so only the recorder and the runtime decide what is read from it.
+ */
+export function openStream(): { readonly response: Response; push(text: string): void } {
+  let source: ReadableStreamDefaultController<Uint8Array> | undefined;
+  const response = new Response(new ReadableStream<Uint8Array>({ start: (controller) => void (source = controller) }), {
+    status: 200,
+    headers: { 'content-type': 'text/event-stream' },
+  });
+  return { response, push: (text) => source?.enqueue(encoder.encode(text)) };
+}
+
 export type Route = (call: Call) => Response | Promise<Response> | undefined;
 
 export function scriptedNetwork(routes: Route[] = []) {

@@ -74,6 +74,13 @@ bytes independently, so:
   not stop recording, and the rest of the stream is still captured;
 - the client gets the original `Response`, unread and unlocked.
 
+Capture also has its own end. It is over when the response ends, fails or is stopped, not when the call
+that sent the request returns or the client gives up on the stream. The runtime hands the recorder the
+request's abort signal and a callback. When the signal aborts, the recorder stops reading, keeps what it
+already read, marks the exchange `user-stopped` and calls the callback, even if the response body is
+still open. The runtime holds the abort controller until every recording made under it has called back,
+so Stop works for as long as bytes are still being recorded.
+
 Two limits come from the platform, not the recorder. The tee buffers for the slower branch without a
 bound. The recorder reads promptly, so in practice it is the client branch that waits. And when a
 connection fails or a run is aborted, bytes the platform had buffered but nobody had read yet are

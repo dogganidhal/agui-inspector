@@ -28,7 +28,7 @@ const connectionProps = (patch: Partial<ConnectionViewProps> = {}): ConnectionVi
 /** The opening tag of the element with this attribute value, so a test does not depend on attribute order. */
 const openTag = (markup: string, attribute: string): string => markup.match(new RegExp(`<(?:button|textarea|input)[^>]*${attribute.replace(/[()?]/g, '\\$&')}[^>]*>`))?.[0] ?? '';
 const chip = (markup: string, text: string): string => markup.match(new RegExp(`<button[^>]*>${text.replace(/[()?]/g, '\\$&')}</button>`))?.[0] ?? '';
-const render = (patch: Partial<ConnectionViewProps> = {}, extras: { notice?: string; mode?: 'embedded' | 'hosted' } = {}) =>
+const render = (patch: Partial<ConnectionViewProps> = {}, extras: { notice?: string; capturing?: boolean; mode?: 'embedded' | 'hosted' } = {}) =>
   renderToStaticMarkup(<ConnectionView {...connectionProps(patch)} {...extras} />);
 
 test('the view is the labelled connection section with every control a native, named element', () => {
@@ -63,6 +63,15 @@ test('Stop is available only while a run streams, and a streaming run disables t
   assert.match(openTag(streaming, 'aria-label="Send message"'), /disabled/);
   assert.match(chip(streaming, '/help'), /disabled/);
   assert.match(streaming, /A run is streaming\. Stop it to send another message\./);
+});
+
+test('Stop follows the recording, not the run: it stays available after the run ended while a response is still captured', () => {
+  const recording = render({ running: false }, { capturing: true });
+  assert.doesNotMatch(openTag(recording, 'aria-label="Stop"'), /disabled/);
+  assert.doesNotMatch(openTag(recording, 'placeholder="Message the agent"'), /disabled/, 'a new message is still allowed: only the run blocks it');
+  assert.match(recording, /Enter sends\. Shift\+Enter adds a line\./);
+  assert.match(openTag(render({ running: false }, { capturing: false }), 'aria-label="Stop"'), /disabled/);
+  assert.doesNotMatch(openTag(render({ running: true }, { capturing: false }), 'aria-label="Stop"'), /disabled/, 'a host that only reports the run keeps working');
 });
 
 test('waiting replies disable the composer and the notice says why', () => {
