@@ -307,7 +307,9 @@ Its section 10 supplies the release baseline; the recorded clarifications resolv
   keyboard operation (Tabs, Modal, pickers); media components stay blocked (FR-037). An `a2ui-surface`
   activity that has no operations yet but declares a generation `status` (`building`, `retrying`,
   `failed`) MUST show that status, and a failed generation MUST be visibly distinct from a building one.
-  (Sources: 4, 8.3, 8.5, 10; clarification 2026-10-02; render audit FX11.)
+  Interacting with a rendered surface MUST NOT change the received operations: the renderer is given
+  copies, so the JSON view, frames, session export and projection keep what the agent sent.
+  (Sources: 4, 8.3, 8.5, 10; clarification 2026-10-02; render audit FX11; FX14.)
 - **FR-021**: Subagent starts, finishes, and errors MUST appear as nested markers under the parent
   run, linked through parent and subagent run identifiers. Dedicated lanes are outside the MVP.
   (Sources: 8.3, 10.)
