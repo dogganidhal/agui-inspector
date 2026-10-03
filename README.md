@@ -137,9 +137,9 @@ specifications, plans and tasks.
 You need Node 24 or newer, and [uv](https://docs.astral.sh/uv/) for the Python package.
 
 ```sh
-npm ci --ignore-scripts             # install exactly what the lockfile pins, without lifecycle scripts
-npx playwright install chromium     # browser for the end-to-end tests
-npm run check:ci                    # the same gate pull requests run
+npm ci --ignore-scripts            # lockfile install, no lifecycle scripts
+npx playwright install chromium    # browser for end-to-end tests
+npm run check:ci                   # the pull request gate
 ```
 
 `npm run build` builds the page and `npm run package:python` builds the wheel and sdist into `packages/python/dist`.
