@@ -46,7 +46,7 @@ metadata or version bump.
 | Agent | Endpoint below base | Demonstration |
 | --- | --- | --- |
 | Interactive | __demo__/agent/interactive | Plain default; interrupt/tools/slow/never finishes/state/broken quick messages; ordered session/warm preparations. |
-| A2UI | __demo__/agent/a2ui | Form plus normal action envelope and existing continuation. |
+| A2UI showcase | __demo__/agent/a2ui | Several stories picked by quick message or by the action a surface sends (find a table, support ticket, deploy board, self-repair, sandbox probe), plus the original form and its continuation. |
 | Protocol baseline | __demo__/agent/protocol/baseline | Baseline producer with input IDs. |
 | Protocol run error | __demo__/agent/protocol/run-error | Existing error producer; completes all-31 coverage. |
 

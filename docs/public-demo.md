@@ -28,7 +28,7 @@ The interactive and A2UI agents answer at the speed of a model, not in one burst
 - A new message, step or tool call waits 150 to 400 ms. A tool result waits 400 to 900 ms after its call. A state or surface
   update waits 250 to 600 ms.
 
-A plain reply takes about 0.7 seconds and the other scenarios, `slow` aside, up to about 1.2. Pacing changes chunking and timing only. The event types come in the same order, and
+A plain reply takes about 0.7 seconds and the other scenarios, `slow` aside, up to about 1.2. The two longest A2UI stories, the deploy board and the failed self-repair, take 3 to 4 seconds because they send a surface update every 250 to 600 ms. Pacing changes chunking and timing only. The event types come in the same order, and
 the deltas of a message join back into the original text, so the frames list shows five word-sized deltas where the unpaced
 scenario had one. A delta that has no start event, as in the `broken` scenario, stays the one frame it was, so pacing adds
 nothing to the damage. The `slow` scenario is the one deliberately slow run: it uses a slower profile (a 600 to 1000 ms think
@@ -49,9 +49,33 @@ behavior passes a profile: `createInteractiveServer({ pace: NATURAL_PACE })`, or
 | Agent | Quick messages | What it shows |
 | --- | --- | --- |
 | Interactive scenarios | `Hello there`, `interrupt`, `tools`, `slow`, `never finishes`, `state`, `broken` | A plain reply; two interrupts to resolve or cancel; two tool calls that need results; a long reply that streams slowly and finishes; a response that stays open until you press Stop; state snapshot and delta; a run with a broken frame in the middle. Each message first sends the preparation requests (a session `PUT` and a warm-up `POST`) the preset declares. All of them stream with the pacing described below. |
-| A2UI form | `Show the order form` | A form surface. Edit the note and press Send note: the action goes out in a new run and the surface changes in place. |
+| A2UI showcase | `Find a table for 4`, `Open a support ticket`, `Deploy the release`, `Compare three laptops`, `Compare three laptops (never valid)`, `Probe the sandbox`, `Show the order form` | Seven short A2UI stories, listed under "The A2UI showcase" below. |
 | Protocol baseline | `Run the baseline protocol example` | 30 of the 31 event types, mixed line delimiters, split into uneven chunks. Not paced. |
 | Protocol run error | `Run the failing example` | `RUN_STARTED` then `RUN_ERROR`, the 31st type. |
+
+### The A2UI showcase
+
+The A2UI agent is one entry in the picker with seven quick messages, and each message is a story of its own. The stories live in
+`examples/reference-agent/a2ui-showcase.ts` and use only the bundled basic catalog, A2UI v0.9. A story keeps nothing between
+runs. Each next step is rebuilt from the name and the resolved context of the action your click sent, so the Request body of a
+run shows what the server was told. A story that goes on over several runs keeps one activity and replaces it in place, so a
+surface changes where it stands.
+
+| Quick message | What happens | What it shows |
+| --- | --- | --- |
+| `Find a table for 4` | Three restaurants as cards. Book opens a booking form beside the results. Confirm deletes both surfaces and shows a confirmation. Cancel removes only the form, and Book another starts again. | A List template of Cards with Rows, Dividers and the text variants. A second surface and `deleteSurface`. A number field, a date and time input, a chip picker and a checkbox. `checks` on the fields and on Confirm, which stays disabled until they pass. An action context resolved from the card (`restaurantId`) and from the data model (`party`). `formatString`, `formatCurrency`, `formatDate` and `pluralize`. |
+| `Open a support ticket` | A form with an email, a description, a severity picker, an urgency slider, a checkbox, a date and a help modal. Send stays disabled until the email and description pass their checks. Low severity with urgency 4 or 5 is refused by the server, and the answer is one operation that only sets data, so the form keeps what you typed. Any other combination is filed. | `required`, `email`, `length` and `and` checks. A `Modal`. The difference between what the browser can check and what only the server knows. |
+| `Deploy the release` | A board that changes while the run streams: seven `ACTIVITY_DELTA` patches, each appending `updateDataModel` operations to the activity. The run ends with the rollout still going. Type in the release note while it streams and the text stays. Pause rollout sends the progress and the note, and the answer is one more patch on the same activity. | Deltas on the A2UI path, a surface that is never rebuilt, and `Tabs` for the summary and the logs. |
+| `Compare three laptops` | `building`, a first attempt that leaves a card out, `retrying` with the validation error, then the valid surface and a closing line from the agent. | The lifecycle the A2UI middleware writes on one activity: `status`, `attempt`, `maxAttempts` and `errors`. The middleware never paints a surface it has rejected. The showcase sends the invalid attempt anyway, so there is something to inspect. |
+| `Compare three laptops (never valid)` | Three invalid attempts with two `retrying` frames between them, then `failed` with `error`, `attempts` and `maxAttempts`, and a line from the agent saying nothing was drawn. | The failure state of the same lifecycle. |
+| `Probe the sandbox` | One list that asks for a picture, a video, a sound and an `openUrl`, puts markup in a text, uses a component the catalog does not have, and then sends an entry that is not an object, one with no version, a v0.8 entry, an unknown catalog and an update for a surface that does not exist. | What a client refuses, and that the rest of the list still draws. Every address is on the reserved `.invalid` host, so nothing can resolve and the page requests nothing. |
+| `Show the order form` | The original form. Edit the note and press Send note. | The continuation: the surface changes in place. |
+
+Four renderer details matter when you write a story of your own. A check is `{ "condition": ..., "message": ... }`, and a button
+with a failing check is disabled. A text field holds text, so check it with `regex` or `length`. `numeric` takes a number, and the
+renderer reports an error when it gets a string. A modal's trigger button needs an action, and a `functionCall` action opens the
+modal without sending anything. A child id that no component has is drawn as `[Loading id...]` with no error, because a later
+message may still supply it.
 
 Choose an agent from the Agent selector beside the endpoint (Settings has the same choice). The first one, Interactive scenarios, is selected at start. The page says in plain text, above
 the inspector, that the examples are scripted and run inside the page, and links the

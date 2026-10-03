@@ -23,15 +23,25 @@
     },
     {
       "id": "a2ui",
-      "name": "A2UI form (browser-local example)",
+      "name": "A2UI showcase (browser-local example)",
       "url": "__demo__/agent/a2ui",
       "capabilities": {
-        "identity": { "name": "A2UI reference agent", "version": "0.1.0" },
-        "transport": { "streaming": true }
+        "identity": { "name": "A2UI showcase agent", "version": "0.2.0", "description": "Scripted A2UI v0.9 stories built from the basic catalog" },
+        "transport": { "streaming": true },
+        "tools": { "supported": false },
+        "custom": { "a2ui": { "version": "v0.9", "catalog": "basic", "activityType": "a2ui-surface", "activityDeltas": true } }
       },
       "preset": {
         "messages": "turn",
-        "quickMessages": ["Show the order form"]
+        "quickMessages": [
+          "Find a table for 4",
+          "Open a support ticket",
+          "Deploy the release",
+          "Compare three laptops",
+          "Compare three laptops (never valid)",
+          "Probe the sandbox",
+          "Show the order form"
+        ]
       }
     },
     {

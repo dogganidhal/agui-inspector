@@ -58,7 +58,9 @@ server/transport factory adds unnecessary abstraction.
 | examples/reference-agent/config-scenarios.ts | Existing preset variables, ordered preparation and quick-message syntax; remains unchanged. |
 
 Demo wraps existing A2UI operations in supported activity events and forwards recorded action
-envelopes to existing continuation. No Node I/O modules enter the worker dependency graph.
+envelopes to existing continuation. The showcase stories (examples/reference-agent/a2ui-showcase.ts)
+are further pure producers behind the same route: a later step of a story is rebuilt from the action's
+name and resolved context, never from memory. No Node I/O modules enter the worker dependency graph.
 
 ## R4: Startup CSP / visitor policy / loopback limit
 

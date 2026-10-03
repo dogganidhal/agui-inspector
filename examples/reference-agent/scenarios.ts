@@ -9,6 +9,7 @@
 // is meant to be watched slowly. Imports nothing from Node, React or a worker.
 // Erasable TypeScript only, so Node can run it directly.
 import { continuation, formSurface, type UserAction } from './a2ui-scenarios.ts';
+import { showcaseEvents } from './a2ui-showcase.ts';
 import { baselineRun, runError, type RunIds } from './protocol-fixtures.ts';
 import type { ScenarioEnding } from './recorder-fixtures.ts';
 
@@ -178,13 +179,21 @@ const isUserAction = (value: unknown): value is UserAction => {
 };
 
 /**
- * The A2UI agent: the form as an activity snapshot, or, for a run that carries a surface action in the
- * normal `forwardedProps.a2uiAction` envelope, the form extended by the existing continuation. The same
- * activity is replaced, so the surface changes in place.
+ * The A2UI agent. A showcase story answers the quick message that names it, or the surface action its own
+ * surfaces send (a2ui-showcase.ts). Otherwise it is the order form as an activity snapshot or, for a run
+ * that carries a form action in the normal `forwardedProps.a2uiAction` envelope, the form extended by the
+ * existing continuation. The same activity is replaced, so the surface changes in place. An action
+ * that no surface of the showcase or the form sent is acknowledged in text.
  */
 export function a2uiResponse(input: RunInput): ScenarioResponse {
   const userAction = input.forwardedProps?.a2uiAction?.userAction;
-  const operations = isUserAction(userAction) ? continuation(formSurface, userAction) : formSurface;
+  const action = isUserAction(userAction) ? userAction : undefined;
+  const story = showcaseEvents(input.runId, lastUserText(input), action);
+  if (story !== undefined) return sse([started(input), ...story, finished(input)]);
+  if (action !== undefined && action.surfaceId !== 'form') {
+    return sse([started(input), ...say(`m-${input.runId}`, `Action received: ${action.name} ${JSON.stringify(action.context)}`), finished(input)]);
+  }
+  const operations = action !== undefined ? continuation(formSurface, action) : formSurface;
   return sse([started(input), { type: 'ACTIVITY_SNAPSHOT', ...A2UI_ACTIVITY, content: { a2ui_operations: operations }, replace: true }, finished(input)]);
 }
 
