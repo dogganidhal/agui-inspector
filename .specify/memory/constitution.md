@@ -1,7 +1,7 @@
 <!--
 Sync Impact Report
 Version: 1.1.0 -> 1.2.0 (MINOR narrow exception to principle I).
-Approval: pending, project maintainer review of the pull request that carries this change.
+Approval: project maintainer, 2026-10-03 (pull request #58 merged after the maintainer approved the exception).
 Modified principle: I. The wire comes first (the protocol client's stream).
 Affected sections: principle I; MVP FR-009; docs/inspection.md; docs/dependencies.md.
 Added/removed sections: none.
