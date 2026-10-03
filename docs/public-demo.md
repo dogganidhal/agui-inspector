@@ -28,10 +28,12 @@ The interactive and A2UI agents answer at the speed of a model, not in one burst
 - A new message, step or tool call waits 150 to 400 ms. A tool result waits 400 to 900 ms after its call. A state or surface
   update waits 250 to 600 ms.
 
-A plain reply takes about 0.7 seconds and the other scenarios up to about 1.2. Pacing changes chunking and timing only. The event types come in the same order, and
+A plain reply takes about 0.7 seconds and the other scenarios, `slow` aside, up to about 1.2. Pacing changes chunking and timing only. The event types come in the same order, and
 the deltas of a message join back into the original text, so the frames list shows five word-sized deltas where the unpaced
 scenario had one. A delta that has no start event, as in the `broken` scenario, stays the one frame it was, so pacing adds
-nothing to the damage. The `slow` scenario still streams "Thinking about it" and then stays open until you press Stop.
+nothing to the damage. The `slow` scenario is the one deliberately slow run: it uses a slower profile (a 600 to 1000 ms think
+pause, 110 to 170 ms between words) for a reply of about fifty words, so it takes 6 to 10 seconds and then finishes with its own
+`RUN_FINISHED`. The `never finishes` scenario streams one sentence and stays open until you press Stop.
 
 The pauses come from a hash of each chunk's position, with no clock and no `Math.random`, so a run takes the same time on every
 visit. The protocol examples are exempt. Their bytes are the point (uneven chunks, mixed delimiters), so they reach the page
@@ -42,11 +44,11 @@ response. No closing frame is made up, and nothing arrives afterwards.
 
 The layer belongs to the adapter, so any scenario that returns a `ScenarioResponse` is paced without knowing about it. The
 Node reference agent stays at wire speed, which keeps tests fast and their frame counts exact. A test that wants the demo's
-behavior passes a profile: `createInteractiveServer({ pace: NATURAL_PACE })`.
+behavior passes a profile: `createInteractiveServer({ pace: NATURAL_PACE })`, or `SLOW_PACE` for the `slow` scenario.
 
 | Agent | Quick messages | What it shows |
 | --- | --- | --- |
-| Interactive scenarios | `Hello there`, `interrupt`, `tools`, `slow`, `state`, `broken` | A plain reply; two interrupts to resolve or cancel; two tool calls that need results; a response held open until you press Stop; state snapshot and delta; a run with a broken frame in the middle. Each message first sends the preparation requests (a session `PUT` and a warm-up `POST`) the preset declares. All of them stream with the pacing described below. |
+| Interactive scenarios | `Hello there`, `interrupt`, `tools`, `slow`, `never finishes`, `state`, `broken` | A plain reply; two interrupts to resolve or cancel; two tool calls that need results; a long reply that streams slowly and finishes; a response that stays open until you press Stop; state snapshot and delta; a run with a broken frame in the middle. Each message first sends the preparation requests (a session `PUT` and a warm-up `POST`) the preset declares. All of them stream with the pacing described below. |
 | A2UI form | `Show the order form` | A form surface. Edit the note and press Send note: the action goes out in a new run and the surface changes in place. |
 | Protocol baseline | `Run the baseline protocol example` | 30 of the 31 event types, mixed line delimiters, split into uneven chunks. Not paced. |
 | Protocol run error | `Run the failing example` | `RUN_STARTED` then `RUN_ERROR`, the 31st type. |

@@ -18,7 +18,7 @@
           { "method": "PUT", "path": "__demo__/prepare/sessions/{{threadId}}", "body": { "thread": "{{threadId}}" } },
           { "method": "POST", "path": "__demo__/prepare/warm", "body": { "run": "{{runId}}" } }
         ],
-        "quickMessages": ["Hello there", "interrupt", "tools", "slow", "state", "broken"]
+        "quickMessages": ["Hello there", "interrupt", "tools", "slow", "never finishes", "state", "broken"]
       }
     },
     {

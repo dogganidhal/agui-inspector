@@ -97,7 +97,19 @@ const CASES: readonly Case[] = [
   {
     name: 'slow',
     extra: user(SCENARIOS.slow),
-    expected: frames(started, { type: 'TEXT_MESSAGE_START', messageId: 'm-r-1', role: 'assistant' }, { type: 'TEXT_MESSAGE_CONTENT', messageId: 'm-r-1', delta: 'Thinking about it' }),
+    expected: frames(
+      started,
+      ...say(
+        'm-r-1',
+        'This reply is slow on purpose. A busy model can take several seconds to write a long answer, and the inspector records every frame as it arrives. The run finishes by itself when the last word lands. Press Stop at any point to cancel it and keep what has arrived.',
+      ),
+      finished,
+    ),
+  },
+  {
+    name: 'never finishes',
+    extra: user(SCENARIOS.neverFinishes),
+    expected: frames(started, { type: 'TEXT_MESSAGE_START', messageId: 'm-r-1', role: 'assistant' }, { type: 'TEXT_MESSAGE_CONTENT', messageId: 'm-r-1', delta: 'This response stays open until you press Stop.' }),
     ending: 'hold-until-abort',
   },
   {
@@ -197,6 +209,12 @@ for (const scenario of CASES) {
     assert.equal(site.openStreams(), 0);
   });
 }
+
+test('only the slow scenario asks for slow pacing, and only never finishes is held open', () => {
+  const answers = Object.values(SCENARIOS).map((content) => [content, interactiveResponse({ ...ids, ...user(content) })] as const);
+  assert.deepEqual(answers.filter(([, answer]) => answer.pacing !== undefined).map(([content, answer]) => [content, answer.pacing]), [['slow', 'slow']]);
+  assert.deepEqual(answers.filter(([, answer]) => answer.ending === 'hold-until-abort').map(([content]) => content), ['never finishes']);
+});
 
 test('the interrupts the server declares are the ones exported for tests', () => {
   assert.deepEqual(INTERRUPTS.map((interrupt) => interrupt.id), ['i-approve', 'i-contact']);
@@ -403,15 +421,15 @@ test('the example configuration is a valid version-0 file with the four example 
   }
 });
 
-test('the interactive agent exposes all six scenarios as quick messages and prepares a session, then warms, in order', () => {
+test('the interactive agent exposes all seven scenarios as quick messages and prepares a session, then warms, in order', () => {
   const parsed = parseConfig(demoFile('config.json'));
   assert.ok(parsed.ok);
   const interactive = parsed.value.agents.find((agent) => agent.id === 'interactive')!;
   const messages = interactive.preset!.quickMessages!;
-  assert.equal(messages.length, 6);
+  assert.equal(messages.length, 7);
   assert.deepEqual(messages.slice(1), Object.values(SCENARIOS));
   const answers = messages.map((message) => bodyOf(interactiveResponse({ ...ids, messages: [{ role: 'user', content: message }] })));
-  assert.equal(new Set(answers).size, 6, 'six different scenarios');
+  assert.equal(new Set(answers).size, 7, 'seven different scenarios');
   assert.match(answers[0]!, /Hello from the reference agent\./, 'the first is the plain reply');
 
   assert.deepEqual(

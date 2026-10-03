@@ -174,7 +174,8 @@ const reply = (page: Page) => page.getByText('Hello from the reference agent.', 
 const heading = (page: Page) => page.getByRole('heading', { name: 'agui-inspector', level: 1 });
 const status = (page: Page) => page.locator('#demo-status');
 const messageBox = (page: Page) => page.getByLabel('Message', { exact: true });
-const stopButton = (page: Page) => page.getByRole('button', { name: 'Stop' });
+// Exact: a frame row that quotes the never finishes text ("... press Stop.") has a button name that contains Stop too.
+const stopButton = (page: Page) => page.getByRole('button', { name: 'Stop', exact: true });
 const quick = (page: Page, text: string) => page.getByRole('button', { name: text, exact: true });
 const card = (page: Page, interruptId: string): Locator => page.locator(`[data-entry="interrupt"][data-interrupt="${interruptId}"]`);
 const toolCard = (page: Page, toolCallId: string): Locator => page.locator(`[data-entry="tool-result"][data-tool-call="${toolCallId}"]`);
@@ -481,7 +482,7 @@ test('New thread empties the conversation and state at once, keeps every exchang
 });
 
 // ---------------------------------------------------------------------------------------------
-// Slow responses and Stop (G-D03)
+// A response that never finishes, and Stop (G-D03)
 // ---------------------------------------------------------------------------------------------
 
 /**
@@ -515,16 +516,16 @@ async function countCancellations(worker: Worker): Promise<() => Promise<number>
   return () => worker.evaluate(() => (globalThis as unknown as { __cancelled: number }).__cancelled);
 }
 
-test('slow: bytes arrive while the response is held open, and Stop releases the client, the recorder and the producer', async ({ page, context, open }) => {
+test('never finishes: bytes arrive while the response is held open, and Stop releases the client, the recorder and the producer', async ({ page, context, open }) => {
   const site = await open();
   await openDemo(page, site);
   const [worker] = context.serviceWorkers();
   expect(worker, 'the demo worker is running').toBeDefined();
   const cancelled = await countCancellations(worker!);
 
-  await quick(page, 'slow').click();
+  await quick(page, 'never finishes').click();
   // Incremental: the text is on screen while the response is still open and Stop is live.
-  await expect(page.getByText('Thinking about it', { exact: true })).toBeVisible();
+  await expect(page.getByText('This response stays open until you press Stop.', { exact: true })).toBeVisible();
   await expect(stopButton(page)).toBeEnabled();
   await expect(messageBox(page)).toBeDisabled();
   expect(await cancelled(), 'held open: nothing is cancelled yet').toBe(0);
@@ -534,12 +535,12 @@ test('slow: bytes arrive while the response is held open, and Stop releases the 
   await expect.poll(cancelled, 'the page cancelled both of its readers, so the held-open producer was released').toBe(1);
 
   const session = await exportSession(page);
-  const [slow] = conversations(session);
-  expect(slow?.transport).toBe('user-stopped');
+  const [held] = conversations(session);
+  expect(held?.transport).toBe('user-stopped');
   // The partial evidence is kept as received, and no terminal frame was made up.
-  // The text arrived as three word-sized deltas; the response is still open after the last one.
-  expect(framesOf(session, slow!.id).map((frame) => frame.eventType)).toEqual(['RUN_STARTED', 'TEXT_MESSAGE_START', 'TEXT_MESSAGE_CONTENT', 'TEXT_MESSAGE_CONTENT', 'TEXT_MESSAGE_CONTENT']);
-  expect(wireOf(session, slow!.id)).toBe(decode(produced(slow!)));
+  // The text arrived as eight word-sized deltas; the response is still open after the last one.
+  expect(framesOf(session, held!.id).map((frame) => frame.eventType)).toEqual(['RUN_STARTED', 'TEXT_MESSAGE_START', ...Array<string>(8).fill('TEXT_MESSAGE_CONTENT')]);
+  expect(wireOf(session, held!.id)).toBe(decode(produced(held!)));
   expect(session.runs[0]?.outcome).toEqual({ kind: 'unknown' });
   expect(session.findings.filter((finding) => finding.kind === 'terminal')).toHaveLength(1);
   await expect(page.locator('[data-entry="run"]')).toContainText('Stopped by you');
@@ -551,21 +552,21 @@ test('slow: bytes arrive while the response is held open, and Stop releases the 
   expect(site.requests.filter((request) => request.method !== 'GET')).toEqual([]);
 });
 
-test('slow: stopping the moment the run starts keeps what arrived, makes up no terminal frame and leaves the example usable', async ({ page, open }) => {
+test('never finishes: stopping the moment the run starts keeps what arrived, makes up no terminal frame and leaves the example usable', async ({ page, open }) => {
   const site = await open();
   await openDemo(page, site);
-  await quick(page, 'slow').click();
+  await quick(page, 'never finishes').click();
   await expect(stopButton(page)).toBeEnabled();
   await stopButton(page).click();
   await idle(page);
 
   const session = await exportSession(page);
-  const [slow] = conversations(session);
-  expect(slow?.transport).toBe('user-stopped');
-  const types = framesOf(session, slow!.id).map((frame) => frame.eventType);
+  const [held] = conversations(session);
+  expect(held?.transport).toBe('user-stopped');
+  const types = framesOf(session, held!.id).map((frame) => frame.eventType);
   expect(types).not.toContain('RUN_FINISHED');
   expect(types).not.toContain('RUN_ERROR');
-  expect(wireOf(session, slow!.id)).toBe(decode(produced(slow!)).slice(0, wireOf(session, slow!.id).length));
+  expect(wireOf(session, held!.id)).toBe(decode(produced(held!)).slice(0, wireOf(session, held!.id).length));
 
   await quick(page, 'Hello there').click();
   await expect(reply(page)).toBeVisible();

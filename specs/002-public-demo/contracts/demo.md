@@ -83,9 +83,16 @@ result 400 to 900 ms after its call, a state or surface update 250 to 600 ms. Ev
 those of the scenario and each delta stream joins back to the original text. Baseline and run-error bytes,
 chunks and delimiters are unchanged and unpaced. The only worker timers are these pauses.
 
+Two scenarios run long (FX10). `slow` is a reply of about fifty words that finishes: TEXT_MESSAGE_START,
+the word-sized deltas, TEXT_MESSAGE_END and RUN_FINISHED. Its response carries `pacing: 'slow'`, which
+selects a slower profile (a 600 to 1000 ms think pause and 110 to 170 ms between words), so the run is
+scheduled over 6 to 10 seconds whichever pauses the hash picks. `never finishes` uses the natural
+profile, streams "This response stays open until you press Stop." and holds the response open, with no
+TEXT_MESSAGE_END and no RUN_FINISHED, until Stop or another cancel from the page.
+
 ## Example config
 
-Existing version 0, agents/capabilities/presets only. Interactive messages cover six scenarios;
+Existing version 0, agents/capabilities/presets only. Interactive messages cover seven scenarios;
 A2UI/baseline/run-error have their own quick messages. Interactive preset demonstrates ordered
 session/warm preparations using threadId/runId built-ins. A2UI actions use existing forwardedProps
 envelope in a new run, not an auxiliary fake transport. Source references are relative; build

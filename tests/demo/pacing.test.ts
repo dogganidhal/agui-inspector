@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { createInteractiveServer } from '../../examples/reference-agent/interactive-scenarios.ts';
-import { deliver, NATURAL_PACE, pace, sleepOn, type PaceProfile, type Sleep } from '../../examples/reference-agent/pacing.ts';
+import { deliver, NATURAL_PACE, pace, SLOW_PACE, sleepOn, type PaceProfile, type Sleep } from '../../examples/reference-agent/pacing.ts';
 import { a2uiResponse, baselineResponse, interactiveResponse, runErrorResponse, SCENARIOS, type RunInput, type ScenarioResponse } from '../../examples/reference-agent/scenarios.ts';
 
 const decoder = new TextDecoder();
@@ -49,6 +49,7 @@ test('every interactive scenario keeps its event types in order, and every delta
     ['interrupt', run(SCENARIOS.interrupt)],
     ['tools', run(SCENARIOS.tools)],
     ['slow', run(SCENARIOS.slow)],
+    ['never finishes', run(SCENARIOS.neverFinishes)],
     ['state', run(SCENARIOS.state)],
     ['resume', run(undefined, { resume: [{ interruptId: 'i-approve', status: 'resolved', payload: { approved: true, note: 'ok' } }] })],
     ['tool results', run(undefined, { messages: [{ role: 'tool', toolCallId: 'c-color', content: 'teal' }] })],
@@ -126,12 +127,75 @@ test('wire fragments and invalid frames are kept as they are, and the protocol f
   assert.deepEqual(broken.chunks, run(SCENARIOS.broken).chunks, 'a delta with no start is the damage and stays one frame: pacing adds nothing to it');
 });
 
-test('the slow scenario keeps its semantics: it streams a little, then stays open', () => {
+test('the never finishes scenario streams a little, then stays open and says so', () => {
+  const held = pace(run(SCENARIOS.neverFinishes));
+  assert.equal(held.ending, 'hold-until-abort');
+  assert.deepEqual(distinct(typesOf(held)), ['RUN_STARTED', 'TEXT_MESSAGE_START', 'TEXT_MESSAGE_CONTENT']);
+  assert.equal(Object.values(said(held)).join(''), 'This response stays open until you press Stop.');
+  assert.ok(!typesOf(held).includes('RUN_FINISHED'), 'no terminal frame is made up');
+  assert.ok(!typesOf(held).includes('TEXT_MESSAGE_END'), 'the message is left open too');
+});
+
+test('the slow scenario is a long reply that finishes: message end, then RUN_FINISHED, and the closing body', () => {
   const slow = pace(run(SCENARIOS.slow));
-  assert.equal(slow.ending, 'hold-until-abort');
-  assert.deepEqual(distinct(typesOf(slow)), ['RUN_STARTED', 'TEXT_MESSAGE_START', 'TEXT_MESSAGE_CONTENT']);
-  assert.equal(Object.values(said(slow)).join(''), 'Thinking about it');
-  assert.ok(!typesOf(slow).includes('RUN_FINISHED'), 'no terminal frame is made up');
+  assert.equal(slow.ending, 'close');
+  assert.deepEqual(distinct(typesOf(slow)), ['RUN_STARTED', 'TEXT_MESSAGE_START', 'TEXT_MESSAGE_CONTENT', 'TEXT_MESSAGE_END', 'RUN_FINISHED']);
+  assert.equal(typesOf(slow).at(-1), 'RUN_FINISHED');
+  const text = Object.values(said(run(SCENARIOS.slow))).join('');
+  assert.ok(text.split(/[.!?] /).length >= 3, 'a few sentences');
+  assert.equal(Object.values(said(slow)).join(''), text, 'the words join back into the original reply');
+  assert.ok(eventsOf(slow).filter((event) => event.type === 'TEXT_MESSAGE_CONTENT').length > 30, 'streamed a word at a time');
+});
+
+/** A virtual clock: `sleep` advances `now` by what it was asked for and never waits, so a run of seconds takes no time. */
+function virtualClock(): { now: number; sleep: Sleep } {
+  const clock = {
+    now: 0,
+    sleep: (async (ms, signal) => {
+      if (!signal.aborted) clock.now += ms;
+    }) as Sleep,
+  };
+  return clock;
+}
+
+test('the slow scenario is scheduled over 6 to 10 seconds and its last frame, RUN_FINISHED, goes out at the end', async () => {
+  const slow = pace(run(SCENARIOS.slow));
+  const total = slow.delaysMs!.reduce((sum, delay) => sum + delay, 0);
+  assert.ok(total >= 6000 && total <= 10_000, `the slow run is scheduled over ${total} ms`);
+
+  const clock = virtualClock();
+  const written: { type: string; at: number }[] = [];
+  const started = Date.now();
+  const complete = await deliver(slow, (chunk) => written.push({ type: (JSON.parse(decoder.decode(chunk).slice('data: '.length)) as Event).type, at: clock.now }), clock.sleep, new AbortController().signal);
+  assert.ok(Date.now() - started < 200, 'ten seconds of schedule was delivered without sleeping');
+  assert.equal(complete, true);
+  assert.equal(clock.now, total, 'delivery waited exactly the schedule');
+  assert.deepEqual(written.at(-1), { type: 'RUN_FINISHED', at: total });
+  assert.equal(written[0]!.at, 0, 'RUN_STARTED goes out at once');
+
+  // The window does not depend on which pauses the hash picks, only on the profile and the reply's length.
+  const [think, ...tokens] = slow.delaysMs!.filter((delay) => delay > 0);
+  assert.ok(inRange(think!, SLOW_PACE.think), 'the first pause is the think latency');
+  assert.ok(tokens.every((delay) => inRange(delay, SLOW_PACE.token)), 'every later pause is a token interval');
+  assert.ok(SLOW_PACE.think[0] + tokens.length * SLOW_PACE.token[0] >= 6000, 'the quickest the profile can stream it is 6 seconds');
+  assert.ok(SLOW_PACE.think[1] + tokens.length * SLOW_PACE.token[1] <= 10_000, 'the slowest is 10 seconds');
+});
+
+test('Stop partway through the slow scenario ends the wait at once, writes nothing more and leaves no terminal frame', async () => {
+  const slow = pace(run(SCENARIOS.slow));
+  const stop = new AbortController();
+  const clock = virtualClock();
+  const written: Uint8Array[] = [];
+  const sleep: Sleep = async (ms, signal) => {
+    if (clock.now >= 3000) stop.abort(); // Stop pressed three seconds in, during a pause
+    await clock.sleep(ms, signal);
+  };
+  assert.equal(await deliver(slow, (chunk) => written.push(chunk), sleep, stop.signal), false);
+  assert.ok(clock.now >= 3000 && clock.now < 3200, `the schedule stopped at ${clock.now} ms, not at its end`);
+  assert.ok(written.length > 5 && written.length < slow.chunks.length - 1, 'part of the reply arrived');
+  assert.deepEqual(written, slow.chunks.slice(0, written.length), 'what arrived is a prefix of the original frames, unchanged');
+  const types = written.map((chunk) => (JSON.parse(decoder.decode(chunk).slice('data: '.length)) as Event).type);
+  assert.ok(!types.includes('RUN_FINISHED') && !types.includes('TEXT_MESSAGE_END'), 'no terminal frame is made up');
 });
 
 // ---- what changes: the pauses ---------------------------------------------------------------------
@@ -220,6 +284,7 @@ test('a profile sets the ranges, and an instant one asks for no time at all', ()
   assert.ok(pace(run('hello'), none).delaysMs!.every((delay) => delay === 0));
   const fixed: PaceProfile = { ...none, think: [250, 250] };
   assert.equal(pace(run('hello'), fixed).delaysMs![1], 250);
+  assert.ok(pace(run(SCENARIOS.slow), none).delaysMs!.every((delay) => delay === 0), 'a profile that is passed wins over the slow scenario’s own');
 });
 
 // ---- playing a paced response -----------------------------------------------------------------------
@@ -360,11 +425,11 @@ test('with a profile the Node server streams the paced bytes over time and close
 });
 
 test('with a profile a held run counts as open at once, and Stop mid-stream releases it and writes nothing more', async () => {
-  const slowProfile: PaceProfile = { ...FAST, think: [400, 400] };
-  const server = await createInteractiveServer({ pace: slowProfile });
+  const lateProfile: PaceProfile = { ...FAST, think: [400, 400] };
+  const server = await createInteractiveServer({ pace: lateProfile });
   try {
     const stop = new AbortController();
-    const response = await post(server.origin, SCENARIOS.slow, stop.signal);
+    const response = await post(server.origin, SCENARIOS.neverFinishes, stop.signal);
     const reader = response.body!.getReader();
     await reader.read(); // RUN_STARTED; the think pause is now running
     assert.equal(server.openStreams(), 1, 'the connection is open while it thinks');

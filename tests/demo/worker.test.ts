@@ -203,7 +203,7 @@ const userAction: UserAction = { name: 'send_note', surfaceId: 'form', sourceCom
 test('the interactive route serves every scenario and continuation as the shared producer answers it, paced', async () => {
   const bodies = [
     { messages: [{ role: 'user', content: 'plain hello' }] },
-    ...Object.values(SCENARIOS).filter((name) => name !== 'slow').map((name) => ({ messages: [{ role: 'user', content: name }] })),
+    ...Object.values(SCENARIOS).filter((name) => name !== SCENARIOS.neverFinishes).map((name) => ({ messages: [{ role: 'user', content: name }] })),
     { resume: [{ interruptId: 'i-approve', status: 'resolved', payload: { approved: true } }, { interruptId: 'i-contact', status: 'cancelled' }] },
     { messages: [{ role: 'tool', toolCallId: 'c-color', content: 'teal' }] },
     { forwardedProps: { a2uiAction: { userAction } } },
@@ -326,16 +326,16 @@ async function answeredWithSpy(request: Request, target: Harness = worker): Prom
   }
 }
 
-const slowRequest = () => post('agent/interactive', input({ messages: [{ role: 'user', content: SCENARIOS.slow }] }));
-const slowResponse = () => pace(interactiveResponse({ threadId: 't-1', runId: 'r-1', messages: [{ role: 'user', content: SCENARIOS.slow }] }));
-const slowBytes = () => joined(slowResponse());
-const slowChunks = slowResponse().chunks.length;
+const heldRequest = () => post('agent/interactive', input({ messages: [{ role: 'user', content: SCENARIOS.neverFinishes }] }));
+const heldResponse = () => pace(interactiveResponse({ threadId: 't-1', runId: 'r-1', messages: [{ role: 'user', content: SCENARIOS.neverFinishes }] }));
+const heldBytes = () => joined(heldResponse());
+const heldChunks = heldResponse().chunks.length;
 const heldFor = (read: Promise<unknown>) => Promise.race([read.then(() => 'ended'), new Promise((resolve) => setTimeout(() => resolve('held'), 60))]);
 
 test('a held response delivers its bytes in order, stays open without inventing a terminal frame, and releases on cancel', async () => {
-  const expected = slowResponse();
+  const expected = heldResponse();
   assert.equal(expected.ending, 'hold-until-abort');
-  const { response, cancelled } = await answeredWithSpy(slowRequest());
+  const { response, cancelled } = await answeredWithSpy(heldRequest());
 
   const reader = response.body!.getReader();
   const received: Uint8Array[] = [];
@@ -344,7 +344,7 @@ test('a held response delivers its bytes in order, stays open without inventing 
     assert.equal(done, false);
     received.push(value!);
   }
-  assert.deepEqual(Buffer.concat(received), slowBytes(), 'every byte arrives before the hold, in order');
+  assert.deepEqual(Buffer.concat(received), heldBytes(), 'every byte arrives before the hold, in order');
 
   const waiting = reader.read();
   assert.equal(await heldFor(waiting), 'held', 'the stream stays open and sends nothing more');
@@ -359,11 +359,11 @@ test('a held response delivers its bytes in order, stays open without inventing 
 
 test('the producer is released only when both branches of a teed held response stop', async () => {
   // The recorder and the client each read a branch; the source must outlive either one alone.
-  const { response, cancelled } = await answeredWithSpy(slowRequest());
+  const { response, cancelled } = await answeredWithSpy(heldRequest());
   const [recorder, client] = response.body!.tee();
   const recorderReader = recorder.getReader();
   const clientReader = client.getReader();
-  for (let index = 0; index < slowChunks; index += 1) {
+  for (let index = 0; index < heldChunks; index += 1) {
     const [first] = await Promise.all([recorderReader.read(), clientReader.read()]);
     assert.equal(first.done, false);
   }
@@ -442,6 +442,44 @@ test('Stop in the middle of a pause ends it, sends nothing more, closes nothing 
   assert.equal(manual.clock.waiting.size, 0, 'the pause was cleared, not left to fire later');
   manual.clock.fire();
   assert.equal(manual.clock.delays.length, 1, 'no later chunk was scheduled');
+});
+
+const slowRequest = () => post('agent/interactive', input({ messages: [{ role: 'user', content: SCENARIOS.slow }] }));
+const slowResponse = () => pace(interactiveResponse({ threadId: 't-1', runId: 'r-1', messages: [{ role: 'user', content: SCENARIOS.slow }] }));
+
+test('the slow scenario is played on the slow profile over 6 to 10 seconds, then ends with RUN_FINISHED and a closed body', async () => {
+  const instant = load();
+  const expected = slowResponse();
+  const text = decoder.decode(await bytesOf((await instant.fetch(slowRequest()))!)); // the body only finishes reading if the worker closed it
+  assert.deepEqual(Buffer.from(text), joined(expected));
+  assert.ok(text.endsWith('"type":"RUN_FINISHED","threadId":"t-1","runId":"r-1","outcome":{"type":"success"}}\n\n'), 'the run ends with its own RUN_FINISHED');
+  const asked = instant.clock.delays;
+  assert.deepEqual(asked, expected.delaysMs!.filter((delay) => delay > 0), 'the worker asked for exactly the slow pauses');
+  assert.ok(asked[0]! >= 600 && asked[0]! <= 1000, `think latency ${asked[0]}`);
+  const total = asked.reduce((sum, delay) => sum + delay, 0);
+  assert.ok(total >= 6000 && total <= 10_000, `the slow run is scheduled over ${total} ms`);
+});
+
+test('Stop partway through the slow scenario releases the producer, sends nothing more and invents no RUN_FINISHED', async () => {
+  const manual = load(undefined, { manual: true });
+  const { response, cancelled } = await answeredWithSpy(slowRequest(), manual);
+  const reader = response.body!.getReader();
+  const received: Uint8Array[] = [(await reader.read()).value!];
+  for (let frame = 0; frame < 8; frame += 1) {
+    manual.clock.fire();
+    received.push((await reader.read()).value!);
+  }
+  assert.equal(manual.clock.waiting.size, 1, 'the worker is waiting for the next word');
+
+  const waiting = reader.read();
+  await reader.cancel(new DOMException('stopped', 'AbortError'));
+  assert.deepEqual(await waiting, { value: undefined, done: true });
+  assert.equal(cancelled.length, 1, 'the producer was told to stop');
+  assert.equal(manual.clock.waiting.size, 0, 'the pause was cleared, not left to fire later');
+  manual.clock.fire();
+  assert.equal(manual.clock.delays.length, 9, 'no later chunk was scheduled');
+  assert.deepEqual(Buffer.concat(received), Buffer.concat(slowResponse().chunks.slice(0, 9)), 'what arrived is the start of the run, unchanged');
+  assert.ok(!decoder.decode(Buffer.concat(received)).includes('RUN_FINISHED'));
 });
 
 test('protocol fixtures are byte-exact wire evidence: no pause is asked for and no byte is re-cut', async () => {

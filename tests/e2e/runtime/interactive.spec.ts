@@ -289,11 +289,22 @@ test('a sequence violation and a broken frame become findings while every frame 
 // US1.6: Stop and New thread
 // ---------------------------------------------------------------------------------------------
 
+test('the slow scenario is a reply that finishes: unpaced, it ends with a message end and RUN_FINISHED', async ({ page, servers }) => {
+  await open(page, servers, { agent: 'plain' });
+  await send(page, 'slow');
+  const recorded = await settled(page, 1);
+  expect(recorded.exchanges[0]?.transport).toBe('completed');
+  expect(recorded.frames.map((frame) => frame.eventType)).toEqual(['RUN_STARTED', 'TEXT_MESSAGE_START', 'TEXT_MESSAGE_CONTENT', 'TEXT_MESSAGE_END', 'RUN_FINISHED']);
+  expect(recorded.runs[0]?.outcome).toEqual({ kind: 'success', pendingToolCallIds: [] });
+  expect(recorded.findings.filter((finding) => finding.kind === 'terminal')).toHaveLength(0);
+  expect(servers.site.openStreams()).toBe(0);
+});
+
 test('Stop ends the connection, keeps the partial recording and makes up no terminal event', async ({ page, servers }) => {
   await open(page, servers, { agent: 'plain' });
   const stop = page.getByRole('button', { name: 'Stop' });
   await expect(stop).toBeDisabled();
-  await send(page, 'slow');
+  await send(page, 'never finishes');
   await expect(stop).toBeEnabled();
   await expect.poll(() => servers.site.openStreams()).toBe(1);
   await expect(page.getByText('A run is streaming. Stop it to send another message.')).toBeVisible();
