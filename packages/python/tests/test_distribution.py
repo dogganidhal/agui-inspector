@@ -113,7 +113,7 @@ class DistributionTest(unittest.TestCase):
         self.assertEqual(self.expected, in_wheel)
         self.assertEqual(self.expected, in_sdist)
 
-    def test_metadata_is_private_python_310_with_optional_starlette_only(self):
+    def test_metadata_is_uploadable_python_310_with_optional_starlette_only(self):
         with zipfile.ZipFile(self.wheel) as wheel:
             name = next(n for n in wheel.namelist() if n.endswith(".dist-info/METADATA"))
             meta = Parser().parsestr(wheel.read(name).decode())
@@ -122,7 +122,7 @@ class DistributionTest(unittest.TestCase):
             self.assertEqual(["embedded"], meta.get_all("Provides-Extra"))
             requires = [re.sub(r"[ '\"]", "", r) for r in meta.get_all("Requires-Dist")]  # quoting differs by backend
             self.assertEqual(["starlette==1.7.0;extra==embedded"], requires)
-            self.assertIn("Private :: Do Not Upload", meta.get_all("Classifier"))
+            self.assertEqual([], [c for c in meta.get_all("Classifier") or [] if c.startswith("Private ::")])  # PyPI rejects it
             self.assertEqual("MIT", meta["License-Expression"])
             self.assertEqual(list(LICENSE_FILES), meta.get_all("License-File"))
             self.assertFalse([n for n in wheel.namelist() if n.endswith(".dist-info/entry_points.txt")])  # no CLI
@@ -187,11 +187,11 @@ class DistributionTest(unittest.TestCase):
         found = {key: meta["version"] for key, meta in lock.items() if key.split("node_modules/")[-1] == "dompurify"}
         self.assertEqual({"node_modules/dompurify": "3.4.16"}, found)
 
-    def test_pyproject_is_private_mit_with_the_license_files(self):
+    def test_pyproject_is_mit_with_the_license_files_and_no_upload_block(self):
         text = (REPO / "packages" / "python" / "pyproject.toml").read_text()
         self.assertIn('license = "MIT"', text)
         self.assertIn('license-files = ["LICENSE", "THIRD_PARTY_NOTICES.txt"]', text)
-        self.assertIn('"Private :: Do Not Upload"', text)
+        self.assertNotIn("Private ::", text)
 
     def test_ci_runs_python_310_and_314_and_never_publishes(self):
         text = (REPO / ".github" / "workflows" / "ci.yml").read_text()
