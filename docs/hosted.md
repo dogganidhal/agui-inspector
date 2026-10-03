@@ -119,7 +119,7 @@ The option does not change where the page reads its own configuration from. The 
 comes from the page's own origin or from an origin you named in `allowedOrigins`, as before. Turning
 the option on does not let the configuration be read from an address a visitor could type. What the
 configuration declares is a target like any other: a capabilities URL is read when its agent is
-selected (the first agent is selected at start), and a preparation request runs when the visitor sends a
+selected (the first agent is selected at start, and a visitor switches agents from the picker beside the endpoint field), and a preparation request runs when the visitor sends a
 message. Both meet the same boundary as the run, so a deployer who lists agents should list only
 targets they are content for the page to contact. An A2UI surface still loads no remote image, video,
 audio or catalog and opens no link; the policy below leaves `img-src` and `default-src` as they were.

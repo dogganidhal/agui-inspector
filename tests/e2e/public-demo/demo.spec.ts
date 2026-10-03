@@ -183,12 +183,10 @@ async function openDemo(page: Page, site: Site): Promise<void> {
   await expect(heading(page)).toBeVisible();
 }
 
-/** Chooses an example agent by its name, from the picker in Settings. */
+/** Chooses an example agent by its name, from the picker beside the endpoint. */
 async function chooseAgent(page: Page, name: RegExp): Promise<void> {
-  await page.getByRole('button', { name: 'Settings', exact: true }).click();
-  await page.getByRole('button', { name: /\(browser-local example\)/ }).first().click();
-  await page.getByRole('button', { name: new RegExp(`${name.source}.*browser-local example`) }).last().click();
-  await page.getByRole('button', { name: 'Inspection', exact: true }).first().click();
+  await page.getByRole('banner').getByRole('button', { name: /^Agent / }).click();
+  await page.getByRole('banner').getByRole('listitem').getByRole('button', { name }).click();
 }
 
 /** Types into the composer and sends with Enter. */
@@ -524,6 +522,36 @@ test('slow: stopping the moment the run starts keeps what arrived, makes up no t
 // ---------------------------------------------------------------------------------------------
 // A2UI and the protocol examples
 // ---------------------------------------------------------------------------------------------
+
+test('the four example agents are one choice away in the top bar, and a typed endpoint reads Custom URL', async ({ page, open }) => {
+  const site = await open();
+  await openDemo(page, site);
+  const endpoint = page.getByRole('textbox', { name: 'Endpoint URL' });
+  const picker = (name: string) => page.getByRole('banner').getByRole('button', { name: `Agent ${name}`, exact: true });
+
+  await expect(picker('Interactive scenarios (browser-local example)')).toBeVisible();
+  await expect(endpoint).toHaveValue(`${site.base}__demo__/agent/interactive`);
+  await expect(quick(page, 'Hello there')).toBeVisible();
+
+  await picker('Interactive scenarios (browser-local example)').click();
+  const options = page.getByRole('banner').getByRole('listitem');
+  await expect(options).toHaveCount(4);
+  await options.getByRole('button', { name: /A2UI form/ }).click();
+  await expect(picker('A2UI form (browser-local example)')).toBeVisible();
+  await expect(endpoint).toHaveValue(`${site.base}__demo__/agent/a2ui`);
+  await expect(quick(page, 'Show the order form')).toBeVisible();
+  await expect(quick(page, 'Hello there')).toHaveCount(0);
+
+  // Settings is the same selection, from the other side.
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await expect(page.locator('[data-view="settings"]').getByRole('button', { name: 'A2UI form (browser-local example)', exact: true })).toBeVisible();
+
+  await endpoint.fill(`${site.origin}/my-own-agent`);
+  await page.getByRole('button', { name: 'Use endpoint' }).click();
+  await expect(picker('Custom URL')).toBeVisible();
+  await expect(page.locator('[data-view="settings"]').getByRole('button', { name: 'Custom URL', exact: true })).toBeVisible();
+  await expect(quick(page, 'Show the order form')).toHaveCount(0);
+});
 
 test('A2UI: the form renders, its edited action starts a new run, and the surface changes in place', async ({ page, open, requested }) => {
   const site = await open();

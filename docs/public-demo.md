@@ -24,7 +24,7 @@ fixtures. The bytes in the browser and in the Node tests cannot drift apart.
 | Protocol baseline | `Run the baseline protocol example` | 30 of the 31 event types, mixed line delimiters, split into uneven chunks. |
 | Protocol run error | `Run the failing example` | `RUN_STARTED` then `RUN_ERROR`, the 31st type. |
 
-Choose an agent under Settings. The first one, Interactive scenarios, is selected at start. The page says in plain text, above
+Choose an agent from the Agent selector beside the endpoint (Settings has the same choice). The first one, Interactive scenarios, is selected at start. The page says in plain text, above
 the inspector, that the examples are scripted and run inside the page, and links the
 [embedding guide](https://github.com/dogganidhal/agui-inspector/blob/main/docs/embedding.md). The link is ordinary navigation;
 the page does not fetch it.

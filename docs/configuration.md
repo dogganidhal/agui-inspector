@@ -58,6 +58,10 @@ reads as version 0. Any other version is rejected with an error that names it.
 | `agents[].capabilities` | Optional. Either an inline object with up to eleven groups, or a URL that returns one. |
 | `agents[].preset` | Optional. See below. |
 
+The inspector lists the agents in a picker beside the endpoint field in the top bar, on every pane and tab, and
+again under Settings. Both change the same selection. The top bar picker appears only when at least one agent is
+configured, and it reads "Custom URL" once an endpoint has been typed by hand, because that endpoint matches no agent.
+
 Unknown fields are errors. A field that could carry a credential (`headers`, `token`,
 `authorization`, `auth`, `apiKey`, `cookie` and similar) gets a message saying credentials never live
 in configuration. The inspector cannot see what you put inside a request body or a forwarded
@@ -260,6 +264,9 @@ matters. The host that assembles the page supplies:
 - `onImportProfile`, which calls `importProfile` and shows `error` when it fails.
 - `onExportProfile`, which downloads `exportProfile(profile)`.
 - Optionally `capabilities`, the loaded state of a capabilities URL.
+
+The top bar's `TargetControls` takes the same picker as an `agentPicker` slot. Render `AgentPicker` from the settings
+view there with the same `agents`, `selectedAgentId` and `onSelectAgent`, so that choosing in either place runs one handler.
 
 The view imports no stylesheet. The page loads `views/theme/index` and
 `views/settings/settings.css` itself, so that building the app does not emit an extra asset until
