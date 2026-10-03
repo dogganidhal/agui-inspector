@@ -3,7 +3,7 @@
 // whole file before anything is committed and never starts a request.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import type { InspectionSession } from '../../src/contracts.ts';
+import type { Exchange, InspectionSession, RawFrame } from '../../src/contracts.ts';
 import { parseSession, restoreSession, serializeSession, SESSION_FILE_NAME } from '../../src/core/session-files/index.ts';
 import { eventFixtures, richSession } from './support.ts';
 
@@ -249,4 +249,100 @@ test('an empty session exports and imports', () => {
   assert.ok(result.ok);
   assert.deepEqual(result.session, empty);
   assert.deepEqual(restoreSession(result.session).snapshot(), empty);
+});
+
+/** A synthetic recording: `counts[i]` frames in exchange i, written round-robin so the exchanges interleave on the wire. */
+function syntheticSession(counts: readonly number[]): InspectionSession {
+  const frameIds = counts.map((): string[] => []);
+  const frames: RawFrame[] = [];
+  for (let round = 0; round < Math.max(...counts); round += 1) {
+    counts.forEach((count, e) => {
+      if (round >= count) return;
+      const data = JSON.stringify({ type: 'CUSTOM', name: 'tick', value: round });
+      const id = `exchange-${e}:frame-${round}`;
+      frameIds[e]!.push(id);
+      frames.push({ id, exchangeId: `exchange-${e}`, index: round, classification: 'data', envelope: `data: ${data}\n\n`, data, offsetMs: round * 3, eventType: 'CUSTOM', summary: 'CUSTOM tick', jsonVerdict: 'valid', schemaVerdict: 'valid', parsed: JSON.parse(data), provenance: 'raw' });
+    });
+  }
+  const exchanges: Exchange[] = counts.map((_, e) => ({ id: `exchange-${e}`, kind: 'raw', method: 'POST', path: '/agent', startedAt: 1_700_000_000_000 + e, transport: 'completed', frameIds: frameIds[e]! }));
+  return { id: 'synthetic', exchanges, runs: [], frames, findings: [], derived: [] };
+}
+
+/** The number of array-iterator steps (spread, for...of, Array.from) taken while `run` executes. */
+function iteratorSteps(run: () => void): number {
+  const original = Array.prototype[Symbol.iterator];
+  let steps = 0;
+  Array.prototype[Symbol.iterator] = function (this: unknown[]) {
+    const inner = original.call(this);
+    return { next: () => ((steps += 1), inner.next()), [Symbol.iterator]() { return this; } };
+  } as typeof original;
+  try {
+    run();
+  } finally {
+    Array.prototype[Symbol.iterator] = original;
+  }
+  return steps;
+}
+
+test('one large exchange imports with the same ids, order, timings and raw data, and broken frame lists are still rejected', () => {
+  const session = syntheticSession([5000]);
+  const text = serializeSession(session);
+  const result = parseSession(text);
+  assert.ok(result.ok);
+  assert.deepEqual(result.session, session);
+  assert.equal(serializeSession(result.session), text);
+  assert.deepEqual(result.session.exchanges[0]?.frameIds, session.frames.map((frame) => frame.id));
+
+  const file = () => JSON.parse(text) as { session: Record<string, any[]> };
+
+  const missing = file();
+  missing.session.exchanges![0]!.frameIds!.pop();
+  rejects(missing, /exchanges\[0\].*arrival order/i);
+
+  const misordered = file();
+  const ids = misordered.session.exchanges![0]!.frameIds!;
+  [ids[2500], ids[2501]] = [ids[2501], ids[2500]];
+  rejects(misordered, /exchanges\[0\].*arrival order/i);
+
+  const duplicated = file();
+  duplicated.session.exchanges![0]!.frameIds![4999] = duplicated.session.exchanges![0]!.frameIds![0];
+  rejects(duplicated, /exchanges\[0\].*arrival order/i);
+});
+
+test('frames interleaved from several exchanges are grouped per exchange, and cross-exchange lists are still rejected', () => {
+  const session = syntheticSession([40, 25, 40]);
+  assert.notDeepEqual(session.frames.slice(0, 3).map((frame) => frame.exchangeId), Array(3).fill(session.frames[0]!.exchangeId));
+  const text = serializeSession(session);
+  const result = parseSession(text);
+  assert.ok(result.ok);
+  assert.deepEqual(result.session, session);
+  assert.deepEqual(result.session.exchanges.map((exchange) => exchange.frameIds.length), [40, 25, 40]);
+
+  const file = () => JSON.parse(text) as { session: Record<string, any[]> };
+  const crossed = file();
+  crossed.session.exchanges![0]!.frameIds![0] = crossed.session.exchanges![1]!.frameIds![0];
+  rejects(crossed, /exchanges\[0\].*belongs to exchange "exchange-1"/i);
+
+  const swapped = file();
+  const ids = swapped.session.exchanges![1]!.frameIds!;
+  [ids[3], ids[4]] = [ids[4], ids[3]];
+  rejects(swapped, /exchanges\[1\].*arrival order/i);
+
+  const short = file();
+  short.session.exchanges![2]!.frameIds!.pop();
+  rejects(short, /exchanges\[2\].*arrival order/i);
+
+  const unknown = file();
+  unknown.session.exchanges![0]!.frameIds![5] = 'no-such-frame';
+  rejects(unknown, /exchanges\[0\].*no-such-frame/i);
+});
+
+test('import groups frame ids in one pass: iterator work grows with the frame count, not its square', () => {
+  const steps = (frames: number) => {
+    const text = serializeSession(syntheticSession([frames]));
+    return iteratorSteps(() => assert.ok(parseSession(text).ok));
+  };
+  const small = steps(1000);
+  const large = steps(2000);
+  assert.ok(large < small * 3, `doubling the frames took ${large} iterator steps against ${small}; linear work is about twice`);
 });

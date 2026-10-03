@@ -354,7 +354,11 @@ function checkSession(value: unknown): InspectionSession {
 
   // An exchange lists exactly its own frames, in the order they arrived.
   const own = new Map<string, string[]>();
-  for (const frame of frames) own.set(frame.exchangeId, [...(own.get(frame.exchangeId) ?? []), frame.id]);
+  for (const frame of frames) {
+    const ids = own.get(frame.exchangeId);
+    if (ids) ids.push(frame.id);
+    else own.set(frame.exchangeId, [frame.id]);
+  }
   exchanges.forEach((exchange, position) => {
     exchange.frameIds.forEach((id) => {
       const frame = frameById.get(id);
