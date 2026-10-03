@@ -3,10 +3,10 @@
 // there is no Markdown or HTML path. Encrypted reasoning shows metadata only.
 //
 // Replying (interrupt answers, tool results, the composer) is the connection lane's, so this view
-// shows outcomes and pending states but offers no reply controls; see docs/event-views.md.
+// shows outcomes and pending states but offers no reply controls; see website/content/docs/event-views.mdx.
 //
 // Styling: this module imports no stylesheet, so importing it never changes what the build emits. The
-// assembly loads the theme (views/theme/index.ts) and ./conversation.css; see docs/event-views.md.
+// assembly loads the theme (views/theme/index.ts) and ./conversation.css; see website/content/docs/event-views.mdx.
 import { useState, type ReactElement, type ReactNode } from 'react';
 import type { ConversationViewProps, EvidenceTarget, FrameId, JsonValue, RawFrame } from '../../contracts';
 import type {

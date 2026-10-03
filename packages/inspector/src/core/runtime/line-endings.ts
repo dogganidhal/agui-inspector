@@ -7,9 +7,9 @@
 // branch changes, and only its line endings. CR and LF never occur inside a multibyte UTF-8 sequence, so the
 // copy works on bytes without a decoder, and a JSON string cannot hold a raw CR or LF, so no value changes.
 //
-// Temporary, and an exception to "the client gets the original response" (docs/inspection.md). Delete this
+// Temporary, and an exception to "the client gets the original response" (website/content/docs/internals.mdx). Delete this
 // file and its one call in index.ts when @ag-ui/client is bumped to the first release that contains
-// ag-ui-protocol/ag-ui#2939 (docs/dependencies.md); the compatibility test that pins the old behaviour fails
+// ag-ui-protocol/ag-ui#2939 (website/content/docs/dependencies.mdx); the compatibility test that pins the old behaviour fails
 // then. Ceilings: each chunk is copied once, and every successful answer is taken for an event stream, as the
 // recorder does (binary transports are out of scope, and no header is read).
 

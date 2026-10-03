@@ -1,5 +1,6 @@
-# Deploys the public demo to GitHub Pages from main. It builds the isolated demo directory, checks it, and
-# uploads only that directory. It never builds from a pull request, ships a package, tags or releases.
+# Deploys the public demo and the docs site to GitHub Pages from main. It builds the isolated demo directory and
+# checks it, builds the docs site, merges the two into one directory and uploads only that. The demo keeps the site
+# root and the docs live under docs/. It never builds from a pull request, ships a package, tags or releases.
 # Pages itself (the Actions source and the github-pages environment limited to main) is enabled by the
 # maintainer in the repository settings; nothing here changes a setting.
 name: Pages
@@ -20,7 +21,7 @@ concurrency:
 
 jobs:
   build:
-    name: build demo artifact
+    name: build demo and docs artifact
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
@@ -36,6 +37,8 @@ jobs:
         with:
           node-version: 24
       - run: npm ci --ignore-scripts
+      # The docs site has its own lockfile and is not a workspace, so it installs separately.
+      - run: npm ci --ignore-scripts --prefix website
       # Reads the site's origin and base path. No input is set, so it cannot enable Pages: it fails when
       # the maintainer has not.
       - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
@@ -50,9 +53,15 @@ jobs:
       - run: node scripts/bundle-budget.mjs --dir .build/public-demo
       # The build, isolation and workflow checks; they need no browser, no uv and no previous build.
       - run: npm run test:unit -- tests/demo/build.test.ts
+      # The docs site under the same base path, with its type checks. It has no page at the root, which is the demo's.
+      - run: npm run build --prefix website
+        env:
+          PAGES_BASE_PATH: ${{ steps.pages.outputs.base_path }}
+      # One directory for the site. cpSync stops on any file both outputs contain, so the docs never replace a demo file.
+      - run: node -e "for (const dir of ['.build/public-demo', 'website/out']) require('node:fs').cpSync(dir, '.build/pages', { recursive: true, force: false, errorOnExist: true })"
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
-          path: .build/public-demo
+          path: .build/pages
 
   deploy:
     name: deploy to GitHub Pages

@@ -1,0 +1,77 @@
+/* The inspector's design language on Fumadocs. The colors, fonts and radius come from the inspector's own
+   public theme properties (tokens.css), so the docs follow any change to them. Fumadocs' palette is mapped
+   onto those properties with the same mixes the inspector derives its tokens from. */
+@import 'tailwindcss';
+@import 'fumadocs-ui/css/lib/default-colors.css';
+@import 'fumadocs-ui/css/preset.css';
+@import '../../packages/inspector/src/views/theme/tokens.css';
+
+@theme {
+  --font-sans: var(--agui-font-sans);
+  --font-mono: var(--agui-font-mono);
+  --radius-md: calc(var(--agui-radius) * 0.45);
+  --radius-lg: calc(var(--agui-radius) * 0.7);
+  --radius-xl: var(--agui-radius);
+  --radius-2xl: calc(var(--agui-radius) * 1.25);
+}
+
+/* Both selectors, after Fumadocs' own: dark mode is already in --agui-bg and --agui-fg, which tokens.css
+   switches on data-theme. */
+:root,
+.dark {
+  --docs-l-sem: 0.54;
+  --color-fd-background: var(--agui-bg);
+  --color-fd-foreground: var(--agui-fg);
+  --color-fd-muted: color-mix(in oklab, var(--agui-fg) 4%, var(--agui-bg));
+  --color-fd-muted-foreground: color-mix(in oklab, var(--agui-fg) 64%, var(--agui-bg));
+  --color-fd-popover: var(--agui-bg);
+  --color-fd-popover-foreground: var(--agui-fg);
+  --color-fd-card: color-mix(in oklab, var(--agui-fg) 2%, var(--agui-bg));
+  --color-fd-card-foreground: var(--agui-fg);
+  --color-fd-border: color-mix(in oklab, var(--agui-fg) 10%, var(--agui-bg));
+  --color-fd-primary: var(--agui-accent);
+  --color-fd-primary-foreground: var(--agui-accent-contrast);
+  --color-fd-secondary: color-mix(in oklab, var(--agui-fg) 4%, var(--agui-bg));
+  --color-fd-secondary-foreground: var(--agui-fg);
+  --color-fd-accent: color-mix(in oklab, var(--agui-fg) 5.5%, var(--agui-bg));
+  --color-fd-accent-foreground: var(--agui-fg);
+  --color-fd-ring: color-mix(in oklab, var(--agui-accent) 55%, transparent);
+  --color-fd-overlay: rgb(0 0 0 / 0.28);
+  /* The inspector's semantic hues: error, warning, success, and the text family for information. */
+  --color-fd-error: oklch(var(--docs-l-sem) 0.17 27);
+  --color-fd-warning: oklch(calc(var(--docs-l-sem) + 0.06) 0.13 70);
+  --color-fd-success: oklch(var(--docs-l-sem) 0.12 150);
+  --color-fd-info: oklch(var(--docs-l-sem) 0.13 255);
+  --color-fd-idea: oklch(calc(var(--docs-l-sem) + 0.08) 0.12 75);
+}
+.dark {
+  --docs-l-sem: 0.72;
+}
+
+html {
+  scrollbar-gutter: stable;
+}
+html > body[data-scroll-locked] {
+  margin-right: 0 !important;
+  --removed-body-scroll-bar-size: 0px !important;
+}
+
+/* The brand, drawn like the inspector's top bar: the mark on the accent, then the name. */
+.docs-mark {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: calc(var(--agui-radius) * 0.7);
+  background: var(--agui-accent);
+  color: var(--agui-accent-contrast);
+}
+.docs-mark svg {
+  width: 18px;
+  height: 18px;
+}
+.docs-brand {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}

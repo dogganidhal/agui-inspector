@@ -1,0 +1,260 @@
+---
+title: Development
+description: A first edit-and-preview loop, the repository layout, every command, the pull request gate, the benchmark, Changesets and the docs site.
+---
+
+This page is for working in the repository. Everything here runs locally or in pull request CI, and
+publishes, tags or releases nothing. The only workflow that publishes is the [Python release](./releases.mdx#python-release).
+
+## Prerequisites
+
+- Node 24 LTS or newer, and npm. The scaffold was checked on Node 26.9.0 and npm 12.1.0. CI uses Node 24.
+- A working tree installed with `npm ci --ignore-scripts`. Never install with lifecycle scripts enabled. esbuild and
+  TypeScript ship their binaries as optional platform packages, so they work without scripts.
+- For the end-to-end tests, a browser: `npx playwright install chromium`. `npm ci` never
+  downloads it.
+- For the Python package and the full gate only, [uv](https://docs.astral.sh/uv/). The package needs Python 3.10 or
+  newer.
+
+## Make your first change
+
+To change the inspector UI, build a local demo and open it. Rebuild and reload after each edit, then test and run
+the full gate. To change these docs, use the separate install in [The docs site](#the-docs-site).
+
+<Steps>
+<Step>
+
+Install the root dependencies:
+
+```sh
+npm ci --ignore-scripts
+```
+
+</Step>
+<Step>
+
+Build the demo for `http://127.0.0.1:4173`, serve it, and open `http://127.0.0.1:4173/agui-inspector/`. The three
+commands are in [Build for the origin you serve from](./demo-internals.mdx#build-for-the-origin-you-serve-from). The
+demo is the normal app plus example agents that answer inside the page, so you can send runs without starting a
+server. The recipe serves files with `python3 -m http.server`. Any static file server on that address works.
+
+</Step>
+<Step>
+
+After each edit, run the build and copy commands from that recipe again, then reload the page. The server can keep
+running.
+
+</Step>
+<Step>
+
+Run the tests for the area you changed. Unit tests are in one directory per area under `packages/inspector/tests`, so
+`npm run test:unit -- packages/inspector/tests/frames` runs only the frame tests. If you can see the change in the
+page, also run the matching Playwright specs, for example `npm run test:e2e -- tests/e2e/inspection`.
+`npm run typecheck` checks sources and tests.
+
+</Step>
+<Step>
+
+Before you open a pull request, run the full gate with `npm run check:ci`. It ends with the Python tests, so it needs
+uv.
+
+</Step>
+</Steps>
+
+### Where things are
+
+| Path | What it holds |
+| --- | --- |
+| `packages/inspector/src/core` | Framework-free TypeScript: recorder, frame reader, session store, configuration, presets, profiles, runtime and transport, A2UI lifecycle. No React. |
+| `packages/inspector/src/views` | React views: connection, conversation, inspection, A2UI, settings, and the theme tokens and primitives. |
+| `packages/inspector/src/app` | The page entry, startup and the content security policy (`security.ts`). |
+| `packages/inspector/tests` | Unit tests, one directory per area. |
+| `packages/python` | The Python package (`mount_inspector`), its tests and `uv.lock`. |
+| `demo` | The public demo's bootstrap and service worker, kept out of every package. |
+| `examples` | The scripted reference agent shared by the tests and the demo (`reference-agent`), and the embedded FastAPI host (`fastapi`). |
+| `tests` | Playwright specs in `tests/e2e`, and unit tests for the demo, CI, release and benchmarks. |
+| `scripts` | The build, the test runner, the bundle budget, the CI gate and Python packaging. |
+| `website` | This docs site. |
+| `specs` | Feature specifications, plans and tasks. The constitution is `.specify/memory/constitution.md`. |
+
+[Architecture and UI internals](./internals.mdx) explains how core, views and app work together.
+[CONTRIBUTING.md](https://github.com/dogganidhal/agui-inspector/blob/main/CONTRIBUTING.md) lists what a pull request
+needs before it can merge. [AGENTS.md](https://github.com/dogganidhal/agui-inspector/blob/main/AGENTS.md) lists the
+rules coding agents follow in this repository.
+
+## Commands
+
+Run them from the repository root.
+
+| Command | What it does |
+| --- | --- |
+| `npm ci --ignore-scripts` | Installs exactly the versions in `package-lock.json`. |
+| `npm run typecheck` | Strict type check of the tooling and of `packages/inspector`, sources and tests. |
+| `npm run test:unit` | Compiles `*.test.ts(x)` with esbuild into `.build/tests` and runs them with `node --test`. Add paths (`-- packages/inspector/tests/foundation`) to run only those tests. If it finds no tests, it fails. |
+| `npm run build` | Writes `packages/inspector/dist` (`index.html`, `app.js`, `app.css`). `-- --outdir <dir>` builds elsewhere. |
+| `npm run check:bundle` | Checks `packages/inspector/dist` against the [bundle budget](#bundle-budget). Run `npm run build` first. |
+| `npm run check:bundle:renderer` | Builds the scaffold plus the pinned A2UI v0.9 renderer into `.build/representative` and reports how much budget is left. |
+| `npm run test:benchmark` | Checks the 5,000-frame fixture and schedule and reports responsiveness as pending. `-- --strict` fails while it is pending. `-- --measure` runs the browser benchmark. |
+| `npm run test:e2e` | Runs Playwright against `tests/e2e`. With no spec it fails with "No tests found", so a missing suite never counts as passing. |
+| `npm exec -- tsc -p demo/tsconfig.json` | Strict type check of the demo's page bootstrap, with the DOM library and no Node types. |
+| `npm exec -- tsc -p demo/tsconfig.worker.json` | The same for the demo's service worker, with the WebWorker library. |
+| `node scripts/build-demo.mjs --outdir .build/public-demo --base-path /agui-inspector/` | Builds the [public demo](./demo-internals.mdx) into its own directory under `.build`. `--origin` defaults to the Pages site. It never changes `packages/inspector/dist`. |
+| `node scripts/bundle-budget.mjs --dir .build/public-demo` | Applies the same budget to all demo assets. |
+| `npm run package:python` | Builds the assets, copies them into `packages/python`, computes their checksums and runs `uv build`. See [build provenance](./releases.mdx#build-provenance). |
+| `npx changeset` | Adds a [changeset](#changesets) for a change to the Python package. |
+| `npm run check:ci` | Runs the [pull request gate](#pull-request-checks) locally. `-- --strict` also fails on suites that do not exist yet. |
+
+## Reference agent
+
+```sh
+node examples/reference-agent/server.ts --port 0 --allow-origin http://127.0.0.1:4173
+```
+
+This starts a model-free fixture server on 127.0.0.1 only, with no network, and prints `{"url": ...}`.
+`POST /agent` streams one deterministic run and never echoes request headers. The server allows cross-origin resource
+sharing (CORS) for the one allowed origin only, and never sets credentials headers. `POST /credential-echo` is the one
+intentional exception. It repeats the token it received in one known frame of an otherwise valid run, so the
+end-to-end test can check that the inspector keeps target-sent bytes unchanged (see
+[Session recordings](./recordings.mdx)). Node removes the TypeScript types itself, so the file uses only erasable
+syntax.
+
+`packages/inspector/src/static-path.js` exports `staticAssetsPath`, the absolute path of `dist`, so another server can
+serve that directory next to a configuration file. The npm package ships no CLI and no server helper.
+
+## Bundle budget
+
+`npm run check:bundle` adds up every file under `packages/inspector/dist` except source maps, whatever the build adds.
+It measures gzip size per file (level 6, no modification time in the header) and adds those up, so the number depends
+only on the bytes. The command prints each file and both totals. It fails when either total is above 2,000,000
+minified or 600,000 gzip bytes (decimal). A total equal to the limit passes. A missing or empty directory fails.
+
+The scaffold says little about the final app. So `npm run check:bundle:renderer` bundles it with the pinned A2UI v0.9
+renderer and catalog, A2UI core, the AG-UI client, the event schemas and the upstream render tool. With the pinned
+versions, that is about 1.02 MB minified and 250 KB gzipped. Use it for planning only: the integrated app adds its own
+code, and the strict check runs on that build too. Gzip output can differ slightly between Node versions, so compare
+numbers from the same Node version.
+
+## 5,000-frame benchmark
+
+`tests/benchmarks/generate.ts` builds the fixed workload: seed `001`, ten exchanges of 500 original server-sent events
+(SSE) data frames, all 31 event types plus 100 invalid frames. `tests/benchmarks/manifest.json` fixes the type counts,
+each frame's data and envelope byte lengths in order, and a SHA-256 per exchange.
+`npm run test:unit -- tests/benchmarks` regenerates the fixture and compares it with the manifest, checks counts and
+payload sizes against the plan, and validates the 4,900 valid frames with the upstream schema. It also checks each
+event lifecycle and runs every exchange through the pinned protocol client. After a reviewed profile change,
+regenerate the manifest with `node tests/benchmarks/generate.ts --write` and review the diff.
+
+`npm run test:benchmark` repeats the manifest check and the planned schedule. It then prints `PENDING` and
+`SC-009 NOT PASSED` unless the machine matches the plan. `-- --measure` runs one warm-up and three measured browser
+runs, in about seven minutes. On an Apple M4 Pro with headless Chromium 153.0.8010.12, every run kept exactly 5,000
+frames with matching hashes. Every run finished all 200 interactions (100 filter changes and 100 expansions) within
+200 ms. That machine is not the required runner, so these are development numbers only. The certification run on a
+headed Mac mini M2 is pending with the maintainer.
+[`tests/benchmarks/profile.md`](https://github.com/dogganidhal/agui-inspector/blob/main/tests/benchmarks/profile.md)
+has the pass rules (at least 95 of 100 filters and 95 of 100 expansions within 200 ms, plus the exact frame count and
+hashes), the runner requirements and the recorded numbers.
+
+## Pull request checks
+
+`.github/workflows/ci.yml` runs on `pull_request` only, with read-only access and no secrets. It never publishes,
+tags or releases. Its check job runs `npm ci --ignore-scripts`, then `npm run check:ci`. It is a matrix over Python
+3.10 and 3.14 (`UV_PYTHON`), so the required checks are `check (python 3.10)` and `check (python 3.14)`. To repeat one
+version locally, set `UV_PYTHON=3.14` before the uv commands. The job downloads Chromium only when an end-to-end spec
+exists, and `uv` only when the Python package exists. Both are explicit downloads. A second job builds the
+[docs site](#the-docs-site). Every action is pinned to a full commit SHA. Update a pin only after reading the new
+release.
+
+`scripts/ci.mjs` runs these steps in order and stops at the first failure:
+
+| Step | Runs | When |
+| --- | --- | --- |
+| typecheck | `npm run typecheck` | Always. |
+| demo typecheck | The two `tsc -p demo/...` commands above | `demo/service-worker.ts` exists. A missing project fails. |
+| unit tests | `npm run test:unit`, including `tests/demo` (demo build, isolation and workflow checks) | Always. |
+| demo unit tests | Nothing. Fails when `tests/demo` has no `*.test.ts` | The demo exists. |
+| build | `npm run build` | Always. |
+| bundle budget | `npm run check:bundle` | `scripts/bundle-budget.mjs` exists. |
+| demo build and budget | The demo build and budget commands above | The demo exists. A missing script, or a missing or empty output, fails. |
+| end-to-end tests | `npm run test:e2e`, including `tests/e2e/public-demo`, which serves the demo under `/agui-inspector/` and tests the real service worker in Chromium | `tests/e2e` has a `*.spec.ts`. |
+| python tests | `uv sync --project packages/python --locked --extra embedded --group test`, then `uv run --project packages/python python -m unittest discover -s packages/python/tests` | `packages/python/pyproject.toml` exists. The tests open the real npm archive, wheel and sdist, so the package build runs first. |
+
+The unit and Python steps also check that no demo file gets into the npm package, the wheel or the sdist.
+
+A suite that does not exist yet shows as `PENDING`, with the reason. It has no command, so it cannot report success,
+and the summary says pending suites do not count as passing. Once a suite exists, the gate requires it. A Python
+package with no `test_*.py` file fails instead of passing an empty run. A missing `check:bundle` script fails the
+budget step.
+
+Two other workflows run on `main` only. `pages.yml` [deploys the demo and these docs](./demo-internals.mdx#deployment)
+and never runs for a pull request. `ci.yml` has no deployment permission. `release-python.yml`
+[publishes the Python package](./releases.mdx#python-release).
+
+## Changesets
+
+Changesets version the Python package. Add one to any pull request that changes what the package does or ships.
+The wheel includes the inspector assets, so user-visible inspector changes count too.
+
+```sh
+npx changeset
+```
+
+Pick `agui-inspector-python`, the bump type and the line the changelog will show. Before 1.0.0, use `minor` for a
+change that needs a migration or adds a feature, and `patch` for a fix. Commit the Markdown file it writes under
+`.changeset/` with your change. A docs or test change with nothing to release needs none. Changesets ignores
+`agui-inspector` (the npm manifest) until its release is set up.
+
+Never edit a version by hand. The version pull request updates `packages/python/package.json`, `pyproject.toml`,
+`uv.lock` and `CHANGELOG.md` together, and `tests/release/changeset.test.ts` fails when they differ.
+
+## Integrated-MVP gate
+
+The 0.1.0 minimum viable product (MVP) is accepted only when every suite above exists and passes together on
+the integrated `main` branch. `npm run check:ci -- --strict` checks this. It exits non-zero while any suite is
+pending, so a missing bundle-budget check, end-to-end suite or Python package blocks the release. The Python release
+workflow reruns it on the tagged commit. The 5,000-frame responsiveness check is outside this gate, because it needs
+the physical runner and CI cannot certify it.
+
+Today every suite exists, including the network-allowlist checks under `tests/e2e`, and runs in `npm run check:ci` on
+Python 3.10 and 3.14. Release verification is not complete: the responsiveness certification is still pending. The
+roadmap's [current status](https://github.com/dogganidhal/agui-inspector/blob/main/ROADMAP.md#current-status) is the one summary of the release, including the
+publication gates.
+
+The foundation tests check that the pinned dependencies work together: the 31 event types, the fetch hook,
+sequence-error reporting while the recording branch keeps reading, resume and cancel entries, the render tool, the
+A2UI v0.9 processor and action shape, and the client's
+[LF-only event framing](./dependencies.mdx#crlf-and-cr-event-streams). They render no surface, because `A2uiSurface`
+does not support server rendering and no DOM library is installed. The A2UI end-to-end tests cover rendering in
+Playwright.
+
+## The docs site
+
+These docs are in `website/`, a Next.js 16 static export built with Fumadocs 16 in its notebook layout (a full-width
+top bar like the inspector's). The site has its own `package.json` and `package-lock.json` and is not an npm
+workspace, so the root lockfile, the root install and the published packages never include it. `website/.npmrc`
+repeats the root settings: no lifecycle scripts, exact versions. [Dependencies](./dependencies.mdx) lists its
+packages.
+
+```sh
+npm ci --ignore-scripts --prefix website
+npm run dev --prefix website
+```
+
+Then open `http://localhost:3000/agui-inspector/docs/`. `npm run build --prefix website` writes the static site to
+`website/out`, under the base path `/agui-inspector`, or `PAGES_BASE_PATH` when set. Both scripts set
+`NEXT_TELEMETRY_DISABLED=1`, so Next sends no telemetry.
+
+- Pages are MDX files in `website/content/docs/`. `meta.json` there sets the sidebar order and its four groups: Start
+  here, Use it, Set it up and Contribute. The repository's `docs/` directory keeps only the frozen product brief,
+  `docs/reference/product-brief.md`, and the screenshots in `docs/images/`. Each screenshot has a light and a dark
+  version, and the README and the pages share them. A page imports both and shows them with the `Screenshot`
+  component, which picks the one that matches the reader's theme.
+- The theme imports `packages/inspector/src/views/theme/tokens.css` and maps Fumadocs' colors, fonts and radius to the
+  inspector's [public `--agui-*` properties](./theming.mdx#public-properties). The build reads the navigation logo and
+  favicon from `branding/`, so the site keeps no copy.
+- Search uses a static index written at build time (`/api/search`) and runs in the browser. There is no search
+  service, analytics or font download.
+
+On `main`, `pages.yml` builds the docs with the site's base path and deploys them at `/agui-inspector/docs/`, next to
+the demo. On pull requests, the "docs site" job in `ci.yml` installs `website/` and runs
+`npm run build --prefix website`, which includes type checks. So a broken page fails the pull request before it can
+be deployed.

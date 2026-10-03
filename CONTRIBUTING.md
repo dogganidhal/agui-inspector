@@ -48,7 +48,7 @@ Python tests, in that order, and stops at the first failure. Narrower commands a
 | `npm run test:e2e -- tests/e2e/inspection` | Playwright specs under the given paths. |
 | `npm run build && npm run check:bundle` | The bundle and its 2 MB minified, 600 KB gzipped budget. |
 
-[docs/development.md](docs/development.md) lists every command, and a test fails if a root script is missing from it.
+[Development](website/content/docs/development.mdx) lists every command, and a test fails if a root script is missing from it.
 
 ## What reviewers look for
 
@@ -59,7 +59,7 @@ Python tests, in that order, and stops at the first failure. Narrower commands a
 - Credentials stay in memory. Nothing new is written to storage, exports or logs, the recorder reads no headers, and the
   page makes no request of its own to third parties.
 - A new dependency has to earn its place. Pin the exact version, commit the lockfile, and add a row to
-  [docs/dependencies.md](docs/dependencies.md) saying why the platform or an existing dependency could not do the job.
+  [Dependencies](website/content/docs/dependencies.mdx) saying why the platform or an existing dependency could not do the job.
   A test checks that every direct dependency has one.
 - Docs change in the same pull request as the behavior they describe.
 

@@ -1,0 +1,69 @@
+---
+title: Introduction
+description: See the requests and event streams of your AG-UI server frame by frame, with every protocol problem reported.
+---
+
+import runLight from '../../../docs/images/run-light.webp';
+import runDark from '../../../docs/images/run-dark.webp';
+
+When your [AG-UI](https://docs.ag-ui.com) agent stops replying or a client rejects its events, agui-inspector shows you
+the request and the stream. It sends runs to your server, keeps each frame it receives in order with its timing, and
+reports JSON, schema and event-sequence problems. You can compare the conversation with the recorded frames and answer
+interrupts, tool calls and A2UI surfaces as a client does. You can also send a raw JSON request to test how your server
+handles invalid input.
+
+<Screenshot light={runLight} dark={runDark} alt="The inspector after an A2UI run: the deploy board the agent drew on the left, and on the right the run's ten frames, each with its arrival time and a passing check." />
+
+On the left is the conversation, with the surface the agent drew. On the right, the frames list shows one exchange: its
+request, a timeline, and each frame with its arrival time in seconds and its check.
+
+## Start with the demo
+
+The browser demo runs scripted agents inside the page. You need no account, no model and no running server.
+[Try your first run](./demo.mdx) shows three runs: a plain reply, a broken stream and a run that never finishes.
+
+<Cards>
+  <Card title="Try your first run" href="/docs/demo" description="Three example runs in the browser demo, and what to look for in each." />
+</Cards>
+
+For your own agent, pick one of these:
+
+<Cards>
+  <Card title="Embed it in Python" href="/docs/embedding" description="Mount it beside your Starlette or FastAPI agent routes." />
+  <Card title="Host the static page" href="/docs/hosted" description="Serve the files anywhere and point them at your server." />
+  <Card title="Read frames and findings" href="/docs/inspection" description="Exchanges, frames, findings and missing terminal events." />
+</Cards>
+
+## Ways to run it
+
+It works with any AG-UI server over HTTP and Server-Sent Events (SSE). All modes use the same static bundle.
+
+| Mode | How it runs | Status |
+| --- | --- | --- |
+| Hosted | A static page that you point at your server. The public demo is one. | Available: the [demo](./demo.mdx), or build the page from a checkout |
+| Embedded | A Python helper mounts it next to your Starlette or FastAPI agent routes, on the same origin. | Available from a [source checkout](./embedding.mdx#working-from-a-source-checkout) |
+| Static assets | Any other server serves the directory that the npm package's `staticAssetsPath` points to. | Available from a source checkout |
+
+[Project status and privacy](./status.mdx) lists the planned modes.
+
+## What it promises
+
+- The inspector keeps every frame it receives, raw, in arrival order and with its timing. This includes frames that are
+  not JSON, fail the schema or break the event sequence. It reports them and never drops, repairs or
+  reorders them.
+- It sends no telemetry. The page talks only to its own origin and to the targets you configure.
+- A token you type stays in memory. The inspector never writes it to storage, recordings, exports or logs, and the
+  recorder reads no headers. If a server repeats the token in a payload, the inspector keeps those bytes as received
+  ([read this before you share a file](./recordings.mdx#read-this-before-you-share-a-file)).
+- `@ag-ui/core` and `@ag-ui/client` handle the protocol, and A2UI's own renderer draws A2UI surfaces. There is no chat
+  framework between the network and the views.
+
+## Status
+
+Version 0.1.0 (the minimum viable product) is implemented on `main`. Release verification is not
+finished, and nothing is published yet. The package name on npm and PyPI is `agui-inspector`, and both packages are
+still private. [Project status and privacy](./status.mdx) describes what you can rely on today.
+[Release process](./releases.mdx) explains how a release happens. The
+[roadmap](https://github.com/dogganidhal/agui-inspector/blob/main/ROADMAP.md) tracks goals and open decisions. The
+[original product brief](https://github.com/dogganidhal/agui-inspector/blob/main/docs/reference/product-brief.md)
+holds the protocol details and architecture inputs the project started from.

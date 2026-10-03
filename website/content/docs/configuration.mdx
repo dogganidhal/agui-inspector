@@ -1,0 +1,138 @@
+---
+title: Configuration and client profiles
+description: Where a deployment may connect, which agents it lists, what your next run sends, and where credentials live.
+---
+
+Three things control a run:
+
+| Surface | Decides | Who edits it |
+| --- | --- | --- |
+| `hosting-config.json` | Where this deployment may connect. Read first, and nothing later can change it. See [Host the static page](./hosted.mdx#hosting-configjson). | The deployer |
+| `config.json` | The agents the page lists, their optional [presets](./presets.mdx), and an optional theme. | The deployer, or `mount_inspector`, which writes it from its arguments |
+| The client profile | Your client settings: what the next run sends (protocol version, tools, context, message mode, forwarded properties) and whether A2UI surfaces render. Edit it under Settings. The browser stores it. | You, in the browser |
+
+A preset holds what one agent needs for a run: setup requests, variables, forwarded properties, a message mode and quick messages. The profile can override two of these. Its `messageMode` replaces the preset's mode when set. Its `forwardedProps` are merged over the preset's ([client profile](#client-profile)).
+
+The agent configuration and the client profile use format version 0, which is not stable yet. They may change before 1.0.0. [Migrations](#migrations) lists every change that breaks an existing file. Version 1 and its published JSON Schemas come with the stable release.
+
+## Configuration file
+
+A configuration is JSON that lists agents. The embedded bundle reads `config.json` next to the page. Hosted mode reads a file or an allowed URL ([Host the static page](./hosted.mdx#hosting-configjson)). A file with no `version` is the older form and reads as version 0. Any other version fails with an error that names it.
+
+```json title="config.json"
+{
+  "version": 0,
+  "agents": [
+    {
+      "id": "support",
+      "name": "Support assistant",
+      "url": "/agents/support/stream",
+      "capabilities": "/agents/support/capabilities",
+      "preset": { "quickMessages": ["/help"] }
+    }
+  ],
+  "theme": {
+    "light": { "--agui-accent": "#2563eb", "--agui-radius": "6px" },
+    "dark": { "--agui-accent": "#93c5fd" }
+  }
+}
+```
+
+| Field | Rule |
+| --- | --- |
+| `agents[].id` | Required, nonempty, unique in the file. |
+| `agents[].url` | Required. Relative to the page origin when embedded, absolute `http(s)` when hosted. No `user:password@`. |
+| `agents[].name` | Optional string. |
+| `agents[].capabilities` | Optional. An inline object with up to eleven groups, or a URL that returns one. See [Declared capabilities](#declared-capabilities). |
+| `agents[].preset` | Optional. See [presets](./presets.mdx). |
+| `theme` | Optional. `light` and `dark` maps that give string values to the ten public `--agui-*` names. See [Theme](#theme). |
+
+The agents appear in a picker beside the endpoint field in the top bar, on every pane and tab, and again under Settings. Both pickers change the same selection. The top-bar picker appears only when at least one agent is configured. An endpoint you type by hand matches no agent, so the picker then shows "Custom URL".
+
+Unknown fields are errors. A field that could hold a credential (`headers`, `token`, `authorization`, `auth`, `apiKey`, `cookie` and similar) gets a message that says credentials never go in configuration. The inspector cannot see what you put in a request body or a forwarded property, so keep secrets out of those too.
+
+The loader fetches nothing itself. `loadConfig` and `loadCapabilities` take a `fetchText` callback from the guarded transport, so every request follows the startup allowlist. A configuration never adds an allowed origin. The inspector requests only the routes the file names.
+
+### Theme
+
+`theme` restyles the inspector in every deployment mode, with no rebuild and no separate stylesheet. Both maps are optional, and so is every property in them. Like the rest of the file, it holds no credentials. [Theming](./theming.mdx#delivering-overrides) explains how the maps apply, and [public properties](./theming.mdx#public-properties) lists the names and defaults.
+
+A theme problem causes a warning and never stops startup. The page shows a "Configuration" warning under the top bar, on every tab, and does not apply the rejected override. The agents, presets and every valid override in the same file still work.
+
+| Input | Result |
+| --- | --- |
+| `theme` is not an object | One warning. The whole field is ignored. |
+| A key other than `light` or `dark` | One warning. That key is ignored. |
+| A map that is not an object | One warning. That map is ignored. |
+| A name that is not one of the ten public ones, including private or generic names such as `--bg`, `--r` or `--agui-private` | One warning. That entry is ignored. Names are case-sensitive. |
+| A value that is not a string, or is empty | One warning. That entry is ignored. |
+| A value containing `url(`, `image-set(`, `src(`, `image(` or `cross-fade(` in any letter case, with any whitespace before the `(` | One warning. That entry is ignored. |
+| A value containing `@`, `;`, `{`, `}` or a backslash | One warning. That entry is ignored. |
+
+Values go into custom properties through the CSS object model. So a value cannot start a request or escape its declaration. The content security policy is the same with or without a theme. The warning names the map and the property, never the rejected value. `parseConfig` returns the accepted maps as `theme` and the messages as `warnings`. Only an unusable `agents` list is an error.
+
+### Declared capabilities
+
+Capabilities show in the eleven documented groups: `identity`, `transport`, `tools`, `output`, `state`, `multiAgent`, `reasoning`, `multimodal`, `execution`, `humanInTheLoop` and `custom`. A group the agent leaves out shows as "Not declared". An inline declaration needs no request. A URL is fetched once, through the callback. The inspector checks the shape against the protocol's `AgentCapabilitiesSchema`. In 0.1.0 the inspector does not discover capabilities or compare them with observed events.
+
+## Client profile
+
+The profile is what the inspector declares and sends: seven settings, no others.
+
+| Setting | Effect on the next run input |
+| --- | --- |
+| `protocolVersion` | Sent as `protocolVersion`. Must be nonempty. |
+| `tools` | Sent as `tools`. Each tool needs a `name` and a `description`. `parameters` is its JSON Schema. Names are unique. |
+| `context` | Sent as `context`. Each entry has a `description` and a string `value`. |
+| `renderA2ui` | None. It decides whether [A2UI surfaces](./a2ui.mdx) render or stay as JSON in the views. |
+| `injectA2uiTool` | Adds the official `render_a2ui` tool from `@ag-ui/a2ui-middleware` to `tools`. It replaces a profile tool with the same name, so the name never appears twice. |
+| `messageMode` | `full` or `turn`. When set, it overrides the [preset's mode](./presets.mdx#forwarded-properties-and-message-mode). When absent, the preset decides. |
+| `forwardedProps` | Merged over the preset's properties. If both define a name, the profile wins. `a2uiAction` is reserved. |
+
+`composeRunInput` builds the input from the profile, the resolved preset and what the runtime gives it: thread and run ids, the transcript and this turn's messages, the current state, the parent run, resume answers and an A2UI action. It checks the result against the protocol's `RunAgentInput` schema. An input that fails is not sent or repaired. It comes back as an error to show. This applies to ordinary runs only. The [raw request editor](./runs.mdx#raw-submissions) sends what you typed.
+
+An A2UI action is sent as `forwardedProps.a2uiAction.userAction` with `name`, `surfaceId`, `sourceComponentId`, `context` and `timestamp`, set after all other properties.
+
+### Profile file and browser storage
+
+Export writes this envelope to a file. Browser storage keeps it under the key `agui-inspector.profile`:
+
+```json
+{
+  "version": 0,
+  "profile": {
+    "protocolVersion": "1.0",
+    "tools": [],
+    "context": [],
+    "renderA2ui": true,
+    "injectA2uiTool": false,
+    "messageMode": "turn",
+    "forwardedProps": {}
+  }
+}
+```
+
+`messageMode` is left out when the profile uses the preset's mode. The version must be exactly 0. A missing or different version is an error. Import and load check the whole file. A bad file shows its error and does not change the current profile. If the saved profile cannot be read, the inspector reports it and keeps the defaults.
+
+## Credentials
+
+Authentication credentials stay in memory. The token and its header name belong to the connection state. No profile, configuration or export type refers to that state, and the profile has no field for either. Import rejects a field that looks like one. Export copies only the seven settings, even when it gets an object with more. Only the guarded transport receives the token.
+
+Keep secrets out of `forwardedProps`, `context` and tool schemas too. The browser saves those values, and exported profiles contain them as typed.
+
+## Hosting file
+
+`hosting-config.json` sits next to the page, separate from the agent configuration. The page reads it first. It is strict, and nothing loaded later can change it. [Host the static page](./hosted.mdx#hosting-configjson) lists its fields. Two of them affect the agent configuration. `config` names a file to read instead of `config.json` and makes that file required. `allowVisitorTargets` belongs only in `hosting-config.json`. In `config.json` it is an unknown field and an error.
+
+A page can mount the application itself instead of loading the shipped `index.html`. It can pass `configFile` in the startup environment to read the initial agent configuration from another file. Like `config`, the name is relative to the page. The page reads it after the policy is in place, and only from its own origin or an allowed origin. `allowVisitorTargets` does not add origins here. The file changes no mode, origin or policy. If the file is missing, the page starts empty as usual, and the endpoint field and import still work. Only a `config` named in `hosting-config.json` makes a configuration required.
+
+## Migrations
+
+- 0.1.0 adds the optional `allowVisitorTargets` field to `hosting-config.json`, version 0. A file without it works as before and needs no migration. Before 0.1.0, the field was an unknown key and the file was refused.
+- 0.1.0 adds the optional `theme` field to the version-0 configuration. A file without it reads as before and needs no migration. Before 0.1.0, `theme` was an unknown field and an error.
+
+No other format has changed since version 0. Any later change that breaks an existing file will appear here, with the steps to update it. Until 1.0.0, such a change may keep the version number, so this list is the record.
+
+To see how the settings view connects to the page, read [Architecture and UI internals](./internals.mdx#settings-view-wiring).
+
+Next, add setup requests and quick messages with [Presets](./presets.mdx), or restyle the page with [Theming](./theming.mdx).

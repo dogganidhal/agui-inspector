@@ -1,0 +1,102 @@
+---
+title: Project status and privacy
+description: What is implemented and released, where your data goes, and which formats, versions and browsers you can rely on.
+---
+
+These docs describe the `main` branch. Every push to `main` also deploys the public demo. The changelog starts with the
+first release.
+
+## What is implemented
+
+Version 0.1.0 (the minimum viable product) is implemented on `main`. The public demo has been online since
+2026-10-02. You can try it in the [demo](./demo.mdx) or from a checkout
+([development](./development.mdx)).
+
+| Mode | Status |
+| --- | --- |
+| Hosted static page with a `hosting-config.json` | Available: the [demo](./demo.mdx) is one, or build the page from a checkout |
+| Embedded in Starlette or FastAPI, through `mount_inspector` | Available from a source checkout |
+| Static assets from the npm package's `staticAssetsPath`, served by any other server | Available from a source checkout |
+| CLI: a local command that serves the page and proxies to a target | Planned for 1.0.0 |
+| JS helpers: Express, Hono and Next.js route-handler integrations | Planned for 1.0.0 |
+| In-app: a custom element that watches an `AbstractAgent` your application already runs | Planned for 1.0.0 |
+
+## Release status
+
+Nothing is published yet. The package name on npm and PyPI is `agui-inspector`. Release verification is not finished:
+the 5,000-frame benchmark on the reference machine and a manual smoke test of each mode still need to run.
+[Release process](./releases.mdx) explains how a release happens. The
+[roadmap](https://github.com/dogganidhal/agui-inspector/blob/main/ROADMAP.md) tracks the release, the 1.0.0 plans and
+the open decisions.
+
+## Where your data goes
+
+- The page sends no telemetry and loads nothing from third parties. It talks only to its own origin and to the targets
+  you configure.
+- Your browser sends each run directly to the agent, with no proxy. A hosted page sends no cookies, not even to its own
+  origin. An embedded page calls your agent on the same origin, so the browser adds the credentials it already has for
+  your site.
+- The page keeps the session (exchanges, frames and findings) in memory. No server stores it, and a reload clears it.
+- The page saves the client profile in browser storage under `agui-inspector.profile`. It saves `forwardedProps`,
+  `context` and the tool schemas as you typed them, so do not put secrets in them.
+- A recording exists only as a file you exported to your disk.
+- The token you type stays in memory, and the page sends it only in the header you choose. The page never writes it to
+  browser storage, configuration, a profile, a recording, an export or a log. The recorder reads no headers, and a
+  reload clears the token.
+
+<Callout type="warn">
+The inspector keeps frames and request bodies exactly as sent and received, so they can contain secrets or
+personal data. If a server repeats your token in a payload, the token is in the session and in every export. Check a
+recording before you share it: [read this before you share a file](./recordings.mdx#read-this-before-you-share-a-file).
+</Callout>
+
+## Embedded routes need your protection
+
+`mount_inspector` adds no authentication. When the embedded inspector is enabled, anyone who can reach its route sees
+request bodies, raw frames and your agent list. Put the route behind your application's authentication. Set `enabled`
+(default `False`) from a setting that is off outside development. [Embedding](./embedding.mdx) describes the debug guard
+and the warning it logs.
+
+## Formats are pre-stable
+
+The configuration (including presets), the client profile and recordings are at version 0 and not stable yet.
+Until 1.0.0, a release can change them in incompatible ways without changing the version number. One release may
+refuse a recording made by another. [Configuration](./configuration.mdx) lists breaking changes to these files and to
+`hosting-config.json`, with their migration steps, and the changelog announces them. Version 1, with published JSON
+Schemas, is planned for the stable release. [Recordings](./recordings.mdx) describes the recording format.
+
+## Supported versions
+
+| What | Supported |
+| --- | --- |
+| AG-UI | Protocol 1.0, the 31-event baseline, over HTTP and Server-Sent Events (SSE), with `@ag-ui/core` and `@ag-ui/client` 1.0.1 ([dependencies](./dependencies.mdx)) |
+| A2UI | v0.9 only. The inspector reports an operation with no version or with `v0.8` as unsupported and skips it ([A2UI surfaces](./a2ui.mdx)). |
+| Python, for the embedded helper | 3.10 or newer. CI runs 3.10 and 3.14. |
+
+## Browser coverage
+
+The end-to-end tests run only in Chromium. For local servers, the tests check how the hosted page handles
+`localhost` and `127.0.0.1` in Chromium. The same cases were checked by hand in Safari, and Firefox has not been
+checked. These checks cover only these cases, not browser compatibility in general. Treat every other
+loopback address or name as unsupported ([browser check](./hosted.mdx#browser-check)).
+
+## License
+
+[MIT](https://github.com/dogganidhal/agui-inspector/blob/main/LICENSE), Copyright (c) 2026 Nidhal Dogga.
+[`THIRD_PARTY_NOTICES.txt`](https://github.com/dogganidhal/agui-inspector/blob/main/THIRD_PARTY_NOTICES.txt) lists the
+bundled dependencies and their licenses, and every distribution includes it. agui-inspector is an independent project.
+[AG-UI](https://github.com/ag-ui-protocol/ag-ui) and [A2UI](https://a2ui.org) are open protocols maintained by their
+own projects.
+
+## Report a bug or a vulnerability
+
+- Report a bug with the [GitHub issue forms](https://github.com/dogganidhal/agui-inspector/issues/new/choose). The form
+  asks for what happened, the steps from opening the page, the mode, the commit you built from or the date you used the
+  demo, your browser and operating system, and what the server sent. For the demo, the steps include the example agent
+  and the quick message. Paste only synthetic or redacted data.
+- Report a vulnerability privately, as [SECURITY.md](https://github.com/dogganidhal/agui-inspector/blob/main/SECURITY.md)
+  describes. Do not use a public issue. Security reports cover `main` and the public demo.
+- To propose a change, read
+  [CONTRIBUTING.md](https://github.com/dogganidhal/agui-inspector/blob/main/CONTRIBUTING.md).
+
+To see the inspector before you decide, [try your first run](./demo.mdx).

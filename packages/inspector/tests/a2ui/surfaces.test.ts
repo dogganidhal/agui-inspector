@@ -368,8 +368,8 @@ test('the stylesheet takes colors, radii and fonts from the theme tokens and loa
   }
 });
 
-test('docs/a2ui.md states v0.9-only support, the bundled catalog and the blocked resources', () => {
-  const doc = readFileSync(path.join(process.cwd(), 'docs', 'a2ui.md'), 'utf8');
+test('the A2UI page states v0.9-only support, the bundled catalog and the blocked resources', () => {
+  const doc = readFileSync(path.join(process.cwd(), 'website', 'content', 'docs', 'a2ui.mdx'), 'utf8');
   assert.match(doc, /Only A2UI v0\.9 is supported/);
   assert.ok(doc.includes(BASIC_CATALOG_ID));
   for (const name of ['Image', 'Video', 'AudioPlayer', 'openUrl', 'forwardedProps.a2uiAction.userAction', 'renderA2ui', 'injectA2uiTool']) {

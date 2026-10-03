@@ -34,8 +34,8 @@ These are documented behavior:
 
 - An enabled embedded inspector shows request bodies, raw frames and the agent list to anyone who can reach its route.
   Keep `enabled` tied to a debug setting and put the route behind your app's authentication
-  ([embedding](docs/embedding.md#debug-guard)).
+  ([embedding](https://dogganidhal.github.io/agui-inspector/docs/embedding/#debug-guard)).
 - Bytes a server sends are recorded unchanged, even when they echo a credential. The export dialog warns about this
-  ([recordings](docs/recordings.md)).
+  ([recordings](https://dogganidhal.github.io/agui-inspector/docs/recordings/)).
 - Browser rules for CORS, mixed content and local network access apply as the browser enforces them. The inspector does
   not work around them.

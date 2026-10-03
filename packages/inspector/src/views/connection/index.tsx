@@ -12,7 +12,7 @@
 // echoes the header name and a mask, never the token, and keeps nothing in browser storage.
 //
 // Styling: this module imports no stylesheet, so importing it never changes what the build emits. The
-// assembly loads the theme (views/theme/index.ts) and ./connection.css; see docs/conversation.md.
+// assembly loads the theme (views/theme/index.ts) and ./connection.css; see website/content/docs/runs.mdx.
 import { useEffect, useId, useRef, useState, useSyncExternalStore, type KeyboardEvent, type ReactElement, type ReactNode } from 'react';
 import type { ConnectionViewProps, ConversationViewProps, DeploymentMode, InterruptAnswer, JsonValue, ToolResultDraft } from '../../contracts';
 import { checkAgainstSchema } from '../../core/runtime/schema';

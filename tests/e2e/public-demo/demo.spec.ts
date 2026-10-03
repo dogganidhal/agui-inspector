@@ -315,7 +315,7 @@ test('a fresh visit prepares, becomes ready under the sub-path within 10 seconds
   // Distinguishes a scripted example from a real endpoint, links the embedding guide, and does not fetch it.
   await expect(page.getByText(/scripted agents that run inside this page/)).toBeVisible();
   const guide = page.getByRole('link', { name: 'Embedding guide' });
-  await expect(guide).toHaveAttribute('href', 'https://github.com/dogganidhal/agui-inspector/blob/main/docs/embedding.md');
+  await expect(guide).toHaveAttribute('href', 'https://dogganidhal.github.io/agui-inspector/docs/embedding/');
   await expect(guide).toHaveAttribute('rel', 'noopener noreferrer');
   await expect(page.locator('[data-view="footer"]')).toContainText('requests to this origin, HTTPS targets and supported local servers');
 

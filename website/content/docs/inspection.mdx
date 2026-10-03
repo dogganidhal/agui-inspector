@@ -1,0 +1,92 @@
+---
+title: Read frames and findings
+description: How to read the Inspection pane, what a missing terminal event means, and which evidence is captured, transport status or derived.
+---
+
+import issuesLight from '../../../docs/images/issues-light.webp';
+import issuesDark from '../../../docs/images/issues-dark.webp';
+
+The Inspection pane shows what was sent and received for every request in the session. The conversation beside it is built from that evidence, so when the two disagree, trust Inspection.
+
+## What the pane shows
+
+Start in Inspection, on the Frames tab. The list has one row for each exchange, newest at the top, and the newest is open.
+
+- An exchange is one HTTP request and its response: a run request, a preparation request or a raw submission. Its row shows the method and path, a tag (the run, `prepare` or `raw`), the status, the elapsed time, the frame count and the number of issues, if any. A request that got no response shows `failed` instead of the status, or `stopped` if you stopped it first. A `live` tag marks an exchange still being recorded.
+- Open an exchange to see the request body as sent, any finding on the exchange or its run, a non-stream response body, a timeline of arrivals, and its frames.
+- A frame is one block from the event stream, in arrival order, with its offset in seconds since the request was sent. A check mark means the frame is a valid AG-UI event. A red tag names the frame's finding (`json`, `schema`). A `control` or `partial` tag marks a block that is not an event, such as a keep-alive comment or an unfinished block left when the stream ended.
+- Open a frame to see it as received, formatted if it is valid JSON. Its Copy button copies the exact text. The copy button on an exchange row copies all its frames as JSON.
+- A finding explains a problem with a frame, a run or its connection. It sits beside the evidence and never replaces or changes it.
+
+The conversation is built only from valid events. If something appears in Frames but not in the conversation, check the frame's finding and any "Not shown" note in the conversation. The [event reference](./event-views.mdx) says where each event type appears. [Words you will see](./demo.mdx#words-you-will-see) defines the other terms.
+
+<Screenshot light={issuesLight} dark={issuesDark} alt="A run with a broken frame: the unparsable bytes stay in the frames list at their position, the run shows a sequence error for a message that was never started, and the run still finishes." />
+
+Left: the conversation's "Not shown" note. Right: the exchange row with its status, frame count and 2 issues, the `sequence` finding above the timeline, and the `unparsed` frame with its `json` tag between valid frames, ending in `RUN_FINISHED`.
+
+The text filter matches a frame's type or content. The family chips (Run, Text, Tools and the others) filter frames by event family. Issues keeps only frames with a finding. They filter frames inside exchanges and never add or remove an exchange. Export session and Import session save and open the whole session ([recordings](./recordings.mdx)).
+
+## Missing terminal events
+
+A completed HTTP response does not prove that the run finished. If the stream ends without a valid `RUN_FINISHED` or `RUN_ERROR` event, the outcome is unknown. The run gets one `terminal` finding: "The stream ended without a valid RUN_FINISHED or RUN_ERROR event".
+
+If you pressed Stop, this finding is expected. Stopping the connection does not add a terminal event, and the run shows "Stopped by you". Otherwise, check these in the exchange's frames:
+
+- Did your server send a closing event at all? A clean close, a dropped connection and a user stop all get the finding.
+- Does it pass the schema? A `RUN_FINISHED` that fails it, such as one with no `runId`, does not count. Neither does non-JSON text that mentions `RUN_FINISHED`.
+- Did the SSE (Server-Sent Events) block end with a blank line? A valid `RUN_FINISHED` cut off before its closing blank line stays a `partial` frame and does not count.
+- Did the connection fail before it arrived? Then the exchange also has a `transport` finding.
+
+The finding goes on the exchange's run if the session already has that run, otherwise on the exchange. The inspector never writes an outcome for you and never invents a `RUN_ERROR` or a cancellation.
+
+## Kinds of finding
+
+| Finding | On | Means |
+| --- | --- | --- |
+| `json` | Frame, and the run when the protocol client rejected it | The frame's data is not JSON, empty data included. |
+| `schema` | Frame, and the run when the protocol client rejected it | The data is JSON but not a valid event: a `type` outside the 31 baseline types, a wrong or missing field, or JSON that is not an object. |
+| `sequence` | Run | Each event is valid alone, but the order is wrong, for example a text message that never started. The protocol client reports it. |
+| `terminal` | Run, or the exchange | The stream ended without a valid terminal event. |
+| `transport` | Exchange | The request failed before a response, or the connection failed during the stream. The message holds only the error's name and message. |
+| `capture` | Exchange | The inspector's own recording failed. It is reported once. The client still gets its response, and that exchange's frames stop there. |
+
+Findings only add information. A frame's text and parsed value are never changed, repaired or dropped, and the parsed value keeps fields the schema does not know. Messages name the failing field and the kind of problem, never the received values. If the validator itself throws, the frame is kept and marked invalid, with a finding that validation failed. No finding stops recording: after a bad frame, the rest of the stream is still captured.
+
+## Captured, transport and derived evidence
+
+Captured evidence is what was sent and received: the request body exactly as sent, the status, a response body's text, and event-stream bytes with their arrival offsets. It is never rewritten.
+
+Transport status describes only the connection: `completed`, `transport-error` or `user-stopped`. It says nothing about the protocol. A `completed` exchange can hold a run that ended in an error event, and a `user-stopped` one can hold a run that never sent a terminal event. A user stop is not an error. The exchange keeps the bytes already read and gets no finding.
+
+Derived data (the conversation, the current state, expanded chunk events) is built from the captured frames. It is labeled derived wherever it appears and never has a raw frame index.
+
+## How the stream becomes frames
+
+The inspector splits the stream at blank lines. LF, CRLF and CR all end a line, in any mix. How the network split the stream into chunks never changes the frames. Each frame keeps its original text with every delimiter, so the frames list shows the line endings your server used. Bytes that are not valid UTF-8 show as U+FFFD.
+
+The protocol client reads its own copy of the response while the recorder reads another, so recording continues when the client rejects the stream. No request or response header is recorded. The inspector ignores `Content-Type`. It reads the response to a run request as an event stream, and keeps a non-2xx response as text without reading it as events. The session lives in memory only. A reload clears it, so export it first to keep it.
+
+<Callout type="warn">
+A server can echo a credential in its body. The inspector never writes a credential it holds and keeps the target's bytes unchanged. Nothing is redacted, hashed or treated differently, and no frame text reaches summaries or findings except an identifier such as a message id. Exports carry a warning instead. See [recordings](./recordings.mdx#read-this-before-you-share-a-file).
+</Callout>
+
+For the recorder, the frame reader and the session store field by field, and the fixtures that test them, see [Architecture and UI internals](./internals.mdx#the-recorder).
+
+## Hiding preparation exchanges
+
+[Preparation requests](./presets.mdx#preparation-requests) run before every run, so a long session lists them between runs. The Preparation chip in the filter row hides them. The chip shows their count and is pressed while they are listed. It starts pressed. The choice is not saved, so a reload lists them again.
+
+Hiding changes only the list. The recording, the counts and the run-to-exchange links stay the same, and an export holds the preparation exchanges whether the list shows them or not.
+
+- A failed preparation exchange (transport error, status 400 or above, or a finding) is never hidden, because it explains why a run was not sent. While one exists, the chip turns red, like the Issues chip.
+- The text filter, the family chips and Issues cannot hide a preparation exchange or show a hidden one.
+
+The newest listed exchange opens first. When the session holds only hidden preparation exchanges, the list says so.
+
+## Arriving from the conversation
+
+A run id or a frame reference in the conversation opens its evidence here. The list opens the exchange and the frame's detail, scrolls the row to the middle of the pane, marks it with `aria-current` and gives it focus. A filter that lists the frame stays as it is. A filter that would hide the frame is cleared, and a toast says so. Nothing is sent and the recording does not change. See [following a reference](./event-views.mdx#following-a-reference).
+
+## Next steps
+
+If a request failed or a run did not end as expected, go to [troubleshooting](./troubleshooting.mdx). To keep or share what you captured, export the session, and [read this before you share a file](./recordings.mdx#read-this-before-you-share-a-file).

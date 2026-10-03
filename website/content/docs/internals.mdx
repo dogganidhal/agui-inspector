@@ -1,0 +1,434 @@
+---
+title: Architecture and UI internals
+description: How the recorder, frame reader, session store and runtime work, how the views connect to the page, and what the tests for each area cover.
+---
+
+This page is for contributors who change the inspector itself. For the edit-and-preview loop and the commands, see
+[Development](./development.mdx).
+
+The code under `packages/inspector/src` has three layers:
+
+- `core` is TypeScript with no React (a test checks this): the recorder, the frame reader, the session store,
+  configuration, presets and profiles, session files, the A2UI lifecycle, the projection that expands chunk
+  events, and the runtime with its guarded transport.
+- `views` holds the React views (connection, conversation, inspection, A2UI and settings) and the theme's tokens and
+  primitives.
+- `app` is the assembly that builds the page. `startup.ts` reads `hosting-config.json`, turns it into the transport
+  policy and the content security policy, and only then creates the runtime. `index.tsx` keeps the page's state around
+  one shared session store and turns each view callback into one call on a core module. `boundary.tsx` keeps a render
+  failure inside the pane where it happened.
+
+The shared types are in `contracts.ts`, which imports no React either.
+
+The connection, conversation, A2UI and settings views import no stylesheet of their own. The assembly loads
+`views/theme/index.ts` and each view's CSS (`views/conversation/conversation.css`, `views/a2ui/a2ui.css`,
+`views/settings/settings.css`, `views/connection/connection.css`), so a view adds no asset to the build.
+
+## The recorder
+
+The evidence on [Read frames and findings](./inspection.mdx) comes from three parts under [`packages/inspector/src/core`](https://github.com/dogganidhal/agui-inspector/tree/main/packages/inspector/src/core): the recorder (`recorder`), the frame reader (`frames`) and the session store (`store`).
+
+Each preparation request, conversation run request and raw submission becomes one exchange. The recorder fills in:
+
+| Field | Source |
+| --- | --- |
+| `kind`, `method`, `path`, optional run link | Given by the caller. |
+| `requestBody` | The exact text sent, including whitespace and key order. |
+| `requestBodyJson` | That text parsed, only when it is valid JSON. |
+| `startedAt` | Wall-clock start, in epoch milliseconds. |
+| `status` | The response status, once a response exists. Absent for a transport failure. |
+| `responseBody` | The response text, for an ordinary response or any non-2xx response. |
+| `elapsedMs` | From dispatch to the end of the exchange, on a monotonic clock. |
+| `transport`, `transportError` | How the transport ended: `completed`, `transport-error` or `user-stopped`. |
+
+An event stream does not go into `responseBody`. Its bytes go to the frame reader as they arrive, in the chunks the
+network delivered. Each chunk is stamped with the milliseconds since dispatch. The recorder does not split or
+interpret them.
+
+### What the recorder never touches
+
+The recorder reads no request or response headers. It never receives or copies a request object, so no
+authentication data can enter an exchange through it. It ignores `Content-Type`: the caller says whether to expect
+an event stream, so a wrong type from the server changes nothing. Apart from the body, the recorder uses only the
+status. It keeps a non-2xx response to a run request as a text error body and never reads it as events.
+
+The recorder adds two kinds of finding to an exchange:
+
+- `transport`: the request failed before a response, or the connection failed during the stream. Its message is only
+  the error's name and message.
+- `capture`: the recorder's own output failed, for example because the sink threw. The recorder reports it once, the
+  client still gets its response, and recording of stream chunks stops there.
+
+A user stop gets no finding. The recorder never creates a terminal, cancellation or error event for a stopped, failed
+or cut-off stream. Missing-terminal findings and observed run outcomes come from the frame reader and the store,
+because they see the events.
+
+### How the client branch stays untouched
+
+The recorder clones each response before anything reads it, reads the clone, and gives the original to the protocol
+client. The two branches read the same bytes independently, so:
+
+- a slow client does not delay recording, and a slow recorder does not delay the client;
+- if the client rejects the stream, for example for a malformed frame or a sequence violation, recording continues to
+  the end of the stream;
+- the client gets the response unread and unlocked, with only its line endings changed.
+
+The runtime changes them after the recorder has cloned the response. The pinned `@ag-ui/client` cannot read lines
+that end in CRLF or in a lone carriage return (CR), although both are valid in server-sent events (SSE). So before the
+client reads its copy, the runtime turns each CRLF and each lone CR into one line feed (LF). Every other byte stays as
+received, in the same order. The recording comes from the other branch, so its envelopes keep the server's
+delimiters, and the frames list shows them. The rewrite stays until the pinned client is updated to the first release
+that contains [ag-ui-protocol/ag-ui#2939](https://github.com/ag-ui-protocol/ag-ui/pull/2939) (see
+[Dependencies](./dependencies.mdx#crlf-and-cr-event-streams)).
+
+Capture ends only when the response ends, fails or is stopped, not when the call that sent the request returns or the
+client stops reading the stream. The runtime gives the recorder the request's abort signal and a callback. When the signal aborts, the recorder stops reading, keeps what it already read, marks the exchange
+`user-stopped` and calls the callback, even if the response body is still open. The runtime keeps the abort
+controller until every recording under it has called back, so Stop works while bytes are still being recorded.
+
+Two limits come from the platform:
+
+- The cloned stream buffers data for the slower branch, with no size limit. The recorder reads promptly, so in
+  practice the client's branch is the one that waits.
+- When a connection fails or a run is aborted, the stream itself discards bytes that the platform buffered but nobody
+  has read yet. The recorder keeps everything it read before then.
+
+Browsers give each branch its own copy of a chunk. Some runtimes, such as Node 24, share one buffer between both
+branches. There, a client that overwrote a chunk it had read could change what the recorder sees. The protocol client
+does not do this, and the recorder does not copy chunks to protect against it.
+
+## The frame reader
+
+The reader decodes the bytes as streaming UTF-8 and splits them into blocks at blank lines. LF, CRLF and CR all end a
+line, in any mix. A CR at the very end of a chunk waits for the next byte, in case an LF follows. A chunk boundary can
+be anywhere, even inside a delimiter or a multibyte character, and the frames are the same.
+
+Each block becomes one frame, in arrival order. Its `index` counts from zero over every frame in the exchange:
+
+| Classification | What it is | AG-UI frame |
+| --- | --- | --- |
+| `data` | A block with at least one `data` field. Several `data` lines are joined with an LF. | Yes, even when the data is not JSON or not a valid event. |
+| `control` | A comment (`: keepalive`), `event`, `id` or `retry` fields with no data, or a stray blank line. | No |
+| `partial` | Text left when the stream ended before a closing blank line. SSE never dispatches it. | No |
+
+Each frame keeps `envelope`, its original text with every delimiter. Joining an exchange's envelopes gives back the
+decoded stream. A `data` frame also keeps `data`, the extracted value. `offsetMs` is the offset of the chunk that
+carried the envelope's last character. A frame that waited for a possible LF keeps the offset of the chunk that
+carried its final CR. Offsets never decrease within an exchange, and a trailing partial frame has the last chunk's
+offset. In the 5,000-frame benchmark, the retained-frame count is the number of `data` frames.
+
+The text model has two limits. Bytes that are not valid UTF-8 appear as U+FFFD in the envelope, because a string
+cannot hold them. A leading byte order mark stays in the envelope, but the reader ignores it when it reads the first
+field.
+
+Control and partial frames are evidence of what the server sent. They get no event type, parsed value or verdict, and
+the reader never turns them into events.
+
+### Verdicts
+
+For each `data` frame, the reader runs `JSON.parse`, then checks the value against the upstream `EventSchemas`. The
+frame gets two verdicts, `jsonVerdict` and `schemaVerdict`, and one finding when something is wrong:
+
+| Case | `jsonVerdict` | `schemaVerdict` | Finding |
+| --- | --- | --- | --- |
+| Valid event | `valid` | `valid` | None |
+| Not JSON, including empty data | `invalid` | `not-applicable` | `json` |
+| Object whose `type` is not one of the 31 baseline types | `valid` | `unknown-type` | `schema` |
+| Known type with a wrong or missing field, or JSON that is not an object | `valid` | `invalid` | `schema` |
+
+The reader does not check event order. In a sequence violation each event is valid on its own, so its frame has no
+finding. The protocol client reports the violation, and the conversation layer adds it to the run as a `sequence`
+finding. Sequence violations never stop the reader or the recorder.
+
+When the stream ends, the reader looks for a schema-valid `RUN_FINISHED` or `RUN_ERROR` frame. If there is none, it
+adds one `terminal` finding. It writes no run outcome, so the outcome stays `unknown` until something observes one.
+
+## The session store
+
+`createSessionStore` keeps one capture's exchanges, raw frames, runs, findings and derived entries in memory. An
+append takes effect immediately. Subscribers are notified at most once per animation frame (`requestAnimationFrame`,
+or a scheduler you pass in), however many appends happened in between. So a busy stream never waits for a view.
+
+Raw frames, findings and derived entries are separate records. A finding points to a frame, run or exchange by id and
+changes none of them. A derived entry, such as an expanded chunk, lists the raw frames it came from. It is labeled
+`derived` and has no frame index. When its source cannot be identified, it says `ambiguous` instead of guessing. The
+store keeps and updates an exchange's transport state and a run's observed outcome separately.
+
+The store refuses a call, and changes nothing, when the call would break a rule that a later export or import depends
+on: a duplicate id, a frame index that is not the next one in its exchange, an offset that goes backwards, or a
+reference to something that does not exist. The recorder reports the refusal as a `capture` finding. That exchange's
+reader then stops, so it does not add a misleading terminal finding as well.
+
+`createFrameSink(store)` connects the recorder to the store. Exchange updates and findings go directly into the store.
+Chunks go through a frame reader, and an exchange's reader ends before the store learns that the exchange is over.
+Reader finding ids come from frame and exchange ids, so they never clash with the recorder's `finding-N` ids.
+
+## Event views wiring
+
+The conversation and state views in the [event reference](./event-views.mdx) come from these modules:
+
+```tsx
+import { ConversationView } from 'views/conversation/index';
+import { StateView } from 'views/conversation/state';
+import { publishChunkExpansions } from 'core/projection/index';
+```
+
+`ConversationView` takes `ConversationViewProps`. It has no interrupt, tool-result or composer controls: those are in
+the connection lane (see [Connect and send a run](./runs.mdx)). Its optional `renderActivity(entry)` draws an
+activity's content, such as an [A2UI surface](./a2ui.mdx), and the card then gets a Rendered and JSON switch.
+`StateView` takes `{ store }` and the same optional `threadId`.
+
+`ConversationView` and `StateView` also take an optional `onReveal(target)`. The `target` is an `EvidenceTarget`: an `exchangeId` and, for a frame, a `frameId`. Without `onReveal`, run ids and frame references stay plain text. `InspectionView` takes an optional `reveal` target and applies it to its own filter and open rows. Each request must be a new object. `App` connects the three.
+
+Both views show the thread that the assembly passes as `threadId`, even before that thread has an exchange. Without `threadId`, they show the thread of the latest conversation exchange, which is what an imported
+recording needs. Both views read the store through `useSyncExternalStore` and follow its animation-frame batching.
+
+`views/conversation/conversation.css` uses only theme tokens and defines none. Call `publishChunkExpansions(store)`
+after every store change, so the frames list shows each expansion under its chunk. Its ids are stable, so it appends
+only what is new. The projection reads only raw frames, without client callbacks, so it also works on an imported
+[recording](./recordings.mdx).
+
+## A2UI view wiring
+
+[A2UI surfaces](./a2ui.mdx) describes what users see. The view behind it works on its own or inside the conversation
+view's activity card:
+
+```tsx
+import { A2uiView, a2uiActivity } from 'views/a2ui/index';
+
+// Standalone
+<A2uiView activityId={id} operations={content.a2ui_operations} renderEnabled={profile.renderA2ui} onAction={start} />
+
+// Inside the conversation view's card
+<ConversationView {...props} renderActivity={(entry) => a2uiActivity(entry, { renderEnabled: profile.renderA2ui, onAction: start })} />
+```
+
+`a2uiActivity` returns `undefined` for any type other than `a2ui-surface`, so the card stays on JSON. When a user
+activates a control, the view calls `onAction` with the five-field action. The assembly puts the action in
+`forwardedProps.a2uiAction.userAction` and starts the run. The view itself never sends a tool reply or starts a run.
+Neither the view nor `core/a2ui` imports `@ag-ui/a2ui-middleware`.
+
+`views/a2ui/a2ui.css` maps the renderer's `--a2ui-*` variables to the inspector's tokens (`--bg`, `--fg`, `--acc`,
+`--line-2`, `--r-sm`, `--u`, fonts), in light and dark mode. That is why the public `--agui-*` properties restyle
+surfaces. Components that the inspector draws use `agui-a2ui-*` classes from the same file. The stylesheet of
+`@a2ui/react` 0.12.0 has unresolved CSS-module class names, so the inspector does not load it. Layout comes from the
+renderer's inline styles, except for `Row`.
+
+In 0.1.0 the renderer is in the main bundle. `npm run check:bundle:renderer` reports how much room is left.
+
+## Settings view wiring
+
+The configuration, preset and profile formats are in `packages/inspector/src/core/config`, `core/presets` and
+`core/profiles`. They make no network requests of their own. The settings view takes its data and callbacks as props
+(`SettingsViewProps`) and keeps no important state. The assembly supplies:
+
+- `agents` from `parseConfig` or `loadConfig`, and `selectedAgentId`;
+- `profile` from `loadProfile`, saved with `saveProfile` on every `onChangeProfile`;
+- `variables`, the user's edited values, passed to `preparePreset` as overrides;
+- `onImportProfile`, which calls `importProfile` and shows `error` when it fails;
+- `onExportProfile`, which downloads `exportProfile(profile)`;
+- optionally `capabilities`, the loaded state of a capabilities URL.
+
+The top bar's `TargetControls` has an `agentPicker` slot for the same picker. Render the settings view's `AgentPicker`
+there with the same `agents`, `selectedAgentId` and `onSelectAgent`, so a choice in either place runs the same
+handler.
+
+## Theme tokens
+
+The tokens and primitives are in [`packages/inspector/src/views/theme`](https://github.com/dogganidhal/agui-inspector/tree/main/packages/inspector/src/views/theme). [Theming](./theming.mdx#public-properties) documents the ten public `--agui-*` properties. The derived tokens below are internal: views read them, and adopters do not override them. A view adds a token only through a change to the theme.
+
+| Token | Value | Use |
+| --- | --- | --- |
+| `--bg`, `--fg`, `--acc`, `--acc-fg` | The matching public property | Short names for views |
+| `--sunk` | `fg` 4% into `bg` | Code blocks, inputs, selected rows |
+| `--hover` | `fg` 5.5% | Row and button hover |
+| `--line`, `--line-2` | `fg` 10% and 18% | Dividers, control borders |
+| `--muted`, `--faint` | `fg` 64% and 40% | Secondary text, including the conversation's frame references and offsets. `--faint` is for decoration only |
+| `--acc-ink`, `--acc-soft`, `--acc-line` | Accent mixed into `fg` or `bg` | Accent text, fills, borders and focus halos |
+| `--err`, `--warn`, `--ok` and `-soft` fills | `oklch()` at fixed hues 27, 70 and 150 | Findings, outcomes, status codes |
+| `--f-text`, `--f-tool`, `--f-reason`, `--f-state`, `--f-activity`, `--f-neutral` | `oklch()` at hues 255, 300, 200, 75 and 350; neutral is `--muted` | Event family dots and timeline ticks |
+| `--j-str`, `--j-num`, `--j-lit` | `oklch()` at hues 150, 255 and 300 | JSON highlighting |
+| `--u` | `4px × --agui-density` | Spacing unit. Paddings and heights are multiples of it |
+| `--r`, `--r-sm`, `--r-xs` | Radius × 1, 0.7, 0.45 | Cards, controls, tags |
+| `--pop`, `--lift`, `--scrim` | Shadows and the dialog backdrop | Floating layers, raised controls |
+| `--ease` | `cubic-bezier(.16, 1, .3, 1)` | Every transition |
+
+[Theming](./theming.mdx#host-page-styles) explains where these tokens are declared (on `#root`, with their dark
+variants) and why a host page's own `--bg` or `--muted` cannot reach them.
+
+## Theme primitives
+
+Views import the primitives from `packages/inspector/src/views/theme/index.ts`, which also loads the theme's two
+stylesheets. The components take no `className`. If a view needs a variant that does not exist, add the variant to the
+theme instead of overriding the primitive's styles in the view.
+
+| Primitive | Variants and states |
+| --- | --- |
+| `Button` | default, `primary`, `ghost`, `small`, `iconOnly` (requires `aria-label`); hover, active, disabled |
+| `Tag` | neutral, `line`, `dashed`, `accent`, `ok`, `warn`, `err`; optional `pulse` |
+| `FilterChip` | default, pressed, disabled; optional family dot and count |
+| `FamilyDot` | filled, `hollow`; `text`, `tool`, `reason`, `state`, `activity`, `neutral` |
+| `Card`, `CardHeader`, `CardBody`, `CardFooter` | plain, `interrupt` |
+| `CodeBlock` | `json` (highlighted) or `raw` (exactly as given); keyboard focusable, height at most 340 px |
+| `SegmentedControl` | `aria-pressed` on each option |
+| `Switch` | `role="switch"` with `aria-checked` |
+| `Field`, `SearchField`, `Editor` | default, focus, `invalid` |
+| `Popover` | native `popover`, placed under the button whose `popoverTarget` is its `id` |
+| `Dialog` | native modal `<dialog>` controlled by `open` |
+| `ToastRegion`, `useToasts` | polite live region; a toast disappears after 3.2 s |
+| `Finding` | neutral, `warn`, `err`, always with an icon |
+| `Label` | uppercase caption, or a `<label>` when given `htmlFor` |
+| `Icon` | The 24-grid inline SVG set in `primitives.tsx`; no icon library |
+
+Every primitive follows these rules:
+
+- Native elements only. Focus shows as a 2 px outline in the accent at 55% opacity, offset 1 px.
+- Color never shows status alone: a tag has its word, and a finding has an icon.
+- `prefers-reduced-motion: reduce` turns off the pulse, the caret, the row fade and every transition. `agui-caret` and
+  `agui-fresh` are the two motion utility classes that views may use.
+- `CodeBlock` never changes text. The JSON tokenizer is lossless, and non-JSON stays `raw`.
+
+## Runtime API
+
+The runtime in [`core/runtime`](https://github.com/dogganidhal/agui-inspector/tree/main/packages/inspector/src/core/runtime) holds the state behind [Connect and send a run](./runs.mdx), with one call per control. The views in [`views/connection`](https://github.com/dogganidhal/agui-inspector/tree/main/packages/inspector/src/views/connection) take that state as props, and [`app/index.tsx`](https://github.com/dogganidhal/agui-inspector/blob/main/packages/inspector/src/app/index.tsx) connects the two.
+
+```ts
+const runtime = createRuntime({ store, policy, settings: () => ({ profile, variables }) });
+const state = useSyncExternalStore(runtime.subscribe, runtime.getState);
+```
+
+| Where | Call |
+| --- | --- |
+| Agent picker, top bar or Settings: select an agent | `runtime.selectAgent(agent)` |
+| Connection: endpoint typed by the user | `runtime.setTarget(url)` |
+| Connection: token | `runtime.setAuth({ headerName, token })`, or `undefined` to clear |
+| Composer: Send, quick messages, Stop, New thread | `runtime.send(text)`, `runtime.stop()`, `runtime.newThread()` |
+| Replies | `draftInterrupt`, `answerInterrupt`, `draftToolResult`, `submitToolResult`, `continueRun` |
+| Surface | `runtime.sendA2uiAction(action)` |
+| Raw editor | `runtime.sendRaw(text)` |
+| Loading configuration and capabilities | `loadConfig(url, guardedFetchText(runtime.transport))` |
+
+`policy` is the startup `TransportPolicy`: the mode, the page origin and the allowlist. It is fixed when the page
+starts. A call that changes the agent or the endpoint returns `true` when it cleared a token, so the page can tell the
+user.
+
+`ConnectionView` is the frozen entry export. It shows the endpoint controls and the composer together. To put them in
+different places, an assembly uses `TargetControls` in the top bar and `Composer` under the transcript, and puts
+`RepliesView` below the transcript. `RepliesView` takes the same props as `ConversationView`, so one props object
+works for both.
+
+Pass `threadId: state.threadId` to `ConversationView` and `StateView`, so New thread empties them immediately.
+
+## Recorder and protocol fixtures
+
+The fixtures are deterministic and need no model or network. Each one gives the request the recorder is told about
+and the response bytes in arrival order, so the same bytes go through recorder, reader and store.
+
+[`recorder-fixtures.ts`](https://github.com/dogganidhal/agui-inspector/blob/main/examples/reference-agent/recorder-fixtures.ts) feeds the tests in [`packages/inspector/tests/recorder`](https://github.com/dogganidhal/agui-inspector/tree/main/packages/inspector/tests/recorder). They trap any header access on the request and the response, and run the protocol client through the failing streams.
+
+| Scenario | Exercises |
+| --- | --- |
+| `splitStream` | A valid run with LF, CRLF and CR delimiters cut into single bytes, so boundaries fall inside delimiters and multibyte characters. |
+| `lfStream` | A valid LF-only run in uneven chunks, which the protocol client can read. |
+| `coalescedStream` | The same run in one chunk. |
+| `errorJsonBody` | A 422 JSON error to a run request. |
+| `errorTextBody` | A 503 plain-text error to a preparation, split inside a multibyte character. |
+| `transportFailure` | No response. |
+| `midStreamFailure` | A drop after two events and half of a third. |
+| `heldOpen` | Events, then silence until the user stops: no terminal event ever arrives. |
+| `malformedThenValid` | Non-JSON, schema-invalid and out-of-sequence events, then a valid ending. |
+
+[`protocol-fixtures.ts`](https://github.com/dogganidhal/agui-inspector/blob/main/examples/reference-agent/protocol-fixtures.ts) uses the same scenario shape:
+
+| Fixture | Exercises |
+| --- | --- |
+| `eventFixtures` | One schema-valid event for each of the 31 baseline types. |
+| `invalidCases` | Non-JSON, unknown type and schema-invalid data, with the expected verdicts. |
+| `baselineRun` | Thirty of the types in one run, with LF, CRLF and CR delimiters, in 1, 7, 64 and 4096 byte chunks. |
+| `runError` | The 31st type, `RUN_ERROR`, as a valid terminal. |
+| `invalidFrames` | Valid frames around every invalid class, ending correctly. |
+| `sequenceViolations` | Valid events in an invalid order, ending in `RUN_FINISHED`. |
+| `controlEvidence` | Comments, field-only blocks and blank lines, between and inside data frames. |
+| `missingTerminalScenarios` | A close after content, an empty stream, two lookalike terminals, a cut-off `RUN_FINISHED` and a cut inside a multibyte character. |
+
+[`workload.test.ts`](https://github.com/dogganidhal/agui-inspector/blob/main/packages/inspector/tests/frames/workload.test.ts) runs the 5,000-frame fixture from [`tests/benchmarks`](https://github.com/dogganidhal/agui-inspector/tree/main/tests/benchmarks) through the recorder, the reader and the store. It checks that:
+
+- exactly 5,000 `data` frames come out;
+- each exchange's envelopes and data text match the hashes in the manifest;
+- every frame's type and byte sizes match its manifest row;
+- offsets match the chunk each frame ended in;
+- only the 100 invalid frames have findings.
+
+## Session file tests
+
+The export and import code behind [Save and open recordings](./recordings.mdx) is in [`packages/inspector/src/core/session-files`](https://github.com/dogganidhal/agui-inspector/tree/main/packages/inspector/src/core/session-files).
+
+[`credential-echo.spec.ts`](https://github.com/dogganidhal/agui-inspector/blob/main/tests/e2e/inspection/credential-echo.spec.ts) covers both ways a credential can get near a recording: the token the inspector holds, and bytes the target sent back. A [scripted target](https://github.com/dogganidhal/agui-inspector/blob/main/examples/reference-agent/credential-echo.ts) repeats a synthetic token in one frame, with unusual spacing, non-ASCII text and `\r\n` delimiters. The test checks that:
+
+- The frame is identical on the clipboard and in the exported file.
+- The export warning appears before the download. It says that payloads can contain an echoed credential, while
+  headers are not captured.
+- The authentication popover does not promise that the recording never contains the token.
+- The token is not in the configuration, the exported profile, browser storage, any request except the chosen header
+  on the one request to the target, the exchanges and runs in the file, or any field name that could hold a header.
+
+## Event views tests
+
+```sh
+npm run test:unit -- packages/inspector/tests/conversation
+npm run test:e2e -- tests/e2e/conversation
+```
+
+`events.test.ts` has one case per event type and does not compile if one is missing. `workload.test.ts` projects the
+frozen 5,000-frame workload. The browser spec streams into the fixture host
+`packages/inspector/tests/conversation/fixture.tsx`. It covers every event family, plain-text safety and styling in
+both color schemes, and checks that no request goes outside the page's origin.
+
+## A2UI tests
+
+```sh
+npm run test:unit -- packages/inspector/tests/a2ui
+npm run test:e2e -- tests/e2e/a2ui
+```
+
+The unit tests are `catalog.test.ts`, `gallery.test.ts` and `lifecycle.test.ts`. The Chromium specs `surfaces.spec.ts`
+and `components.spec.ts` drive the real renderer. `components.spec.ts` writes screenshots to `.build/a2ui-gallery/`,
+which is not committed. The network test runs under a content security policy that allows images, media and
+connections, so the test checks the guard itself. A control case shows that the stock renderer does make the
+request. The scenarios are in [`examples/reference-agent/a2ui-scenarios.ts`](https://github.com/dogganidhal/agui-inspector/blob/main/examples/reference-agent/a2ui-scenarios.ts) and the gallery is in [`packages/inspector/tests/a2ui/gallery.ts`](https://github.com/dogganidhal/agui-inspector/blob/main/packages/inspector/tests/a2ui/gallery.ts). Neither needs a model or a network.
+
+## Theme tests
+
+| File | Covers |
+| --- | --- |
+| `packages/inspector/tests/theme/tokens.test.ts` | The stylesheets: the ten properties and defaults, both dark rules, no remote loading, no literal colors, radii or fonts in primitives, spacing in multiples of `--u`, focus and reduced-motion rules. |
+| `packages/inspector/tests/theme/config.test.ts` | Applying the maps, and declarations: nothing generic on `:root`, derived tokens, dark variants and the shell's paint on `#root`. |
+| `packages/inspector/tests/config/settings.test.ts`, `packages/inspector/tests/hosted/startup.test.ts` | Validating `theme` and passing it to the page with no request and no policy change. |
+| `packages/inspector/tests/theme/primitives.test.ts` | Component logic. |
+| `tests/e2e/theme/theme.spec.ts` | Every primitive and state from `packages/inspector/tests/theme/fixture.tsx`, in light, dark and overridden: computed styles match the tokens, `--agui-*` alone restyles everything, nothing is requested from another origin, focus, popover, dialog, toast and reduced motion work, and a host stylesheet with the same generic names changes nothing. |
+| `tests/e2e/theme/config.spec.ts` | The production build with real `config.json` maps (hosted, embedded, behind the Python helper, from a generic static server): light and dark from the system preference and from the switch, a missing map, each rejected form shown as a warning with no request and the same policy, agents that still run, a hostile host stylesheet, and an unpainted `body`. |
+| `tests/e2e/hosted/evidence-contrast.spec.ts` | In the built page's default light and dark themes, the conversation's frame references and offsets have a contrast of at least 4.5:1 against the background behind them. Colors an adopter sets are not checked. |
+
+## Hosted deployment tests
+
+[`packages/inspector/tests/hosted`](https://github.com/dogganidhal/agui-inspector/tree/main/packages/inspector/tests/hosted) and `packages/inspector/tests/runtime` test startup, the policy and every caller of the transport, without a browser. `tests/e2e/hosted` and `tests/e2e/visitor-policy` check the production build in Chromium against scripted agents with no model, which the tests start themselves. Loopback cannot trigger private-network or secure-context blocks, so for those cases the tests abort the request in the browser instead.
+
+```sh
+npm run typecheck
+npm run test:unit -- packages/inspector/tests/hosted packages/inspector/tests/runtime
+npm run test:e2e -- tests/e2e/hosted tests/e2e/visitor-policy
+npm run build && npm run check:bundle
+```
+
+## Python package tests
+
+| What | Command |
+| --- | --- |
+| Package, wheel and sdist | `npm run package:python` |
+| Python tests | `uv sync --project packages/python --locked --extra embedded --group test`, then `uv run --project packages/python python -m unittest discover -s packages/python/tests` |
+| Browser tests against the FastAPI example | `npm run test:e2e -- tests/e2e/python` |
+
+`packages/python/.python-version` pins Python 3.10, the minimum version, so CI and the default local run use it. To
+test another version, run `uv run --python 3.14 ...` with its own `UV_PROJECT_ENVIRONMENT`, so the two environments
+do not overwrite each other. `test_distribution.py` and the browser tests need Node and a built
+`packages/inspector/dist`. Without them, those tests fail instead of being skipped.
