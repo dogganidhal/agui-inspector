@@ -248,6 +248,11 @@ Then open `http://localhost:3000/agui-inspector/docs/`. `npm run build --prefix 
   `docs/reference/product-brief.md`, and the screenshots in `docs/images/`. Each screenshot has a light and a dark
   version, and the README and the pages share them. A page imports both and shows them with the `Screenshot`
   component, which picks the one that matches the reader's theme.
+- `node scripts/record-showcase.mjs` records the animation at the top of the README and the introduction. It plays
+  three scenes on the public demo in a fresh browser, once per theme, and replaces `docs/images/showcase-light.webp`
+  and `showcase-dark.webp`, which the README shows, and `website/public/docs/showcase-light.mp4` and
+  `showcase-dark.mp4`, which the `Video` component plays on the site. It needs Playwright's Chromium, ffmpeg and
+  img2webp, and takes about seven minutes. Run it again when the UI changes.
 - The theme imports `packages/inspector/src/views/theme/tokens.css` and maps Fumadocs' colors, fonts and radius to the
   inspector's [public `--agui-*` properties](./theming.mdx#public-properties). The build reads the navigation logo and
   favicon from `branding/`, so the site keeps no copy.

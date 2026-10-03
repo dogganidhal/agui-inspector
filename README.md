@@ -16,8 +16,8 @@ A developer tool for [AG-UI](https://docs.ag-ui.com) servers. Point it at an age
 </div>
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/run-dark.webp">
-  <img alt="The inspector after an A2UI run: the deploy board the agent drew on the left, and on the right the run's ten frames, each with its arrival time and a passing check." src="docs/images/run-light.webp">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/showcase-dark.webp">
+  <img alt="The public demo in three runs: a plain reply with one frame's raw bytes and its request, a slow reply streaming in frame by frame, and an A2UI support form filled in and sent." src="docs/images/showcase-light.webp">
 </picture>
 
 agui-inspector shows every request it sends and every event that comes back, in order, with its timing, checked
