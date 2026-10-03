@@ -5,14 +5,52 @@ Feature specifications define requirements and acceptance criteria. The
 The [original product brief](docs/reference/product-brief.md) is frozen for source traceability
 and planning input.
 
+## Current status
+
+As of 2026-10-03. This is the one summary of where the release stands. The sections under
+[Planning history](#planning-history) record how it got here and are not kept current.
+
+Built and merged on `main`:
+
+- The 0.1.0 MVP: embedded Starlette and FastAPI support, the hosted page, npm static assets for other servers, the
+  recorder, views for all 31 baseline event types, manual interrupt and tool replies, A2UI v0.9 surfaces, configuration,
+  presets and client profiles, raw submissions, and session export and import. Waves W1 and W2 (PRs #3 to #18) and the
+  three W3 follow-ups (D01 release hygiene, D02 theme delivery, D03 the catalog alias and the credential-echo
+  regression) are all merged.
+- The public demo, live at <https://dogganidhal.github.io/agui-inspector/> since 2026-10-02 and deployed from `main` by
+  `pages.yml`. It is the hosted page with scripted examples answered by a service worker, and it also accepts a
+  visitor's own HTTPS or `localhost` server. See [public demo](docs/public-demo.md).
+- The Python release workflow, `release-python.yml`, which keeps a `chore: version packages` pull request open. See
+  [distribution](docs/distribution.md#python-release).
+
+Still to verify:
+
+- SC-009, the 5,000-frame responsiveness check, on the headed Mac mini M2. The Apple M4 Pro headless result is
+  development evidence only, so SC-009 stays not passed until the maintainer runs the physical certification. See
+  [development](docs/development.md#5000-frame-benchmark).
+- A manual smoke run of each distribution mode (hosted, Python and static assets) before any release.
+- Firefox for the numeric loopback addresses. Chromium and Safari are recorded in
+  [hosted](docs/hosted.md#browser-check).
+
+Publication gates:
+
+- Nothing is published. `agui-inspector` was unregistered on npm and PyPI on 2026-10-03. Both manifests are private and
+  the Python package still carries the `Private :: Do Not Upload` classifier, so a registry install is not available.
+- Python: merging the open version pull request is the release, and the first release also needs a pull request that
+  removes the classifier. The maintainer approves the `pypi` deployment. Registering the trusted publisher on PyPI
+  happens outside this repository, and the maintainer confirms it.
+- npm: not set up. FR-040 asks for a CI build from a tag with npm provenance, and Changesets ignores the npm package
+  until that exists.
+- G-03, whether upstream accepts the inspector under `apps/inspector`, is open. `@ag-ui/inspector` stays conditional on it.
+- Nothing in this repository authorizes publishing, tagging or releasing. Each remains the maintainer's decision.
+
+Planned and not built: the CLI, the JS server helpers and the in-app inspector, listed under
+[1.0.0](#100-stable-target). Embedding in Python today mounts a separate page. It does not observe a host
+application's agent.
+
 ## 0.1.0 MVP
 
-Status: implemented on main (W1/W2, PRs #3-#18). Release verification pending: SC-009 on the
-physical runner, a manual smoke run in all MVP distribution modes, and the first publish (the Python release
-workflow is in place and waits for the maintainer's tag; npm is not set up).
-Three approved W3 follow-ups remain in [tasks](specs/001-inspector-mvp/tasks.md#wave-w3-release-decision-follow-ups).
-The public-demo companion is planned in [feature 002](specs/002-public-demo/spec.md); its
-implementation waits for all three W3 slices to merge and does not authorize package publication.
+Status: see [Current status](#current-status).
 
 The [MVP specification](specs/001-inspector-mvp/spec.md) defines the accepted scope;
 its [requirements checklist](specs/001-inspector-mvp/checklists/requirements.md) records the review.
@@ -33,70 +71,6 @@ least 95% of filter changes and frame expansions finishing visibly within 200 ms
 The implementation plan fixes the benchmark profile. The M4 Pro headless result is informational;
 headed physical M2 certification remains with the maintainer. The complete client
 bundle is limited to 2 MB minified and 600 KB gzipped.
-
-### Approved release decisions (2026-10-02)
-
-- G-01 closed: MIT, `Copyright (c) 2026 Nidhal Dogga`; both distributions ship bundled-dependency
-  third-party notices, including Apache-2.0 license texts and any NOTICE for `@a2ui/react`,
-  `@a2ui/web_core` and `@a2ui/markdown-it`. D01 implements packaging/metadata and the exact
-  DOMPurify 3.4.16 override/lock, Python 3.10/3.14 CI and benchmark-doc cleanup.
-- G-02 closed: `agui-inspector` on npm and PyPI, both unregistered on this date.
-  `@ag-ui/inspector` remains conditional on upstream adoption; G-03 remains open.
-- G-07 closed by constitution 1.0.3 PATCH: inspector-held credentials remain memory-only and are
-  never written by it; the recorder reads no headers. Target evidence, including credential
-  echoes, remains unchanged, with the sensitive-data export warning. No redaction anywhere.
-- G-08 closed without an extra integration PR: checkpoint 13 pass, 1 fail (F-01 embedded config
-  path, fixed by #18), 2 pending (SC-008 credential part, D03; SC-009 physical M2, maintainer).
-- G-09 closed: `config.json` theme light/dark public-property maps in every MVP mode; D02 delivers
-  validation/application, Python support and root-scoped derived tokens to avoid host collisions.
-- D03 adds the single middleware 0.0.11 default catalog id alias to the renderer's basic catalog,
-  beside the catalog factory, plus the credential-echo end-to-end regression. General aliases
-  remain 1.0.0 scope. `renderA2ui` is display-only and persists/exports; tool injection changes input.
-
-Each W3 slice is one PR depending only on main after the decision-recording PR, with disjoint
-ownership. Manifests remain private: no publishing, tags or releases are authorized. FR-040 remains.
-
-### Python release workflow (2026-10-03)
-
-Changesets drive the Python release. `.github/workflows/release-python.yml` keeps a `chore: version packages` pull request
-up to date on `main`; merging it tags the version, runs the strict gate and publishes to PyPI through trusted
-publishing, with no stored token. Nothing has run it: the maintainer still registers the trusted publisher, the `pypi`
-environment and the repository setting that lets the version pull request open, and the manifests stay private (the
-Python classifier included) until the first release PR. The npm release (provenance, a workflow of its own) is not set
-up. See [distribution](docs/distribution.md).
-
-### Public demo companion (2026-10-02)
-
-Status: live at <https://dogganidhal.github.io/agui-inspector/> since 2026-10-02. The
-[specification](specs/002-public-demo/spec.md), [implementation plan](specs/002-public-demo/plan.md) and
-[three slices](specs/002-public-demo/tasks.md) (T001 to T017) are implemented and merged; the Pages workflow
-deployed the demo from `main`.
-The demo accompanies 0.1.0 without adding npm/PyPI publishing, tags, the release workflow,
-JS server helpers or CLI to this feature.
-
-- GitHub Pages serves the existing hosted app under `/agui-inspector/`. Demo-only same-origin
-  service-worker endpoints reuse deterministic reference scenarios and return real HTTP/SSE
-  through the ordinary transport/recorder/frame reader; no model or external example service.
-- Example agents/presets/quick messages cover plain, interrupt, tools, slow, state, broken,
-  A2UI surfaces/actions and all 31 baseline event types. First-page readiness, unavailable
-  browser fallback and Pages sub-path routing are explicit acceptance requirements.
-- Constitution 1.1.0 MINOR permits explicit default-off hosted startup opt-in for visitor-selected
-  HTTPS and browser-supported HTTP loopback targets without inspector endpoint approval prompts.
-  The page discloses the boundary; defaults, embedded auth, no telemetry/automatic third-party
-  traffic, no hosted cookies, local scripts/no eval and memory-only credentials stay unchanged.
-  Use `http://localhost:<port>` locally; Chromium IPv4 must be re-proven, other browsers checked
-  manually, and IPv6 support is not claimed without exact CSP proof. No all-HTTP CSP fallback.
-- Demo worker/bootstrap/config stay outside ordinary static/npm/Python artifacts; both complete
-  asset sets retain the 2 MB/600 KB budgets and inherited 5,000-frame acceptance.
-- P01 **visitor-policy** and P02 **shared-demo-endpoints** have disjoint paths and depend on
-  main after W3 D01/D02/D03; P03 **demo-pages-delivery** depends on both, with at most one unmerged
-  direct parent. It supplies integrated browser/package checks, docs/embedding link and the
-  SHA-pinned least-privilege main-only Pages workflow.
-
-Open gates are [G-D01 through G-D05](specs/002-public-demo/plan.md#open-gates): W3 merges, exact
-numeric-loopback CSP evidence, native worker byte/Stop proof, separate maintainer Pages
-authorization, and integrated budgets/package-isolation/CI evidence. Physical M2 certification
-and MVP release/publishing decisions remain separate; planning does not enable Pages or deploy.
 
 ## 1.0.0 stable target
 
@@ -144,3 +118,87 @@ is selected for implementation. No delivery order or dates are assigned below.
   establish a transport contract.
 - G-06 in-app element: decide how element isolation works with A2UI styles injected into the document.
   Shadow-root integration remains unresolved.
+
+## Planning history
+
+These records are kept for traceability. Each describes the date in its heading, so present-tense lines in them can be
+out of date. [Current status](#current-status) is the source for where things stand. The task checkboxes in
+[`specs/`](specs) are history in the same way.
+
+### MVP status line, as first written
+
+Status: implemented on main (W1/W2, PRs #3-#18). Release verification pending: SC-009 on the
+physical runner, a manual smoke run in all MVP distribution modes, and the first publish (the Python release
+workflow is in place and waits for the maintainer's tag; npm is not set up).
+Three approved W3 follow-ups remain in [tasks](specs/001-inspector-mvp/tasks.md#wave-w3-release-decision-follow-ups).
+The public-demo companion is planned in [feature 002](specs/002-public-demo/spec.md); its
+implementation waits for all three W3 slices to merge and does not authorize package publication.
+
+Since then the three W3 slices and the public demo have merged.
+
+### Approved release decisions (2026-10-02)
+
+- G-01 closed: MIT, `Copyright (c) 2026 Nidhal Dogga`; both distributions ship bundled-dependency
+  third-party notices, including Apache-2.0 license texts and any NOTICE for `@a2ui/react`,
+  `@a2ui/web_core` and `@a2ui/markdown-it`. D01 implements packaging/metadata and the exact
+  DOMPurify 3.4.16 override/lock, Python 3.10/3.14 CI and benchmark-doc cleanup.
+- G-02 closed: `agui-inspector` on npm and PyPI, both unregistered on this date.
+  `@ag-ui/inspector` remains conditional on upstream adoption; G-03 remains open.
+- G-07 closed by constitution 1.0.3 PATCH: inspector-held credentials remain memory-only and are
+  never written by it; the recorder reads no headers. Target evidence, including credential
+  echoes, remains unchanged, with the sensitive-data export warning. No redaction anywhere.
+- G-08 closed without an extra integration PR: checkpoint 13 pass, 1 fail (F-01 embedded config
+  path, fixed by #18), 2 pending (SC-008 credential part, D03; SC-009 physical M2, maintainer).
+- G-09 closed: `config.json` theme light/dark public-property maps in every MVP mode; D02 delivers
+  validation/application, Python support and root-scoped derived tokens to avoid host collisions.
+- D03 adds the single middleware 0.0.11 default catalog id alias to the renderer's basic catalog,
+  beside the catalog factory, plus the credential-echo end-to-end regression. General aliases
+  remain 1.0.0 scope. `renderA2ui` is display-only and persists/exports; tool injection changes input.
+
+Each W3 slice is one PR depending only on main after the decision-recording PR, with disjoint
+ownership. Manifests remain private: no publishing, tags or releases are authorized. FR-040 remains.
+
+### Python release workflow (2026-10-03)
+
+Changesets drive the Python release. `.github/workflows/release-python.yml` keeps a `chore: version packages` pull request
+up to date on `main`; merging it tags the version, runs the strict gate and publishes to PyPI through trusted
+publishing, with no stored token. At that date nothing had run it: the maintainer still had to register the trusted
+publisher, the `pypi` environment and the repository setting that lets the version pull request open, and the manifests
+stay private (the Python classifier included) until the first release PR. The npm release (provenance, a workflow of its
+own) is not set up. See [distribution](docs/distribution.md).
+
+### Public demo companion (2026-10-02)
+
+Status: live at <https://dogganidhal.github.io/agui-inspector/> since 2026-10-02. The
+[specification](specs/002-public-demo/spec.md), [implementation plan](specs/002-public-demo/plan.md) and
+[three slices](specs/002-public-demo/tasks.md) (T001 to T017) are implemented and merged; the Pages workflow
+deployed the demo from `main`.
+The demo accompanies 0.1.0 without adding npm/PyPI publishing, tags, the release workflow,
+JS server helpers or CLI to this feature.
+
+- GitHub Pages serves the existing hosted app under `/agui-inspector/`. Demo-only same-origin
+  service-worker endpoints reuse deterministic reference scenarios and return real HTTP/SSE
+  through the ordinary transport/recorder/frame reader; no model or external example service.
+- Example agents/presets/quick messages cover plain, interrupt, tools, slow, state, broken,
+  A2UI surfaces/actions and all 31 baseline event types. First-page readiness, unavailable
+  browser fallback and Pages sub-path routing are explicit acceptance requirements.
+- Constitution 1.1.0 MINOR permits explicit default-off hosted startup opt-in for visitor-selected
+  HTTPS and browser-supported HTTP loopback targets without inspector endpoint approval prompts.
+  The page discloses the boundary; defaults, embedded auth, no telemetry/automatic third-party
+  traffic, no hosted cookies, local scripts/no eval and memory-only credentials stay unchanged.
+  Use `http://localhost:<port>` locally; Chromium IPv4 must be re-proven, other browsers checked
+  manually, and IPv6 support is not claimed without exact CSP proof. No all-HTTP CSP fallback.
+- Demo worker/bootstrap/config stay outside ordinary static/npm/Python artifacts; both complete
+  asset sets retain the 2 MB/600 KB budgets and inherited 5,000-frame acceptance.
+- P01 **visitor-policy** and P02 **shared-demo-endpoints** have disjoint paths and depend on
+  main after W3 D01/D02/D03; P03 **demo-pages-delivery** depends on both, with at most one unmerged
+  direct parent. It supplies integrated browser/package checks, docs/embedding link and the
+  SHA-pinned least-privilege main-only Pages workflow.
+
+Open gates at planning time were [G-D01 through G-D05](specs/002-public-demo/plan.md#open-gates): W3 merges, exact
+numeric-loopback CSP evidence, native worker byte/Stop proof, separate maintainer Pages
+authorization, and integrated budgets/package-isolation/CI evidence. Physical M2 certification
+and MVP release/publishing decisions remain separate; planning does not enable Pages or deploy.
+
+Outcome: G-D01, G-D03 and G-D05 are met by merged work and the checks in `npm run check:ci`. The maintainer granted
+G-D04 on 2026-10-02. G-D02 is met for Chromium and Safari, and the Firefox check is open.

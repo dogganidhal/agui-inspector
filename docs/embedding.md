@@ -6,6 +6,11 @@ inspector files and one helper, `mount_inspector`, that serves
 them from an existing Starlette or FastAPI application. The host needs no Node toolchain, and
 the helper downloads nothing at startup.
 
+The helper adds a separate page to your server. That page makes its own requests to your agent URLs, so it records the
+runs it starts. It does not attach to the agent your own frontend runs and does not see that agent's requests.
+Watching a host application's `AbstractAgent` is the planned in-app mode (see the [roadmap](../ROADMAP.md#100-stable-target)),
+which is not built.
+
 ## Enable it
 
 ```python
@@ -19,9 +24,10 @@ mount_inspector(
 )
 ```
 
-Install with the `embedded` extra, which adds Starlette (`pip install "agui-inspector[embedded]"`).
-FastAPI uses the same call because it is a Starlette application. The package itself depends on no
-framework, so a host that never enables the inspector installs nothing extra.
+The `embedded` extra adds Starlette. FastAPI uses the same call because it is a Starlette application. The package
+itself depends on no framework, so a host that never enables the inspector installs nothing extra. There is no
+registry install yet: build the wheel from a checkout and install it with the extra, as
+[Working from a source checkout](#working-from-a-source-checkout) shows.
 
 | Argument | Meaning |
 | --- | --- |
@@ -93,16 +99,27 @@ without that dependency running. Put the dependency on `app` itself, or guard wi
 `outer` or with the proxy. A plain Starlette application has no dependency system, so it needs
 middleware or the proxy.
 
+What the guard has to accept: a browser opens the inspector page with a plain navigation. That carries cookies and
+cached HTTP Basic credentials, but it cannot carry a custom header. A guard that accepts only
+`Authorization: Bearer <token>` therefore blocks the page itself, and typing a token into the page cannot help because
+the page has not loaded. Guard the inspector paths with a session cookie, HTTP Basic or a proxy that adds the credential.
+The agent routes behind that guard can still ask for a bearer token. The page's Authentication control sends one
+header with each agent request: keep the header name `Authorization` and type the complete value, `Bearer <token>`, in
+the Token field. See [the token](conversation.md#the-token).
+
 `examples/fastapi/app.py` is a model-free host with HTTP Basic authentication on every route, checked in
 middleware. It reads `EXAMPLE_USER` and `EXAMPLE_PASSWORD` from the environment, mounts the inspector
 only when `EXAMPLE_DEBUG=1`, and streams one scripted run from `POST /agents/demo/stream`:
 
 ```sh
-npm run build && npm run package:python
-EXAMPLE_USER=dev EXAMPLE_PASSWORD=... EXAMPLE_DEBUG=1 \
+npm run package:python
+EXAMPLE_USER=dev EXAMPLE_PASSWORD=choose-a-password EXAMPLE_DEBUG=1 \
   uv run --project packages/python --locked --extra embedded --group test \
   python examples/fastapi/app.py --port 8000
 ```
+
+Open <http://127.0.0.1:8000/agui-inspector/>. The browser asks for that user and password, then the page lists Demo
+agent. If port 8000 is taken, pass another `--port`.
 
 ## Serving the assets from another server
 
@@ -113,10 +130,27 @@ helper.
 
 ## Working from a source checkout
 
-The static files are not committed. A fresh checkout has no `src/agui_inspector/static` directory,
-and `mount_inspector(enabled=True)` then raises an error that points at `npm run package:python`.
-That command builds the assets, copies them into the package, writes `static.sha256` and runs
-`uv build`. See [build provenance](build-provenance.md) for what it checks.
+Nothing is on PyPI, so a checkout is how you run the package today. You need git, Node 24 or newer with npm, and
+[uv](https://docs.astral.sh/uv/).
+
+```sh
+git clone https://github.com/dogganidhal/agui-inspector.git
+cd agui-inspector
+npm ci --ignore-scripts
+npm run package:python
+```
+
+The static files are not committed. A fresh checkout has no `src/agui_inspector/static` directory, and
+`mount_inspector(enabled=True)` then raises an error that points at `npm run package:python`. That command builds the
+assets, copies them into the package, writes `static.sha256` and runs `uv build`, which leaves a wheel and an sdist in
+`packages/python/dist`. See [build provenance](build-provenance.md) for what it checks.
+
+To see the page working, start the model-free example from [Authentication](#authentication). To use the package in
+your own project, install the wheel with the extra. The file name carries the version:
+
+```sh
+pip install "/path/to/agui-inspector/packages/python/dist/agui_inspector-0.0.0-py3-none-any.whl[embedded]"
+```
 
 ## Tests
 
