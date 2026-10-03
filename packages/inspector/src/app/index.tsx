@@ -107,7 +107,7 @@ export function App({ settings, connection, conversation, inspection, mode, allo
       <header className="agui-app-bar">
         <span className="agui-app-brand">
           <span className="agui-app-mark" aria-hidden="true">
-            <Icon name="wire" size={16} />
+            <Icon name="mark" size={16} />
           </span>
           <h1>agui-inspector</h1>
         </span>
