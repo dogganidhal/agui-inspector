@@ -285,6 +285,31 @@ test('a sequence violation and a broken frame become findings while every frame 
   await expect(alert(page)).toHaveCount(0);
 });
 
+test('a "Not shown" issue stays in the run that produced it while later runs arrive', async ({ page, servers }) => {
+  await open(page, servers, { agent: 'plain' });
+  await send(page, 'broken');
+  await settled(page, 1);
+  await send(page, 'Hello there');
+  await settled(page, 2);
+  const issues = page.getByRole('list', { name: 'Projection issues' });
+  await expect(issues).toHaveCount(1);
+  await expect(issues).toContainText('Not shown');
+  await expect(issues).toContainText('never started');
+  // Where the issue sits: how many run headers precede it, and whether the damaged run's step follows it.
+  const place = () =>
+    issues.evaluate((list) => {
+      const before = (node: Element) => !!(node.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING);
+      return { runsBefore: [...document.querySelectorAll('[data-entry="run"]')].filter(before).length, stepsBefore: [...document.querySelectorAll('[data-entry="step"]')].filter(before).length };
+    });
+  expect(await place(), 'inside the broken run, ahead of the second run and of the step after the damage').toEqual({ runsBefore: 1, stepsBefore: 0 });
+
+  await send(page, 'A third run');
+  await settled(page, 3);
+  await expect(page.locator('[data-entry="run"]')).toHaveCount(3);
+  await expect(issues).toHaveCount(1);
+  expect(await place(), 'a newer run does not push it down').toEqual({ runsBefore: 1, stepsBefore: 0 });
+});
+
 // ---------------------------------------------------------------------------------------------
 // US1.6: Stop and New thread
 // ---------------------------------------------------------------------------------------------

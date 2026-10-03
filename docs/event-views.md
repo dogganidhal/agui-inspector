@@ -23,8 +23,10 @@ or the projection computed carries that mark in the interface:
 
 Frames that are not valid events (not JSON, unknown type, failed schema) add nothing here. They keep
 their finding in the frames list. If a valid event refers to something that never started, for
-example `TEXT_MESSAGE_CONTENT` for an unknown message, the conversation lists it under "Not shown"
-with its frame position. The projection never invents the missing start.
+example `TEXT_MESSAGE_CONTENT` for an unknown message, the conversation shows a "Not shown" note
+with a link to its frame. The note sits inside the run that produced it, between the entries that
+came before and after that frame, so later runs never push it away. The projection never invents
+the missing start.
 
 ## Event mapping
 
