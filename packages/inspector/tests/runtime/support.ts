@@ -9,8 +9,9 @@ import { createSessionStore } from '../../src/core/store/index.ts';
 
 const encoder = new TextEncoder();
 
-export const sse = (events: ReadonlyArray<object | string>): string =>
-  events.map((event) => `data: ${typeof event === 'string' ? event : JSON.stringify(event)}\n\n`).join('');
+/** `delimiter` ends each event; the default is the usual blank line made of two LF. */
+export const sse = (events: ReadonlyArray<object | string>, delimiter = '\n\n'): string =>
+  events.map((event) => `data: ${typeof event === 'string' ? event : JSON.stringify(event)}${delimiter}`).join('');
 
 export interface Call {
   readonly url: string;

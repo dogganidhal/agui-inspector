@@ -11,6 +11,8 @@
 // through the protocol client (HttpAgent) whose fetch is the recorder, which in turn sends through the
 // guarded transport. The client's view of the stream (messages, state, outcomes, sequence errors) is
 // kept here; the recording of the stream is the recorder's and is never touched by what the client does.
+// The client reads a copy of the response whose line endings are all LF (line-endings.ts), because it cannot
+// frame CRLF or CR; the recorder's branch was cloned before that and keeps the bytes as sent.
 //
 // The token lives in this object and is read in exactly one place: the guarded transport call. It is
 // not given to the recorder, the store, a log or an error message. Nothing here touches browser storage.
@@ -39,6 +41,7 @@ import { createFrameSink } from '../frames/index.ts';
 import { preparePreset } from '../presets/index.ts';
 import { composeRunInput } from '../profiles/index.ts';
 import { createRecorder, type CaptureRecorder, type RecorderClock } from '../recorder/index.ts';
+import { canonicalizeLineEndings } from './line-endings.ts';
 import { runPreparations } from './prepare.ts';
 import {
   NO_REPLIES,
@@ -407,15 +410,18 @@ export function createRuntime(options: RuntimeOptions): Runtime {
       initialMessages: [...current.messages, ...turnMessages],
       initialState: current.state,
       fetch: (url, init) =>
-        capture.record(
-          { kind: 'conversation', method: init.method ?? 'POST', path: recordedPath(new URL(url)), body, responseKind: 'sse', runId: recordId },
-          () => {
-            startedAt = epoch();
-            linked = true;
-            writeRun({ startedAt });
-            return transport.send({ url, method: init.method ?? 'POST', body, responseKind: 'sse' }, credentials, init.signal ?? controller.signal);
-          },
-        ),
+        capture
+          .record(
+            { kind: 'conversation', method: init.method ?? 'POST', path: recordedPath(new URL(url)), body, responseKind: 'sse', runId: recordId },
+            () => {
+              startedAt = epoch();
+              linked = true;
+              writeRun({ startedAt });
+              return transport.send({ url, method: init.method ?? 'POST', body, responseKind: 'sse' }, credentials, init.signal ?? controller.signal);
+            },
+          )
+          // The recorder cloned the response first; only the client's branch has its line endings made LF.
+          .then(canonicalizeLineEndings),
     });
     client.body = body;
 

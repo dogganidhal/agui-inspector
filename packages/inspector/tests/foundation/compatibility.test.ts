@@ -134,6 +134,21 @@ test('HttpAgent sends through the injected fetch and the client does not need ou
   assert.equal(capture!.body.protocolVersion, PROTOCOL_VERSION);
 });
 
+test('the pinned client cuts events on two LF only: CRLF and CR streams fail in it, which is why the runtime hands it an LF copy', async () => {
+  // Issue #49. The runtime's copy (src/core/runtime/line-endings.ts) is temporary: when this test fails, the pinned
+  // client frames CRLF and CR itself (ag-ui-protocol/ag-ui#2939), so delete the copy and update docs/dependencies.md.
+  const events = [runStarted, runFinishedSuccess];
+  for (const [name, delimiter] of [['LF', '\n\n'], ['CRLF', '\r\n\r\n'], ['CR', '\r\r']] as const) {
+    const seen: { failed?: Error; finished?: boolean } = {};
+    const agent = new HttpAgent({ url: 'http://agent.invalid/run', threadId: 't1', fetch: async () => streamingResponse(sse(events, delimiter)) });
+    await agent
+      .runAgent({ runId: 'r1' }, { onRunFailed: ({ error }) => void (seen.failed = error), onRunFinishedEvent: () => void (seen.finished = true) })
+      .catch(() => undefined);
+    assert.equal(seen.finished === true, name === 'LF', `${name}: the client ${name === 'LF' ? 'reads' : 'does not read'} the stream`);
+    assert.equal(seen.failed === undefined, name === 'LF', `${name}: ${name === 'LF' ? 'no' : 'a'} parse failure`);
+  }
+});
+
 test('protocolVersion and parentRunId reach the request through the documented requestInit override', async () => {
   class ProfileAgent extends HttpAgent {
     protected override requestInit(input: RunAgentInput): RequestInit {
