@@ -1,0 +1,58 @@
+name: Bug report
+description: The inspector shows, records or sends something it should not.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Report security problems privately instead; see [SECURITY.md](https://github.com/dogganidhal/agui-inspector/blob/main/SECURITY.md).
+        Raw frames and request bodies can hold personal data or credentials. Paste only synthetic or redacted data.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you saw, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Start from opening the page. For the public demo, name the example agent and the quick message.
+      placeholder: |
+        1. Open the public demo
+        2. Choose "Interactive scenarios" and send "tools"
+        3. ...
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Mode
+      options:
+        - Public demo
+        - Hosted (my own deployment)
+        - Embedded (Starlette or FastAPI)
+        - Static assets served by another server
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Commit or version
+      description: The commit you built from, or "public demo" with the date you used it.
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and OS
+      placeholder: Chrome 141 on macOS 26
+    validations:
+      required: true
+  - type: textarea
+    id: wire
+    attributes:
+      label: What the server sent
+      description: The relevant frames from the frames list or a redacted session export. Name the server framework if it matters.
+      render: text
