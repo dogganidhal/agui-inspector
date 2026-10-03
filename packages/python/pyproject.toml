@@ -1,6 +1,6 @@
 [project]
 name = "agui-inspector"
-version = "0.0.0"
+version = "0.0.1"
 description = "AG-UI inspector: prebuilt static assets and an opt-in Starlette/FastAPI mount helper. Private and not published."
 requires-python = ">=3.10"
 license = "MIT"
