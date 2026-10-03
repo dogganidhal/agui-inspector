@@ -35,8 +35,12 @@ that no external server is contacted.
    the request and response; interruption resolve/cancel, all-tool replies, a slow reply that
    finishes, stop on a response that never finishes, state changes and malformed-frame
    inspection behave as on a real server.
-3. **Given** the A2UI example, **When** the visitor edits and submits its form, **Then** the
-   action is recorded in a new run and the example returns the corresponding updated surface.
+3. **Given** the A2UI showcase, **When** the visitor picks one of its stories (find a table, support
+   ticket, deploy board, self-repair, sandbox probe, or the original order form) and acts on its
+   surfaces, **Then** every action is recorded in a new run with its resolved context and the example
+   returns the corresponding updated surface. A story that streams updates keeps its surface and what
+   the visitor typed; the self-repair stories show the generation lifecycle on one activity; the sandbox
+   probe's refusals are reported and nothing outside the page is requested.
 4. **Given** the protocol examples, **When** baseline and run-error are exercised, **Then**
    all 31 supported event types appear as original frames; mixed delimiters, fragmentation
    and invalid evidence remain inspectable without repair.
@@ -129,7 +133,12 @@ the demo under `/agui-inspector/`, and review workflow triggers/permissions with
   behavior, routes, status codes and test controls MUST be preserved.
 - **FR-004**: Example configuration MUST expose named interactive, A2UI and baseline-protocol
   agents with presets and quick messages covering plain, interrupt, tools, slow, never finishes,
-  state, broken, A2UI actions and all 31 baseline event types.
+  state, broken, A2UI actions and all 31 baseline event types. The A2UI agent MUST be one entry whose
+  quick messages are self-contained stories made of the bundled basic catalog (v0.9) alone: a
+  multi-surface booking with action context, a form with client-side checks and a server-side rule,
+  a surface updated while its run streams, the generation lifecycle with a retry and a failure, and a
+  probe of everything the inspector refuses. Each story is a pure function of the run input, and what
+  the agent declares as capabilities is what it emits.
 - **FR-005**: On first load the demo MUST enable example dispatch only after examples are ready,
   without requiring manual reload; readiness/failure MUST be visible and bounded by a 10-second
   activation wait, after which own-server use and inspection remain available.
@@ -210,7 +219,7 @@ the demo under `/agui-inspector/`, and review workflow triggers/permissions with
 - **SC-001**: On a fresh supported browser, the first plain example run succeeds without manual
   reload or an external server, and examples become ready or visibly unavailable within 10 seconds.
 - **SC-002**: All seven interactive scenarios, interrupt resolve/cancel, all-tool replies, the slow
-  reply finishing, stop on the never-finishes response and the A2UI action round trip match reference
+  reply finishing, stop on the never-finishes response and the A2UI stories and their action round trips match reference
   request/response evidence, as paced; baseline/run-error examples collectively retain all 31 original
   event types.
 - **SC-003**: A previously unlisted HTTPS target and a browser-compatible localhost target run

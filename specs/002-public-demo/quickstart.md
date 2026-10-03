@@ -39,7 +39,7 @@ prompts are outside the inspector's "no endpoint approval prompt" guarantee.
 ```sh
 npm run typecheck
 npm exec -- tsc -p demo/tsconfig.worker.json
-npm run test:unit -- tests/demo/scenarios.test.ts tests/demo/worker.test.ts packages/inspector/tests/foundation/reference-agent.test.ts packages/inspector/tests/runtime packages/inspector/tests/frames packages/inspector/tests/a2ui
+npm run test:unit -- tests/demo/scenarios.test.ts tests/demo/worker.test.ts tests/demo/a2ui-showcase.test.ts packages/inspector/tests/foundation/reference-agent.test.ts packages/inspector/tests/runtime packages/inspector/tests/frames packages/inspector/tests/a2ui
 ```
 
 Expect: existing Node fixture routes/statuses/CORS/recorded ordering/failures/held-stream counters
@@ -74,7 +74,7 @@ No Pages deployment is required.
 | Slow | The reply streams word by word and the run ends with TEXT_MESSAGE_END and RUN_FINISHED. Its schedule totals 6 to 10 seconds, proved by a unit test on an injected clock rather than a real wait. Stop partway through releases the worker and sends nothing afterwards. |
 | Never finishes / stop | Incremental response visible before close; Stop aborts both client/recorder branches, native producer cleanup observed, partial evidence retained, no invented terminal frame. |
 | State / broken | Snapshot/delta applied; invalid JSON/sequence evidence and all later bytes retained despite client failure. |
-| A2UI | Existing form rendered; edit/action records forwarded envelope in a new run and continuation surface changes; remote assets/catalogs remain blocked. |
+| A2UI | Each quick message of the showcase renders its surface(s); find a table goes results, booking, confirmation through clicks with every action context in the run's request; the support ticket shows its client checks, then the server's data-only error with typed values kept, then a confirmation; the deploy board updates at least three times while typed input survives and a later Pause patches it; self-repair ends on the valid surface and the never-valid variant on `failed`; the sandbox probe's refusals are reported and no request leaves the origin; the original order form still round-trips its edit. |
 | Baseline / run-error | All 31 original event types retained; mixed delimiters/split Unicode byte equality and original-vs-expanded distinction. |
 | Worker unsupported / blocked / timeout | Clear unavailable reason <=10 seconds, no example POST to Pages, own-server and import still work; no fake transport/auto-reload/replay. |
 | Scope and network | Config/preparations/worker under base path; unrelated paths/assets/visitor endpoints untouched; zero third-party requests on example-only fresh use. |

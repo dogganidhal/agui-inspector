@@ -583,7 +583,7 @@ test('an existing controller can ask and gets the same sensitive-data-free answe
 
 test('the worker bundle pulls in only the shared pure producers, their pacing and no Node, React or storage code', () => {
   assert.ok(inputs.length > 1);
-  for (const file of inputs) assert.match(file, /^(demo\/service-worker\.ts|examples\/reference-agent\/(scenarios|pacing|a2ui-scenarios|protocol-fixtures|recorder-fixtures)\.ts)$/, file);
+  for (const file of inputs) assert.match(file, /^(demo\/service-worker\.ts|examples\/reference-agent\/(scenarios|pacing|a2ui-scenarios|a2ui-showcase|protocol-fixtures|recorder-fixtures)\.ts)$/, file);
   assert.ok(!code.includes('node:'));
   assert.ok(!/\brequire\(/.test(code));
   for (const forbidden of [/\bcaches\b/, /\bindexedDB\b/, /\blocalStorage\b/, /\bsessionStorage\b/, /\bXMLHttpRequest\b/, /\bWebSocket\b/, /\bimportScripts\b/, /\bfetch\(/, /\.headers\b(?!\s*:)/, /\bcredentials\b/, /\bcookie/i]) {

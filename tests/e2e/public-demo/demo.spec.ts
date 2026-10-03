@@ -670,7 +670,7 @@ test('the four example agents are one choice away in the top bar, and a typed en
 test('A2UI: the form renders, its edited action starts a new run, and the surface changes in place', async ({ page, open, requested }) => {
   const site = await open();
   await openDemo(page, site);
-  await chooseAgent(page, /A2UI form/);
+  await chooseAgent(page, /A2UI showcase/);
   await quick(page, 'Show the order form').click();
 
   await expect(page.getByRole('heading', { name: 'Order check' })).toBeVisible();
