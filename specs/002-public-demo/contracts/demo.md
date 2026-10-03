@@ -57,8 +57,8 @@ routes; never proxy arbitrary URLs, handle navigation, cache assets or intercept
 
 | Route | Method / response |
 | --- | --- |
-| B + __demo__/agent/interactive | POST run input; 200 shared interactive SSE. |
-| B + __demo__/agent/a2ui | POST run input; 200 supported activity snapshot containing existing form/continuation operations and matching run envelope. |
+| B + __demo__/agent/interactive | POST run input; 200 shared interactive SSE, paced. |
+| B + __demo__/agent/a2ui | POST run input; 200 supported activity snapshot containing existing form/continuation operations and matching run envelope, paced. |
 | B + __demo__/agent/protocol/baseline | POST run input; 200 baseline bytes generated with supplied IDs. |
 | B + __demo__/agent/protocol/run-error | POST run input; 200 RUN_STARTED/RUN_ERROR bytes. |
 | B + __demo__/prepare/sessions/<threadId> | PUT; 200 JSON {"ok":true}; exactly one nonempty segment, not a broad prefix. |
@@ -72,8 +72,16 @@ paths may return local JSON 404; nonreserved fetch events pass through unhandled
 Responses declare content type/cache-control no-store; recorder still reads no headers. Worker
 never inspects auth/cookie headers or records request objects. Uint8Array SSE chunks preserve
 malformed bytes/mixed delimiters; native browser coalescing is not failure. Cancellation/abort
-cleans up held-open producer and both page readers, with no artificial terminal event. Browser
-proof required; unsupported cleanup blocks G-D03 rather than hiding failure.
+cleans up held-open producer, a paced producer in a pause or mid-stream, and both page readers, with
+no artificial terminal event. Browser proof required; unsupported cleanup blocks G-D03 rather than
+hiding failure.
+
+Pacing (FX9): the interactive and A2UI answers are paced. RUN_STARTED goes out at once; the first event
+after it waits 300 to 900 ms; text, reasoning and tool-call argument deltas are cut into word-sized or
+few-character pieces 20 to 60 ms apart; a new message, step or tool call waits 150 to 400 ms, a tool
+result 400 to 900 ms after its call, a state or surface update 250 to 600 ms. Event types and order are
+those of the scenario and each delta stream joins back to the original text. Baseline and run-error bytes,
+chunks and delimiters are unchanged and unpaced. The only worker timers are these pauses.
 
 ## Example config
 

@@ -102,6 +102,7 @@ packages/inspector/src/app/{security,startup,index}.*# P01 policy/footer/mount s
 packages/inspector/src/core/runtime/transport.ts    # P01 central guard
 examples/reference-agent/scenarios.ts              # P02 new pure producer
 examples/reference-agent/{server,interactive-scenarios,protocol-fixtures}.ts
+examples/reference-agent/pacing.ts                  # FX9 pacing layer, shared by both adapters
 demo/bootstrap.ts                                  # P03 DOM entry
 demo/tsconfig.json                                 # P03 DOM typecheck
 demo/service-worker.ts                             # P02 endpoint adapter
@@ -164,6 +165,16 @@ requests or forwarding network traffic. Assets/navigation/external/visitor endpo
 unhandled. No cache/offline shell. Native cancellation/abort must release both page readers and
 held-open producer without inventing terminal frames; browser proof G-D03 is required. Compare
 complete bytes/order and incremental delivery; native chunk boundaries may coalesce.
+
+Pacing (FX9) is one pure transform, `examples/reference-agent/pacing.ts`, over a `ScenarioResponse`:
+it cuts streamed text, reasoning and tool-call argument deltas into pieces and writes an optional
+`delaysMs` beside `chunks`. Producers stay pure and sleep nowhere. The worker applies it to the agent
+routes and plays the result with an abortable sleep on its own timers; Stop aborts the sleep, drops the
+unsent chunks and releases the response. Pauses come from a position-based hash, never a clock or a random
+source. Frames that are not whole `data:` events (the protocol fixtures' fragments, invalid JSON) pass
+through unchanged, and a delta with no start event is not cut, so malformed fixtures keep their damage as
+authored. The Node interactive adapter takes an opt-in `pace` profile and is otherwise unchanged; the CLI
+fixture server is not paced. No dependency, no runtime option for visitors, no new worker route.
 
 Register a classic bundled sibling worker with page-directory scope and `updateViaCache: 'none'`.
 Install uses `skipWaiting()`, activate `clients.claim()`; no persistent state is migrated.

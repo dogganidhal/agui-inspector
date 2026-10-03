@@ -4,7 +4,8 @@
 // `/agui-inspector/` from one loopback origin that logs every request it receives. Example endpoints are
 // answered by the actual worker, never by a request stub, so a test sees what the page's own fetch,
 // recorder and frame reader saw: the exported session is compared byte for byte with what the shared
-// reference producers generate for the request the page actually sent.
+// reference producers generate for the request the page actually sent, as the worker's pacing layer cuts
+// it (FX9: the examples stream over a second or two, with the text in many small deltas).
 //
 // Every test starts in a fresh browser context: no controller, no storage, nothing cached.
 import { readFileSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
@@ -14,6 +15,7 @@ import path from 'node:path';
 import { EventType } from '@ag-ui/core';
 import { expect, test as base, type Locator, type Page, type Worker } from '@playwright/test';
 import { createInteractiveServer, type InteractiveServer } from '../../../examples/reference-agent/interactive-scenarios.ts';
+import { pace } from '../../../examples/reference-agent/pacing.ts';
 import { a2uiResponse, baselineResponse, interactiveResponse, runErrorResponse, type RunInput, type ScenarioResponse } from '../../../examples/reference-agent/scenarios.ts';
 import { buildDemo } from '../../../scripts/build-demo.mjs';
 
@@ -205,7 +207,7 @@ async function idle(page: Page): Promise<void> {
 
 interface Session {
   exchanges: Array<{ id: string; kind: string; method: string; path: string; status?: number; transport: string; requestBody?: string; responseBody?: string }>;
-  frames: Array<{ exchangeId: string; index: number; classification: string; envelope: string; eventType?: string; jsonVerdict: string }>;
+  frames: Array<{ exchangeId: string; index: number; classification: string; envelope: string; eventType?: string; jsonVerdict: string; offsetMs: number }>;
   runs: Array<{ outcome: { kind: string } }>;
   findings: Array<{ kind: string }>;
 }
@@ -220,19 +222,35 @@ async function exportSession(page: Page): Promise<Session> {
   return (JSON.parse(readFileSync(file, 'utf8')) as { session: Session }).session;
 }
 
+/**
+ * The session once every response has been read to its end. A paced response keeps arriving, and being
+ * recorded, after the client has given up on it, as in a run with a broken frame in the middle.
+ */
+async function settledSession(page: Page): Promise<Session> {
+  let session = await exportSession(page);
+  await expect
+    .poll(async () => {
+      session = await exportSession(page);
+      return session.exchanges.every((exchange) => !['created', 'sending', 'streaming', 'reading'].includes(exchange.transport));
+    })
+    .toBe(true);
+  return session;
+}
+
 const conversations = (session: Session) => session.exchanges.filter((exchange) => exchange.kind === 'conversation');
 const framesOf = (session: Session, exchangeId: string) => session.frames.filter((frame) => frame.exchangeId === exchangeId).sort((a, b) => a.index - b.index);
 /** The response body as recorded: the original envelopes, delimiters included, in arrival order. */
 const wireOf = (session: Session, exchangeId: string) => framesOf(session, exchangeId).map((frame) => frame.envelope).join('');
 const decode = (response: ScenarioResponse) => new TextDecoder().decode(Buffer.concat(response.chunks));
 
-/** What the shared producers answer for the run input the page actually sent to this example route. */
+/** What the worker serves for the run input the page actually sent to this example route: the shared producer's answer, paced. */
 function produced(exchange: { path: string; requestBody?: string }): ScenarioResponse {
   const input = JSON.parse(exchange.requestBody ?? '') as RunInput;
-  if (exchange.path.endsWith('/__demo__/agent/interactive')) return interactiveResponse(input);
-  if (exchange.path.endsWith('/__demo__/agent/a2ui')) return a2uiResponse(input);
-  if (exchange.path.endsWith('/__demo__/agent/protocol/baseline')) return baselineResponse(input);
-  if (exchange.path.endsWith('/__demo__/agent/protocol/run-error')) return runErrorResponse(input);
+  if (exchange.path.endsWith('/__demo__/agent/interactive')) return pace(interactiveResponse(input));
+  if (exchange.path.endsWith('/__demo__/agent/a2ui')) return pace(a2uiResponse(input));
+  // The protocol fixtures are wire evidence: pacing leaves their bytes and chunks alone.
+  if (exchange.path.endsWith('/__demo__/agent/protocol/baseline')) return pace(baselineResponse(input));
+  if (exchange.path.endsWith('/__demo__/agent/protocol/run-error')) return pace(runErrorResponse(input));
   throw new Error(`no producer for ${exchange.path}`);
 }
 
@@ -355,7 +373,7 @@ test('plain, state and broken runs carry exactly the reference bytes, and the da
   await quick(page, 'broken').click();
   await idle(page);
 
-  const session = await exportSession(page);
+  const session = await settledSession(page);
   expectProducedBytes(session);
   const runs = conversations(session);
   expect(runs).toHaveLength(3);
@@ -487,7 +505,8 @@ test('slow: bytes arrive while the response is held open, and Stop releases the 
   const [slow] = conversations(session);
   expect(slow?.transport).toBe('user-stopped');
   // The partial evidence is kept as received, and no terminal frame was made up.
-  expect(framesOf(session, slow!.id).map((frame) => frame.eventType)).toEqual(['RUN_STARTED', 'TEXT_MESSAGE_START', 'TEXT_MESSAGE_CONTENT']);
+  // The text arrived as three word-sized deltas; the response is still open after the last one.
+  expect(framesOf(session, slow!.id).map((frame) => frame.eventType)).toEqual(['RUN_STARTED', 'TEXT_MESSAGE_START', 'TEXT_MESSAGE_CONTENT', 'TEXT_MESSAGE_CONTENT', 'TEXT_MESSAGE_CONTENT']);
   expect(wireOf(session, slow!.id)).toBe(decode(produced(slow!)));
   expect(session.runs[0]?.outcome).toEqual({ kind: 'unknown' });
   expect(session.findings.filter((finding) => finding.kind === 'terminal')).toHaveLength(1);
@@ -516,6 +535,66 @@ test('slow: stopping the moment the run starts keeps what arrived, makes up no t
   expect(types).not.toContain('RUN_ERROR');
   expect(wireOf(session, slow!.id)).toBe(decode(produced(slow!)).slice(0, wireOf(session, slow!.id).length));
 
+  await quick(page, 'Hello there').click();
+  await expect(reply(page)).toBeVisible();
+  expect(site.requests.filter((request) => request.method !== 'GET')).toEqual([]);
+});
+
+// ---------------------------------------------------------------------------------------------
+// Natural pacing (FX9)
+// ---------------------------------------------------------------------------------------------
+
+test('a plain run streams like a model: a think pause, then the text in small deltas over time, not one frame in a millisecond', async ({ page, open }) => {
+  const site = await open();
+  await openDemo(page, site);
+  await quick(page, 'Hello there').click();
+  await expect(reply(page)).toBeVisible();
+  await idle(page);
+
+  const session = await exportSession(page);
+  expectProducedBytes(session);
+  const [run] = conversations(session);
+  const frames = framesOf(session, run!.id);
+  const deltas = frames.filter((frame) => frame.eventType === 'TEXT_MESSAGE_CONTENT').map((frame) => (JSON.parse(frame.envelope.slice('data: '.length)) as { delta: string }).delta);
+  expect(deltas.length, 'the reply streamed in several deltas').toBeGreaterThan(1);
+  expect(deltas.join('')).toBe('Hello from the reference agent.');
+  // Same events in the same order as the unpaced scenario: only the text frame was cut up.
+  expect([...new Set(frames.map((frame) => frame.eventType))]).toEqual(['RUN_STARTED', 'TEXT_MESSAGE_START', 'TEXT_MESSAGE_CONTENT', 'TEXT_MESSAGE_END', 'RUN_FINISHED']);
+
+  // The run is announced at once, the model then "thinks", and the whole run takes visibly longer than before.
+  expect(frames[1]!.offsetMs - frames[0]!.offsetMs, 'the think pause after RUN_STARTED').toBeGreaterThanOrEqual(250);
+  expect(frames.at(-1)!.offsetMs, 'the run took more than half a second').toBeGreaterThan(500);
+  const gaps = frames.slice(2).map((frame, index) => frame.offsetMs - frames[index + 1]!.offsetMs);
+  expect(gaps.filter((gap) => gap > 0).length, 'the deltas arrived at different times, not in one burst').toBeGreaterThan(3);
+});
+
+test('Stop during a paced run cancels it: nothing more arrives, no terminal frame is made up, and the worker is released', async ({ page, context, open }) => {
+  const site = await open();
+  await openDemo(page, site);
+  const [worker] = context.serviceWorkers();
+  const cancelled = await countCancellations(worker!);
+
+  await quick(page, 'Hello there').click();
+  // The run is announced and the model is thinking: most of this finite response is still to come.
+  await expect(stopButton(page)).toBeEnabled();
+  await stopButton(page).click();
+  await idle(page);
+  await expect.poll(cancelled, 'the page cancelled both readers, so the paced producer was released').toBe(1);
+
+  const stopped = await exportSession(page);
+  const [run] = conversations(stopped);
+  expect(run?.transport).toBe('user-stopped');
+  const types = framesOf(stopped, run!.id).map((frame) => frame.eventType);
+  expect(types).not.toContain('RUN_FINISHED');
+  expect(types).not.toContain('RUN_ERROR');
+  await expect(page.getByRole('alert')).toHaveCount(0);
+
+  // The rest of the run would have arrived by now, had the worker not been cancelled.
+  await page.waitForTimeout(1200);
+  const later = await exportSession(page);
+  expect(framesOf(later, run!.id).map((frame) => frame.eventType)).toEqual(types);
+
+  // Nothing is left over: the next example runs.
   await quick(page, 'Hello there').click();
   await expect(reply(page)).toBeVisible();
   expect(site.requests.filter((request) => request.method !== 'GET')).toEqual([]);
