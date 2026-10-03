@@ -58,7 +58,7 @@ With the default path the helper adds:
 
 | Route | Response |
 | --- | --- |
-| `GET /agui-inspector` | A 307 redirect to `/agui-inspector/`, keeping the query string, so the page's relative script URL resolves. |
+| `GET /agui-inspector` | A 307 redirect to `/agui-inspector/`, keeping the query string, so the page's relative script URL resolves. The `Location` includes the ASGI `root_path`, which holds the prefix of every enclosing mount: under `outer.mount("/api", app)` it is `/api/agui-inspector/`. |
 | `GET /agui-inspector/` | The inspector page. |
 | `GET /agui-inspector/config.json` | The version-0 configuration built from `agents` and `theme`: `{"version": 0, "agents": [...], "theme": {...}}`. Fields left as `None` are omitted, and so is `theme` when you pass none. The page reads it from beside itself, so a custom `path` works the same way. |
 | `GET /agui-inspector/<file>` | A packaged asset, including nested ones. Anything else is a 404. |
@@ -73,15 +73,29 @@ segments and backslashes, and serves only files under the packaged `static` dire
 
 ## Authentication
 
-The helper adds none. The inspector, its configuration and its assets sit behind whatever
-middleware, dependency or reverse proxy already guards the rest of the application, and the page
-sends its requests to relative agent URLs on the same origin, so the browser attaches the same
-credentials it already holds for your site. Configuration never holds credentials: `Agent` has no
-field for them.
+The helper adds none. The inspector, its configuration and its assets sit behind whatever already
+guards the rest of the application, and the page sends its requests to relative agent URLs on the
+same origin, so the browser attaches the same credentials it already holds for your site. Configuration
+never holds credentials: `Agent` has no field for them.
 
-`examples/fastapi/app.py` is a model-free host with HTTP Basic authentication on every route. It
-reads `EXAMPLE_USER` and `EXAMPLE_PASSWORD` from the environment, mounts the inspector only when
-`EXAMPLE_DEBUG=1`, and streams one scripted run from `POST /agents/demo/stream`:
+The page, `config.json`, the assets and the slash redirect all inherit these guards:
+
+- Middleware on the application you pass to `mount_inspector`, or on any application that mounts it.
+- A reverse proxy or gateway in front of the inspector path.
+- On FastAPI, the application-level dependencies of the application you pass:
+  `FastAPI(dependencies=[Depends(require_login)])`. On a FastAPI application the helper registers API
+  routes, so those dependencies run for all four routes. The routes stay out of the OpenAPI schema.
+
+One setup is not covered: a dependency on an application that mounts yours. FastAPI does not run an
+enclosing application's dependencies for a mounted sub-application, so with
+`outer = FastAPI(dependencies=[...])` and `outer.mount("/api", app)` the inspector in `app` is served
+without that dependency running. Put the dependency on `app` itself, or guard with middleware on
+`outer` or with the proxy. A plain Starlette application has no dependency system, so it needs
+middleware or the proxy.
+
+`examples/fastapi/app.py` is a model-free host with HTTP Basic authentication on every route, checked in
+middleware. It reads `EXAMPLE_USER` and `EXAMPLE_PASSWORD` from the environment, mounts the inspector
+only when `EXAMPLE_DEBUG=1`, and streams one scripted run from `POST /agents/demo/stream`:
 
 ```sh
 npm run build && npm run package:python

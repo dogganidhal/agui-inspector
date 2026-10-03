@@ -2,11 +2,13 @@
 
 The static files ship inside this package (see scripts/package-python.mjs); nothing is built or
 downloaded on the host. The helper mounts nothing unless ``enabled=True``, adds no authentication
-(the host's own middleware guards every route), and has no session storage or agent proxy.
+(the host's own middleware, or on FastAPI its application-level dependencies, guards every route),
+and has no session storage or agent proxy.
 """
 
 from __future__ import annotations
 
+import functools
 import json
 import logging
 import mimetypes
@@ -62,6 +64,12 @@ def mount_inspector(
     ``enabled`` defaults to False and a disabled call touches nothing, not even the optional
     Starlette import. Enabling logs a warning that names the mount path.
 
+    The helper adds no authentication; every route inherits the host's. Middleware on ``app`` or on
+    an application that mounts it covers all of them. On a FastAPI ``app`` the routes are API routes,
+    so the dependencies passed to ``FastAPI(dependencies=[...])`` run too. A dependency on an
+    enclosing application does not run for a mounted sub-application: put it on the ``app`` you pass
+    here, or guard with middleware or the reverse proxy.
+
     ``theme`` is ``{"light": {...}, "dark": {...}}``, either map optional, from the ten documented
     ``--agui-*`` property names to CSS values. It goes into ``config.json`` as given: the page
     validates it and shows a warning for any name or value it rejects, never an error.
@@ -74,6 +82,7 @@ def mount_inspector(
     if not all(ids) or not all(agent.url for agent in agents) or len(set(ids)) != len(ids):
         raise ValueError("every agent needs a unique nonempty id and a url")
     try:
+        from starlette.requests import Request
         from starlette.responses import RedirectResponse, Response
     except ImportError as exc:
         raise ImportError(
@@ -94,7 +103,9 @@ def mount_inspector(
 
     async def redirect(request):
         query = f"?{request.url.query}" if request.url.query else ""
-        return RedirectResponse(f"{mount}/{query}", status_code=307)
+        # root_path holds the prefix of every enclosing mount and of a proxy that strips its own
+        prefix = request.scope.get("root_path", "").rstrip("/")
+        return RedirectResponse(f"{prefix}{mount}/{query}", status_code=307)
 
     async def serve(request):
         asset = request.path_params["asset"]
@@ -106,6 +117,13 @@ def mount_inspector(
         media_type = mimetypes.guess_type(node.name)[0] or "application/octet-stream"
         return Response(node.read_bytes(), media_type=media_type, headers=headers)
 
-    app.add_route(mount, redirect, methods=["GET", "HEAD"])
-    app.add_route(f"{mount}/{{asset:path}}", serve, methods=["GET", "HEAD"])
+    if hasattr(app, "add_api_route"):
+        # FastAPI runs application-level dependencies only for API routes, and takes the request
+        # from a real annotation (the ones in this module are strings).
+        redirect.__annotations__ = serve.__annotations__ = {"request": Request}
+        add = functools.partial(app.add_api_route, include_in_schema=False)
+    else:
+        add = app.add_route
+    add(mount, redirect, methods=["GET", "HEAD"])
+    add(f"{mount}/{{asset:path}}", serve, methods=["GET", "HEAD"])
     _log.warning("agui-inspector is enabled and mounted at %s; disable it outside development", mount)

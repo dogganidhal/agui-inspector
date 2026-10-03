@@ -4,6 +4,7 @@ Route tests serve a small stand-in asset directory so they run on a source check
 built assets are checked in test_distribution.py and in tests/e2e/python.
 """
 
+import itertools
 import json
 import logging
 import sys
@@ -12,8 +13,11 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, HTTPException, Request
 from starlette.applications import Starlette
+from starlette.middleware import Middleware
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
 from starlette.testclient import TestClient
 
 import agui_inspector
@@ -202,19 +206,19 @@ class EnabledTest(StaticFixture):
             self.assertNotIn("http", policy)
 
     def test_paths_cannot_escape_the_static_directory(self):
-        app = Starlette()
-        mount_inspector(app, agents=AGENTS, enabled=True)
-        client = TestClient(app)
-        for path in (
-            "/agui-inspector/../secret.txt",
-            "/agui-inspector/%2e%2e/secret.txt",
-            "/agui-inspector/assets/../../secret.txt",
-            "/agui-inspector/..%2fsecret.txt",
-            "/agui-inspector/assets%5c..%5c..%5csecret.txt",
-        ):
-            response = client.get(path, follow_redirects=False)
-            self.assertNotIn("outside the static directory", response.text, path)
-            self.assertIn(response.status_code, (307, 400, 404), path)
+        for name, app in self.apps():
+            mount_inspector(app, agents=AGENTS, enabled=True)
+            client = TestClient(app)
+            for path in (
+                "/agui-inspector/../secret.txt",
+                "/agui-inspector/%2e%2e/secret.txt",
+                "/agui-inspector/assets/../../secret.txt",
+                "/agui-inspector/..%2fsecret.txt",
+                "/agui-inspector/assets%5c..%5c..%5csecret.txt",
+            ):
+                response = client.get(path, follow_redirects=False)
+                self.assertNotIn("outside the static directory", response.text, f"{name} {path}")
+                self.assertIn(response.status_code, (307, 400, 404), f"{name} {path}")
 
     def test_no_session_storage_or_agent_proxy(self):
         app = Starlette()
@@ -247,6 +251,126 @@ class EnabledTest(StaticFixture):
         self.assertEqual(200, client.get("/agui-inspector/config.json", headers=allowed).status_code)
         # config.json never echoes request headers back
         self.assertNotIn("synthetic", json.dumps(client.get("/agui-inspector/config.json", headers=allowed).json()))
+
+
+    def test_fastapi_application_dependencies_guard_every_inspector_route(self):
+        # FastAPI runs app-level dependencies for its API routes, so the helper registers those on a FastAPI host.
+        def require_token(request: Request):
+            if request.headers.get("authorization") != "Bearer synthetic":
+                raise HTTPException(status_code=401, detail="Authentication required")
+
+        app = FastAPI(dependencies=[Depends(require_token)])
+        mount_inspector(app, agents=AGENTS, enabled=True)
+        client = TestClient(app)
+        paths = (
+            "/agui-inspector",
+            "/agui-inspector?x=1",
+            "/agui-inspector/",
+            "/agui-inspector/config.json",
+            "/agui-inspector/app.js",
+            "/agui-inspector/assets/chunk.js",
+            "/agui-inspector/missing.js",
+        )
+        for path in paths:
+            for method in ("GET", "HEAD"):
+                response = client.request(method, path, follow_redirects=False)
+                self.assertEqual(401, response.status_code, f"{method} {path}")
+                self.assertNotIn("support", response.text, path)
+        allowed = {"authorization": "Bearer synthetic"}
+        self.assertEqual(307, client.get("/agui-inspector?x=1", headers=allowed, follow_redirects=False).status_code)
+        self.assertEqual(INDEX, client.get("/agui-inspector/", headers=allowed).text)
+        self.assertEqual(APP_JS, client.get("/agui-inspector/app.js", headers=allowed).text)
+        self.assertEqual("support", client.get("/agui-inspector/config.json", headers=allowed).json()["agents"][0]["id"])
+        self.assertEqual(404, client.get("/agui-inspector/missing.js", headers=allowed).status_code)
+
+    def test_fastapi_routes_stay_out_of_the_openapi_schema(self):
+        app = FastAPI()
+        mount_inspector(app, agents=AGENTS, enabled=True)
+        schema = TestClient(app).get("/openapi.json")
+        self.assertEqual(200, schema.status_code)
+        self.assertEqual({}, schema.json()["paths"])
+
+    def test_starlette_middleware_guards_every_inspector_route(self):
+        async def guard(request, call_next):
+            if request.headers.get("authorization") != "Bearer synthetic":
+                return Response(status_code=401)
+            return await call_next(request)
+
+        app = Starlette(middleware=[Middleware(BaseHTTPMiddleware, dispatch=guard)])
+        mount_inspector(app, agents=AGENTS, enabled=True)
+        client = TestClient(app)
+        for path in ("/agui-inspector", "/agui-inspector/", "/agui-inspector/app.js", "/agui-inspector/config.json"):
+            self.assertEqual(401, client.get(path, follow_redirects=False).status_code, path)
+        self.assertEqual(200, client.get("/agui-inspector/", headers={"authorization": "Bearer synthetic"}).status_code)
+
+    def test_a_guard_on_an_enclosing_application_covers_the_mounted_inspector_only_as_middleware(self):
+        def deny():
+            raise HTTPException(status_code=401, detail="Authentication required")
+
+        async def guard(request, call_next):
+            return Response(status_code=401)
+
+        inner = FastAPI()
+        mount_inspector(inner, agents=AGENTS, enabled=True)
+        by_middleware = FastAPI()
+        by_middleware.middleware("http")(guard)
+        by_middleware.mount("/api", inner)
+        for path in ("/api/agui-inspector", "/api/agui-inspector/", "/api/agui-inspector/config.json"):
+            self.assertEqual(401, TestClient(by_middleware).get(path, follow_redirects=False).status_code, path)
+        # FastAPI does not run an enclosing app's dependencies for a mounted sub-application. The guide says so.
+        by_dependency = FastAPI(dependencies=[Depends(deny)])
+        by_dependency.mount("/api", inner)
+        self.assertEqual(200, TestClient(by_dependency).get("/api/agui-inspector/").status_code)
+
+
+class MountPrefixTest(StaticFixture):
+    def assertRedirectsAndLoads(self, client, requested, location):
+        response = client.get(requested, follow_redirects=False)
+        self.assertEqual(307, response.status_code, requested)
+        self.assertEqual(location, response.headers["location"], requested)
+        followed = client.get(requested)
+        self.assertEqual(200, followed.status_code, requested)
+        self.assertEqual(INDEX, followed.text, requested)
+
+    def test_an_enclosing_mount_prefix_survives_the_redirect(self):
+        for (inner_name, inner), (outer_name, outer) in itertools.product(self.apps(), self.apps()):
+            with self.subTest(inner=inner_name, outer=outer_name):
+                mount_inspector(inner, agents=AGENTS, enabled=True)
+                outer.mount("/api", inner)
+                client = TestClient(outer)
+                self.assertRedirectsAndLoads(client, "/api/agui-inspector", "/api/agui-inspector/")
+                self.assertRedirectsAndLoads(client, "/api/agui-inspector?x=1&y=a%20b", "/api/agui-inspector/?x=1&y=a%20b")
+                self.assertEqual(APP_JS, client.get("/api/agui-inspector/app.js").text)
+
+    def test_nested_mounts_and_a_custom_path_keep_every_prefix(self):
+        for name, inner in self.apps():
+            with self.subTest(name):
+                mount_inspector(inner, agents=AGENTS, enabled=True, path="/tools/inspector/")
+                middle = Starlette()
+                middle.mount("/v1", inner)
+                outer = FastAPI()
+                outer.mount("/api", middle)
+                client = TestClient(outer)
+                self.assertRedirectsAndLoads(client, "/api/v1/tools/inspector?x=1", "/api/v1/tools/inspector/?x=1")
+                self.assertEqual(404, client.get("/api/v1/agui-inspector/").status_code)
+
+    def test_the_asgi_root_path_is_part_of_the_redirect(self):
+        for name, make in (("starlette", Starlette), ("fastapi", FastAPI)):
+            with self.subTest(name):
+                app = make()
+                mount_inspector(app, agents=AGENTS, enabled=True)
+                client = TestClient(app, root_path="/proxy")
+                # the proxy strips the prefix, or the server includes it in the path: same URL either way
+                self.assertRedirectsAndLoads(client, "/agui-inspector?x=1", "/proxy/agui-inspector/?x=1")
+                self.assertRedirectsAndLoads(client, "/proxy/agui-inspector?x=1", "/proxy/agui-inspector/?x=1")
+
+    def test_fastapi_root_path_and_a_mount_add_up(self):
+        inner = FastAPI()
+        mount_inspector(inner, agents=AGENTS, enabled=True)
+        outer = FastAPI(root_path="/proxy")
+        outer.mount("/api", inner)
+        # servers put root_path in front of the path, which is what lets a mount resolve under it
+        self.assertRedirectsAndLoads(TestClient(outer), "/proxy/api/agui-inspector?x=1", "/proxy/api/agui-inspector/?x=1")
 
 
 class MissingAssetsTest(unittest.TestCase):
