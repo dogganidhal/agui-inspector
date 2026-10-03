@@ -324,9 +324,9 @@ the next run's input. `injectA2uiTool` controls the input's A2UI tool declaratio
 
 ### Session export and import
 
-Export opens a modal dialog that says what the file holds, warns that raw frames can contain
-personal or sensitive data, states that headers and inspector-held authentication state are never
-included (target-supplied credential echoes remain unchanged evidence), and shows a summary
+Export opens a modal dialog that says what the file holds, warns that raw frames and request bodies
+can contain personal or sensitive data, including credentials and other secrets a target echoed back
+(those stay unchanged evidence), states that headers are not captured or exported, and shows a summary
 line with the file name, exchange count, frame count and "0 headers". Its buttons are Cancel and
 Export session. Import opens a file picker; a failed import shows its error in place of any success
 message and keeps the current session (FR-035).

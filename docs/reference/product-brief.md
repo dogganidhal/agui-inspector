@@ -38,7 +38,8 @@ does (messages, interrupt answers, tool results, A2UI actions) and sends request
 3. **Generic core, application presets.** Nothing in the core knows a particular server. What an application needs
    around a run (preparing a session, extra forwarded props, sending only a turn's new messages) is a preset.
 4. **Nothing leaves the machine but the requests to the target.** No telemetry, no analytics, no third-party
-   requests. Credentials are never recorded, displayed or exported.
+   requests. A credential the inspector holds is never recorded, displayed or exported. A server can still repeat one
+   in a payload, and the inspector keeps those bytes as received.
 5. **Small and auditable.** Few runtime dependencies, exact pins, a committed lockfile, no install scripts.
 6. **Every event type has a view.** Each event type of the protocol has a rendering, including those few servers emit
    today.

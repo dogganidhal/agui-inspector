@@ -127,7 +127,7 @@ function Fixture(): ReactElement {
           title="Export this session?"
           footer={<><Button onClick={() => setDialog(false)}>Cancel</Button><Button variant="primary" onClick={() => setDialog(false)}>Export session</Button></>}
         >
-          <p>Raw frames can contain personal or sensitive data. Headers and tokens are never included.</p>
+          <p>Raw frames can contain personal or sensitive data, including credentials. Headers are not captured or exported.</p>
         </Dialog>
       </Section>
       <Section name="toast">

@@ -4,7 +4,8 @@
 //   - the credential the inspector holds is written nowhere by the inspector: not into configuration,
 //     browser storage, a request, a request recording or an exported header field;
 //   - the bytes the target sent are evidence: the echo frame is retained and exported unchanged, with
-//     the export warning shown first. It is neither redacted nor checked for absence.
+//     the export warning shown first, which says payloads can hold an echoed credential while headers are
+//     not captured. It is neither redacted nor checked for absence.
 // The page under test is the production build; the target is examples/reference-agent/server.ts,
 // started as a separate loopback process that grants CORS to the page's origin only.
 import { spawn, type ChildProcess } from 'node:child_process';
@@ -90,6 +91,9 @@ async function openWithToken(page: Page, site: Site): Promise<void> {
   await page.getByRole('button', { name: 'Authentication: no token' }).click();
   await page.getByRole('textbox', { name: 'Header name' }).fill(HEADER);
   await page.getByRole('textbox', { name: 'Token' }).fill(ECHO_TOKEN);
+  // Where the token is entered, the page does not promise the recording can never hold it.
+  await expect(page.getByText('If the target repeats the token in a payload, the recording keeps it as received.')).toBeVisible();
+  await expect(page.getByText('never recorded or exported')).toHaveCount(0);
   await page.keyboard.press('Escape');
   await expect(page.getByRole('button', { name: `Authentication: ${HEADER} set` })).toBeVisible();
 }
@@ -118,7 +122,11 @@ async function exportSession(page: Page): Promise<string> {
   await page.getByRole('button', { name: 'Export session' }).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toContainText('can contain personal or sensitive data');
-  await expect(dialog).toContainText('Headers and authentication tokens are never included');
+  // The decision names the real boundary: payloads can hold a credential the target echoed, headers are not captured.
+  await expect(dialog).toContainText('including credentials and other secrets');
+  await expect(dialog).toContainText('If the target echoes a token back in a payload, the file holds it exactly as received');
+  await expect(dialog).toContainText('Headers, including the authentication header, are not captured or exported');
+  await expect(dialog).not.toContainText('never included');
   await page.waitForTimeout(200);
   expect(downloads, 'nothing is downloaded before the warning is accepted').toBe(0);
   const [download] = await Promise.all([page.waitForEvent('download'), dialog.getByRole('button', { name: 'Export session' }).click()]);

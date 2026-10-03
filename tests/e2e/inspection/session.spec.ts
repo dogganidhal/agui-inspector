@@ -44,7 +44,9 @@ test('export warns about sensitive data first, and cancelling downloads nothing'
   const dialog = page.getByRole('dialog', { name: 'Export this session' });
   await expect(dialog).toBeVisible();
   await expect(dialog).toContainText('can contain personal or sensitive data');
-  await expect(dialog).toContainText('Headers and authentication tokens are never included');
+  await expect(dialog).toContainText('including credentials and other secrets');
+  await expect(dialog).toContainText('Headers, including the authentication header, are not captured or exported');
+  await expect(dialog).not.toContainText('never included');
   const received = (await snapshot(page)).frames.filter((frame) => frame.classification === 'data').length;
   expect(received).toBe(41);
   await expect(dialog).toContainText(`agui-inspector-session.json · 4 exchanges · ${received} frames · 0 headers`);

@@ -82,9 +82,9 @@ export function SessionControls({ exchangeCount, frameCount, onExport, onImport,
       >
         <p>The file holds this session's exchanges, every frame as received, run inputs and timings, as pre-stable version 0 JSON.</p>
         <Finding variant="warn" kind="Sensitive data">
-          Raw frames and request bodies can contain personal or sensitive data. Anyone who has the file can read it, so share it only where that is acceptable.
+          Raw frames and request bodies can contain personal or sensitive data, including credentials and other secrets. If the target echoes a token back in a payload, the file holds it exactly as received. Anyone who has the file can read it, so share it only where that is acceptable.
         </Finding>
-        <p>Headers and authentication tokens are never included.</p>
+        <p>Headers, including the authentication header, are not captured or exported.</p>
         <p className="agui-ins-mono" data-export-summary="">
           {SESSION_FILE_NAME} · {count(exchangeCount, 'exchange')} · {count(frameCount, 'frame')} · 0 headers
         </p>
