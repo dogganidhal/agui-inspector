@@ -34,6 +34,7 @@ Check verified items only. Mark unrelated items N/A; explain any unmet applicabl
   the [privacy rules][constitution].
 - [ ] API and saved-format changes follow versioning rules and document any required migration.
 - [ ] Applicable bundle, frame-count, accessibility, and distribution requirements have been checked.
+- [ ] A change to what the Python package does or ships has a changeset (`npx changeset`).
 
 [roadmap]: https://github.com/dogganidhal/agui-inspector/blob/main/ROADMAP.md
 [constitution]: https://github.com/dogganidhal/agui-inspector/blob/main/.specify/memory/constitution.md

@@ -1,7 +1,7 @@
 # Embedding in Starlette and FastAPI
 
 `agui-inspector` is the approved package name and the project is MIT licensed. The Python package is private
-and unpublished until the release workflow and its gates are in place (see [distribution](distribution.md)). The package ships the prebuilt
+and unpublished until the first release (see [distribution](distribution.md#python-release)). The package ships the prebuilt
 inspector files and one helper, `mount_inspector`, that serves
 them from an existing Starlette or FastAPI application. The host needs no Node toolchain, and
 the helper downloads nothing at startup.

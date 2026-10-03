@@ -2,8 +2,10 @@
 D01 T055-T058 (G-01, G-02): MIT license and third-party notices ship in the npm tarball, wheel and sdist, the
 manifests stay private, the DOMPurify override resolves exactly, and CI covers Python 3.10 and 3.14.
 P03 T013, T016 (feature 002, FR-012): the public demo's worker, bootstrap, examples and registration are in none
-of the ordinary distributions, a demo build leaves the ordinary assets untouched, and the only other workflow is
-the main-only Pages deployment.
+of the ordinary distributions, a demo build leaves the ordinary assets untouched, and the Pages deployment is
+main-only and ships no package.
+FR-040: the only workflow that publishes is the Changesets-driven Python release, with trusted publishing and no
+stored token.
 
 setUpClass runs the real packaging script on the already built ``packages/inspector/dist``
 (``npm run build``), so these tests need Node and a build; a missing one is a failure, not a skip.
@@ -198,14 +200,56 @@ class DistributionTest(unittest.TestCase):
         self.assertIsNone(re.search(r"^\s*(tags|release|workflow_dispatch|push):", text, re.M))
         self.assertIsNone(re.search(r"\bpublish\b|pypi|npm publish|gh release", text, re.I))
 
-    def test_the_only_other_workflow_deploys_the_demo_from_main_and_ships_no_package(self):
+    def test_the_pages_workflow_deploys_the_demo_from_main_and_ships_no_package(self):
         workflows = sorted(p.name for p in (REPO / ".github" / "workflows").glob("*.yml"))
-        self.assertEqual(["ci.yml", "pages.yml"], workflows)
+        self.assertEqual(["ci.yml", "pages.yml", "release-python.yml"], workflows)
         text = (REPO / ".github" / "workflows" / "pages.yml").read_text()
         self.assertIn("branches: [main]", text)
         self.assertIsNone(re.search(r"^\s*(tags|release|pull_request|pull_request_target|schedule):", text, re.M))
         self.assertIsNone(re.search(r"\bpublish\b|pypi|npm publish|uv publish|twine|gh release|git tag|attest", text, re.I))
         self.assertIn("path: .build/public-demo", text)
+
+    def test_the_release_workflow_versions_with_changesets_and_publishes_only_through_trusted_publishing(self):
+        workflows = REPO / ".github" / "workflows"
+        text = (workflows / "release-python.yml").read_text()
+        code = re.sub(r"^\s*#.*$", "", text, flags=re.M)  # what the workflow does, not what its comments say
+        # Only a push to main starts it, runs are serialized, and nothing is granted by default.
+        self.assertRegex(code, r"(?m)^on:\n  push:\n    branches: \[main\]\n+permissions: \{\}\n+concurrency:\n  group: release-python\n  cancel-in-progress: false\n")
+        self.assertIsNone(re.search(r"pull_request|workflow_dispatch|schedule:|workflow_run|^\s*tags:", code, re.M))
+        # Every action is pinned to a full commit SHA, and the shared ones are the pull request workflow's pins.
+        for ref in re.findall(r"^\s*(?:-\s+)?uses:\s*(\S+)", code, re.M):
+            self.assertRegex(ref, r"^[\w.-]+/[\w./-]+@[0-9a-f]{40}$", ref)
+        pins = lambda source: set(re.findall(r"uses:\s*((?:actions/(?:checkout|setup-node)|astral-sh/setup-uv)@\S+)", source))
+        self.assertEqual(pins((workflows / "ci.yml").read_text()), pins(code))
+        # No stored credential, no other way to publish, tag or release.
+        self.assertIsNone(re.search(r"secrets\.|password:|packages: write|npm publish|changeset publish|twine|uv publish|gh release|git tag |git push", code))
+        self.assertIsNone(re.search(r"npm (?:ci|install)(?![^\n]*--ignore-scripts)", code))
+        self.assertEqual(1, code.count("contents: write"))
+        self.assertEqual(1, code.count("id-token: write"))
+        version, rest = code.split("\njobs:\n")[1].split("\n  build:\n")
+        build, publish = rest.split("\n  publish:\n")
+        # The version job is the only one that writes: it opens the version pull request and pushes tags, no releases.
+        self.assertIn("\n    permissions:\n      contents: write\n      pull-requests: write\n", version)
+        self.assertRegex(version, r"uses: changesets/action@[0-9a-f]{40}")
+        self.assertIn("version-script: node scripts/changeset-version.mjs", version)
+        self.assertIn("publish-script: npm exec -- changeset git-tag", version)
+        self.assertIn("create-github-releases: false", version)
+        # The build job reads only, runs after the version job, and only when a Python version was just tagged.
+        self.assertIn("\n    permissions:\n      contents: read\n", build)
+        self.assertIn("\n    needs: version\n", build)
+        self.assertRegex(build, r"if: needs\.version\.outputs\.published == 'true' && contains\(needs\.version\.outputs\.packages, 'agui-inspector-python'\)")
+        self.assertNotIn("id-token", build)
+        # It gates the tagged commit, then builds from it.
+        steps = ["--points-at", "npm ci --ignore-scripts", "npm run check:ci -- --strict", "npm run package:python -- --no-build", "actions/upload-artifact@"]
+        at = [build.find(step) for step in steps]
+        self.assertNotIn(-1, at, steps)
+        self.assertEqual(sorted(at), at)
+        # The publish job holds the only token grant, runs no repository code and uses the pypi environment.
+        self.assertIn("\n    permissions:\n      id-token: write\n", publish)
+        self.assertIn("\n    needs: build\n", publish)
+        self.assertIn("\n    environment:\n      name: pypi\n", publish)
+        self.assertIsNone(re.search(r"\brun:|actions/checkout", publish))
+        self.assertRegex(publish, r"uses: pypa/gh-action-pypi-publish@[0-9a-f]{40}")
 
     def member_files(self, archive: str) -> dict[str, bytes]:
         """Every file of one distribution, by archive name."""

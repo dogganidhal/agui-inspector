@@ -27,6 +27,7 @@ Tooling: npm workspaces, Node 24 LTS (`engines.node` is `>=24`).
 | `typescript` | 7.0.2 | Strict type checking (`npm run typecheck`). | JSDoc checking: the sources are TypeScript. |
 | `esbuild` | 0.28.2 | Production bundle and compilation of unit tests. Works without its postinstall because the platform binary is an optional dependency. | Vite or webpack: more machinery than a one-bundle static build needs. |
 | `@playwright/test` | 1.63.0 | End-to-end tests and the network-allowlist check. Browsers are installed by an explicit command, not at install time. | jsdom: no real layout or network, and the A2UI renderer does not support server rendering. |
+| `@changesets/cli` | 3.0.3 | Release versioning for the Python package: pending changesets, the version pull request, the changelog and the release tag. Every manifest is private, so it never publishes to npm. | Commit-message tools such as release-please: a changeset is an explicit note a reviewer sees, and the npm package can join later. |
 | `@types/node` | 24.19.1 | Types for `node:test` and the build scripts, matching Node 24. | None. |
 | `@types/react` | 19.3.0 | Types for React 19.3. | None. |
 | `@types/react-dom` | 19.3.0 | Types for React DOM 19.3. | None. |
