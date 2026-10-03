@@ -28,6 +28,8 @@ Response descriptor: status, content type, ordered immutable Uint8Array chunks a
 (close / hold-until-abort); reuse recorder fixture descriptor vocabulary where applicable.
 Optional `delaysMs`: the pause before each chunk. Producers omit it; the pacing layer (FX9) fills it
 in where an adapter chooses to, and an absent entry means no pause.
+Optional `pacing: 'slow'` (FX10): data naming the slower pacing profile for this response. It holds no
+timer; without it, and without a profile passed by the adapter, the natural profile applies.
 Error response is bytes/status, never a successful stream. No headers/auth/I/O functions passed
 to producers. Adapters own I/O/cancellation/CORS. Existing Node request logs/failure/open-stream
 controls stay Node-only, never worker storage.
@@ -43,7 +45,7 @@ metadata or version bump.
 
 | Agent | Endpoint below base | Demonstration |
 | --- | --- | --- |
-| Interactive | __demo__/agent/interactive | Plain default; interrupt/tools/slow/state/broken quick messages; ordered session/warm preparations. |
+| Interactive | __demo__/agent/interactive | Plain default; interrupt/tools/slow/never finishes/state/broken quick messages; ordered session/warm preparations. |
 | A2UI | __demo__/agent/a2ui | Form plus normal action envelope and existing continuation. |
 | Protocol baseline | __demo__/agent/protocol/baseline | Baseline producer with input IDs. |
 | Protocol run error | __demo__/agent/protocol/run-error | Existing error producer; completes all-31 coverage. |

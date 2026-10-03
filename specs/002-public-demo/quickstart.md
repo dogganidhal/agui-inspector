@@ -71,7 +71,8 @@ No Pages deployment is required.
 | Pacing | A plain run outlasts half a second, shows a think pause after RUN_STARTED in the frame offsets, and its reply arrives as several text deltas that join to the original; Stop during the run releases the worker and later frames never arrive. |
 | Interrupt | All interrupts resolved together and separately cancelled; next request matches normal resume contract. |
 | Tools | No early run on subset replies; all results recorded in next run. |
-| Slow / stop | Incremental response visible before close; Stop aborts both client/recorder branches, native producer cleanup observed, partial evidence retained, no invented terminal frame. |
+| Slow | The reply streams word by word and the run ends with TEXT_MESSAGE_END and RUN_FINISHED. Its schedule totals 6 to 10 seconds, proved by a unit test on an injected clock rather than a real wait. Stop partway through releases the worker and sends nothing afterwards. |
+| Never finishes / stop | Incremental response visible before close; Stop aborts both client/recorder branches, native producer cleanup observed, partial evidence retained, no invented terminal frame. |
 | State / broken | Snapshot/delta applied; invalid JSON/sequence evidence and all later bytes retained despite client failure. |
 | A2UI | Existing form rendered; edit/action records forwarded envelope in a new run and continuation surface changes; remote assets/catalogs remain blocked. |
 | Baseline / run-error | All 31 original event types retained; mixed delimiters/split Unicode byte equality and original-vs-expanded distinction. |

@@ -46,7 +46,7 @@ export interface InteractiveServer {
   fail(path: string, status?: number): void;
   clear(): void;
   reset(): void;
-  /** Connections to the slow scenario that are open right now. */
+  /** Connections to a held-open scenario (`never finishes`) that are open right now. */
   openStreams(): number;
   close(): Promise<void>;
 }
@@ -56,7 +56,7 @@ export interface InteractiveOptions {
   readonly assets?: Readonly<Record<string, readonly [contentType: string, body: string]>>;
   /** The one page origin granted CORS. */
   readonly allowOrigin?: string;
-  /** Stream runs the way the public demo does, with this profile (`NATURAL_PACE` for the demo's). Off unless given. */
+  /** Stream runs the way the public demo does, with this profile (`NATURAL_PACE` for the demo's; `SLOW_PACE` for `slow`'s). Off unless given. */
   readonly pace?: PaceProfile;
 }
 

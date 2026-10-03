@@ -3,7 +3,8 @@
 // about it. A run that used to arrive in a millisecond, whole messages in one frame, streams the way a
 // model does: a think latency after RUN_STARTED, streamed text, reasoning and tool-call arguments cut into
 // small deltas at a token interval, longer pauses before a new step, a tool result, or a state or surface
-// update.
+// update. A response that asks for it (`pacing: 'slow'`, the `slow` scenario) gets the slow profile: a long
+// think and a long token interval, so a reply of a few sentences takes several seconds.
 //
 // What changes is only chunking and timing. Event types and their order are untouched, and the pieces of
 // a delta join back into it exactly. Only a stream the response opened is cut: a delta with no start, as
@@ -36,6 +37,9 @@ export interface PaceProfile {
 }
 
 export const NATURAL_PACE: PaceProfile = { think: [300, 900], token: [20, 60], step: [150, 400], tool: [400, 900], update: [250, 600] };
+
+/** A slow writer: with 52 token intervals of 110 to 170 ms, the `slow` scenario takes 6.3 to 9.8 s whatever the hash picks. */
+export const SLOW_PACE: PaceProfile = { ...NATURAL_PACE, think: [600, 1000], token: [110, 170] };
 
 /** The deltas that stream: text and reasoning in word-sized pieces, tool-call arguments a few characters at a time. */
 const STREAMED = new Set(['TEXT_MESSAGE_CONTENT', 'REASONING_MESSAGE_CONTENT', 'TOOL_CALL_ARGS']);
@@ -125,8 +129,11 @@ function gap(type: string | undefined, previous: string | undefined, profile: Pa
   }
 }
 
-/** The response with streamed deltas cut into pieces and a pause before each chunk. Status, type and ending are kept. */
-export function pace(response: ScenarioResponse, profile: PaceProfile = NATURAL_PACE): ScenarioResponse {
+/**
+ * The response with streamed deltas cut into pieces and a pause before each chunk. Status, type, ending and
+ * `pacing` are kept. Without a profile, the response's own `pacing` picks one; a profile that is passed wins.
+ */
+export function pace(response: ScenarioResponse, profile: PaceProfile = response.pacing === 'slow' ? SLOW_PACE : NATURAL_PACE): ScenarioResponse {
   const chunks: Uint8Array[] = [];
   const delaysMs: number[] = [];
   const open = new Set<string>();

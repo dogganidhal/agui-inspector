@@ -175,6 +175,8 @@ source. Frames that are not whole `data:` events (the protocol fixtures' fragmen
 through unchanged, and a delta with no start event is not cut, so malformed fixtures keep their damage as
 authored. The Node interactive adapter takes an opt-in `pace` profile and is otherwise unchanged; the CLI
 fixture server is not paced. No dependency, no runtime option for visitors, no new worker route.
+A producer may set `pacing: 'slow'` on its response (FX10); `pace` then uses `SLOW_PACE` unless the adapter
+passes a profile. Only `slow` does, and `never finishes` is the held-open scenario.
 
 Register a classic bundled sibling worker with page-directory scope and `updateViaCache: 'none'`.
 Install uses `skipWaiting()`, activate `clients.claim()`; no persistent state is migrated.

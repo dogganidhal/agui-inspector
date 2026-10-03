@@ -50,7 +50,7 @@ server/transport factory adds unnecessary abstraction.
 
 | Inspected existing path | Preserve/reuse |
 | --- | --- |
-| examples/reference-agent/interactive-scenarios.ts | Plain/interrupt/tools/slow/state/broken and resume/tool/action branching; preparations, CORS, request order, failures, open-stream control. |
+| examples/reference-agent/interactive-scenarios.ts | Plain/interrupt/tools/slow/never finishes/state/broken and resume/tool/action branching; preparations, CORS, request order, failures, open-stream control. |
 | examples/reference-agent/server.ts | CLI loopback startup JSON, health/preflight, 400 malformed JSON/422 missing IDs, plain deterministic SSE. |
 | examples/reference-agent/a2ui-scenarios.ts | Already pure v0.9 operations/continuation, second/deleted surfaces, malformed/external-resource tests. |
 | examples/reference-agent/protocol-fixtures.ts | Pure 31-type map, baseline/error, invalid/control/missing-terminal byte scenarios. |
@@ -143,6 +143,20 @@ through, and a delta with no start event is left whole.
 **Alternatives considered**: Delays written into each scenario duplicate timing and put timers in pure
 producers; pacing in the page or recorder would touch the wire path (principle I); `Math.random` jitter
 makes runs unreproducible; a visitor-facing speed control adds surface that no requirement calls for.
+
+## R8: A slow run that finishes, and a run that never does (FX10)
+
+**Decision**: The `slow` quick message streams a reply of a few sentences slowly and finishes. A new
+`never finishes` quick message keeps the old behavior: it streams one sentence that says it waits for
+Stop, then holds the response open. The slow run gets its pace from a `pacing: 'slow'` hint on its
+response, which `pace` maps to a slower profile.
+**Rationale**: Visitors read a message labeled slow that then hangs as a bug. Stop and the missing
+terminal finding still need a response that stays open, so that case gets its own name and says what it
+does. A hint on the response keeps timers out of the producer and the worker unchanged, and a unit test
+can total the schedule on an injected clock without waiting 6 to 10 seconds.
+**Alternatives considered**: Sleeping inside the `slow` producer breaks R3. Making the worker look at the
+message text to pick a profile puts scenario knowledge in the adapter. Keeping one scenario and relabeling
+it still leaves no run that is slow and complete.
 
 ## Research closure
 

@@ -5,7 +5,8 @@
 // turn the same descriptor into a real HTTP response, so a browser example and a Node fixture cannot
 // drift apart. No headers, credentials, I/O or timers reach a producer; validation, CORS, logging and
 // cancellation belong to the adapters, and so does pacing: pacing.ts turns a descriptor into a timed one
-// where an adapter chooses to, and no producer sleeps. Imports nothing from Node, React or a worker.
+// where an adapter chooses to, and no producer sleeps. A producer may only say, as data, that its answer
+// is meant to be watched slowly. Imports nothing from Node, React or a worker.
 // Erasable TypeScript only, so Node can run it directly.
 import { continuation, formSurface, type UserAction } from './a2ui-scenarios.ts';
 import { baselineRun, runError, type RunIds } from './protocol-fixtures.ts';
@@ -13,11 +14,12 @@ import type { ScenarioEnding } from './recorder-fixtures.ts';
 
 const encoder = new TextEncoder();
 
-/** What the last user message asks the interactive agent to do. Anything else gets a plain reply. */
+/** What the last user message asks the interactive agent to do. Anything else gets a plain reply. Quick messages follow this order. */
 export const SCENARIOS = {
   interrupt: 'interrupt',
   tools: 'tools',
   slow: 'slow',
+  neverFinishes: 'never finishes',
   state: 'state',
   broken: 'broken',
 } as const;
@@ -42,16 +44,22 @@ export interface RunInput extends RunIds {
 /**
  * A response as data. `chunks` are written in order; `hold-until-abort` leaves the body open after the last one.
  * `delaysMs[i]` is the pause before `chunks[i]`; a producer leaves it out, and an adapter that paces fills it in.
+ * `pacing: 'slow'` asks the pacing layer for its slow profile instead of the natural one; it is a hint, not a timer.
  */
 export interface ScenarioResponse {
   readonly status: number;
   readonly contentType: string;
   readonly chunks: readonly Uint8Array[];
   readonly delaysMs?: readonly number[];
+  readonly pacing?: 'slow';
   readonly ending: Extract<ScenarioEnding, 'close' | 'hold-until-abort'>;
 }
 
 const SSE = 'text/event-stream';
+
+/** The `slow` scenario's reply: a few sentences, long enough that the slow profile takes it 6 to 10 seconds. */
+const SLOW_REPLY =
+  'This reply is slow on purpose. A busy model can take several seconds to write a long answer, and the inspector records every frame as it arrives. The run finishes by itself when the last word lands. Press Stop at any point to cancel it and keep what has arrived.';
 
 /** One server-sent frame, as the Node fixtures have always written it: `data:`, compact JSON, blank line. */
 const frame = (event: object): Uint8Array => encoder.encode(`data: ${JSON.stringify(event)}\n\n`);
@@ -123,8 +131,11 @@ export function interactiveResponse(input: RunInput): ScenarioResponse {
         done,
       ]);
     case SCENARIOS.slow:
-      // Streams a little and then stays open until the client goes away.
-      return sse([open, { type: 'TEXT_MESSAGE_START', messageId: `m-${runId}`, role: 'assistant' }, { type: 'TEXT_MESSAGE_CONTENT', messageId: `m-${runId}`, delta: 'Thinking about it' }], 'hold-until-abort');
+      // A longer reply that an adapter streams slowly; it still finishes on its own.
+      return { ...sse([open, ...say(`m-${runId}`, SLOW_REPLY), done]), pacing: 'slow' };
+    case SCENARIOS.neverFinishes:
+      // Streams a little and then stays open until the client goes away: no message end, no terminal event.
+      return sse([open, ...say(`m-${runId}`, 'This response stays open until you press Stop.').slice(0, 2)], 'hold-until-abort');
     case SCENARIOS.state:
       return sse([
         open,
