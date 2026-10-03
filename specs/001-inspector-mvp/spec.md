@@ -266,7 +266,9 @@ Its section 10 supplies the release baseline; the recorded clarifications resolv
   protocol schema. Client-reported sequence violations MUST be attached to the run in the MVP.
   A stream ending without `RUN_FINISHED` or `RUN_ERROR` MUST receive a terminal-event finding.
   Validation MUST NOT stop capture, repair received data, or alter the stream delivered to the
-  protocol client. (Sources: 2, 7, 10.)
+  protocol client. The one exception is the client's own copy of the stream, whose CRLF and bare CR
+  line endings may be rewritten as LF until the pinned client frames them itself (constitution
+  principle I, issue #49); the recorded frames never change. (Sources: 2, 7, 10.)
 - **FR-010**: Exchanges MUST appear newest first, initially expanding the newest listed one. Users
   MUST be able to filter frames by type, content, and issues, inspect raw content, and copy an
   exchange's frames as JSON. Users MUST also be able to hide and show preparation exchanges in the
