@@ -4,6 +4,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { Exchange, InspectionSession, RawFrame } from '../../src/contracts.ts';
+import { projectConversation } from '../../src/core/projection/index.ts';
 import { parseSession, restoreSession, serializeSession, SESSION_FILE_NAME } from '../../src/core/session-files/index.ts';
 import { eventFixtures, richSession } from './support.ts';
 
@@ -204,6 +205,66 @@ test('import rejects frames that contradict themselves', async () => {
   const provenance = await fileOf();
   provenance.session.frames![0]!.provenance = 'derived';
   rejects(provenance, /frames\[0\].*provenance/i);
+});
+
+/** The recording from issue #42: a snapshot the event schema rejects, filed as valid. Synthetic data only. */
+function snapshotRecording(schemaVerdict: 'valid' | 'invalid') {
+  const event = { type: 'MESSAGES_SNAPSHOT', messages: [{ id: 'bad-message', role: 'assistant', content: [null] }] };
+  const data = JSON.stringify(event);
+  return {
+    version: 0,
+    session: {
+      id: 'audit',
+      runs: [],
+      findings: [],
+      derived: [],
+      exchanges: [{ id: 'e', kind: 'conversation', method: 'POST', path: '/agent', startedAt: 1, transport: 'completed', frameIds: ['f'] }],
+      frames: [
+        { id: 'f', exchangeId: 'e', index: 0, classification: 'data', data, envelope: `data: ${data}\n\n`, parsed: event, offsetMs: 1, eventType: event.type, summary: 'invalid snapshot', jsonVerdict: 'valid', schemaVerdict, provenance: 'raw' },
+      ],
+    },
+  };
+}
+
+test('import rejects a frame that claims a valid event but holds one the schema rejects, naming the frame and the field', () => {
+  const claimedValid = parseSession(JSON.stringify(snapshotRecording('valid')));
+  assert.equal(claimedValid.ok, false, 'the verdict contradicts the data');
+  if (!claimedValid.ok) {
+    assert.match(claimedValid.error, /frames\[0\]/);
+    assert.match(claimedValid.error, /schemaVerdict "valid"/);
+    assert.match(claimedValid.error, /messages\.0\.content: invalid_type/, 'names where the data misses the schema');
+    assert.doesNotMatch(claimedValid.error, /bad-message/, 'names fields, not received values');
+  }
+
+  const unknown = snapshotRecording('valid');
+  unknown.session.frames[0]!.data = '{"type":"NOT_AN_EVENT"}';
+  unknown.session.frames[0]!.parsed = { type: 'NOT_AN_EVENT' } as never;
+  rejects(unknown, /frames\[0\].*schemaVerdict "valid".*NOT_AN_EVENT/);
+
+  const noType = snapshotRecording('valid');
+  noType.session.frames[0]!.data = '{"hello":1}';
+  noType.session.frames[0]!.parsed = { hello: 1 } as never;
+  rejects(noType, /frames\[0\].*schemaVerdict "valid"/);
+});
+
+test('the same snapshot filed with the verdict the reader gives it is preserved as sent, and projecting it does not throw', () => {
+  const file = snapshotRecording('invalid');
+  const result = parseSession(JSON.stringify(file));
+  assert.ok(result.ok, 'a correctly classified malformed frame is evidence, not an import error');
+  assert.deepEqual(result.session.frames, file.session.frames);
+  assert.deepEqual(JSON.parse(serializeSession(result.session)).session.frames, file.session.frames);
+  assert.doesNotThrow(() => projectConversation(restoreSession(result.session).snapshot()));
+});
+
+test('correctly classified malformed, unknown and non-JSON frames import unchanged', async () => {
+  const session = await richSession();
+  const verdicts = new Set(session.frames.map((frame) => `${frame.jsonVerdict}/${frame.schemaVerdict}`));
+  for (const kind of ['invalid/not-applicable', 'valid/invalid', 'valid/unknown-type', 'valid/valid']) assert.ok(verdicts.has(kind), `the sample holds a ${kind} frame`);
+  const text = serializeSession(session);
+  const result = parseSession(text);
+  assert.ok(result.ok);
+  assert.equal(serializeSession(result.session), text);
+  assert.doesNotThrow(() => projectConversation(result.session));
 });
 
 test('import rejects a run input that is not a run input and a path with credentials', async () => {

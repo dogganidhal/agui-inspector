@@ -28,6 +28,7 @@ import '../views/connection/connection.css';
 import '../views/conversation/conversation.css';
 import '../views/settings/settings.css';
 import './app.css';
+import { PaneBoundary, describeError } from './boundary';
 import { startPage, type StartupEnvironment, type Started } from './startup';
 
 // ---------------------------------------------------------------------------------------------
@@ -46,6 +47,8 @@ export interface AppExtras {
   readonly notice?: string;
   /** A response is still being recorded, so Stop stays available even when the run has ended. */
   readonly capturing?: boolean;
+  /** A pane failed to render. The pane shows its own error either way; the host may put something else on screen. */
+  readonly onPaneError?: (pane: string, error: Error) => void;
   /** An imported recording is open: inspection only, nothing can be sent. */
   readonly recording?: boolean;
   readonly renderActivity?: (entry: ActivityEntry) => ReactNode;
@@ -100,7 +103,7 @@ function ThemeSwitch(): ReactElement {
  * The app shell: a fixed top bar above two panes that scroll on their own, conversation left and
  * inspection right. Under 960 px one pane shows and a segmented control switches between them.
  */
-export function App({ settings, connection, conversation, inspection, mode, allowedOrigins = [], allowVisitorTargets = false, capabilities, capturing, notice, recording, renderActivity, warnings = [] }: AppProps & AppExtras): ReactElement {
+export function App({ settings, connection, conversation, inspection, mode, allowedOrigins = [], allowVisitorTargets = false, capabilities, capturing, notice, onPaneError, recording, renderActivity, warnings = [] }: AppProps & AppExtras): ReactElement {
   const [pane, setPane] = useState<Pane>('conversation');
   const [tab, setTab] = useState<Tab>('inspection');
 
@@ -152,8 +155,10 @@ export function App({ settings, connection, conversation, inspection, mode, allo
         <div className="agui-app-pane agui-app-conversation">
           <div className="agui-app-column">
             <div className="agui-app-transcript">
-              <ConversationView {...conversation} {...(renderActivity !== undefined && { renderActivity })} />
-              <RepliesView {...conversation} running={connection.running} />
+              <PaneBoundary pane="conversation" resetKey={conversation.store} onCatch={onPaneError}>
+                <ConversationView {...conversation} {...(renderActivity !== undefined && { renderActivity })} />
+                <RepliesView {...conversation} running={connection.running} />
+              </PaneBoundary>
             </div>
             <section className="agui-app-composer" aria-label="Composer" data-view="connection">
               <Composer
@@ -189,11 +194,15 @@ export function App({ settings, connection, conversation, inspection, mode, allo
           {/* The frames list keeps its filters and open rows while another tab shows; the state view
               recomputes from the store, so it is mounted only while it is the one on screen. */}
           <div className="agui-app-body" hidden={tab !== 'inspection'}>
-            <InspectionView {...inspection} />
+            <PaneBoundary pane="inspection" resetKey={inspection.store} onCatch={onPaneError}>
+              <InspectionView {...inspection} />
+            </PaneBoundary>
           </div>
           {tab === 'state' && (
             <div className="agui-app-body">
-              <StateView store={conversation.store} {...(conversation.threadId !== undefined && { threadId: conversation.threadId })} />
+              <PaneBoundary pane="state" resetKey={conversation.store} onCatch={onPaneError}>
+                <StateView store={conversation.store} {...(conversation.threadId !== undefined && { threadId: conversation.threadId })} />
+              </PaneBoundary>
             </div>
           )}
           <div className="agui-app-body" hidden={tab !== 'settings'}>
@@ -272,6 +281,13 @@ function Root({ started, storage }: { started: Started; storage?: StorageLike })
     settings.variables = {};
     setVariables({});
   };
+  /** A pane that cannot show the recording on screen puts the live capture back and says why. */
+  const paneFailed = (pane: string, error: Error) => {
+    if (shown === live) return;
+    setShown(live);
+    setRecording(false);
+    setInspectionError(`Import failed: the recording could not be shown (${pane}: ${describeError(error)}). The previous capture is back on screen.`);
+  };
   /** Nothing is sent while a recording is open; the user is told why, once. */
   const sending = <A extends unknown[]>(action: (...args: A) => void) => (...args: A) => (recording ? toast(RECORDING_NOTICE) : action(...args));
 
@@ -294,6 +310,7 @@ function Root({ started, storage }: { started: Started; storage?: StorageLike })
     recording,
     capabilities,
     capturing: state.capturing,
+    onPaneError: paneFailed,
     warnings: started.warnings,
     renderActivity: (entry) => a2uiActivity(entry, { renderEnabled: profile.renderA2ui, onAction }),
     ...(recording ? { notice: RECORDING_NOTICE } : state.notice !== undefined && { notice: state.notice }),

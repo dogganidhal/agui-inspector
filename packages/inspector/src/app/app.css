@@ -165,6 +165,11 @@ body,
   flex: none;
 }
 
+/* A pane that could not render shows its error in place of its content; the rest of the shell carries on. */
+.agui-app-pane-error {
+  padding: calc(var(--u) * 3) 16px;
+}
+
 /* The page could not start: one message, nothing else. */
 .agui-app-failure {
   display: grid;
