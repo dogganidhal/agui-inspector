@@ -10,7 +10,7 @@ import {
   FAMILIES,
   byteLength,
   copyFramesJson,
-  countShown,
+  exchangeFailed,
   exchangeRows,
   familyDef,
   familyOf,
@@ -19,6 +19,7 @@ import {
   formatOffset,
   indexSession,
   isFiltering,
+  listExchanges,
   summarizeFrame,
   typeLabel,
   type ExchangeEntry,
@@ -53,28 +54,28 @@ export function FramesPanel(props: FramesPanelProps): ReactElement {
   const { session, filter, openExchanges, openFrames, generation = 0, onFilter, onToggleExchange, onToggleFrame, onCopy } = props;
   const index = useMemo(() => indexSession(session), [session]);
   const filtering = isFiltering(filter);
-  let shown = 0;
-  const entries = index.newestFirst.map((entry, position) => {
-    const count = countShown(entry, filter);
-    shown += count;
-    return { entry, count, open: openExchanges.get(entry.exchange.id) ?? position === 0 };
-  });
+  const { exchanges, shown } = listExchanges(index, filter);
 
   return (
     <div className="agui-fr" data-testid="frames" data-generation={generation} data-frame-total={index.dataFrames} data-frame-shown={shown}>
       <FilterBar index={index} filter={filter} onFilter={onFilter} />
-      {entries.length === 0 ? (
-        <p className="agui-fr-empty">No exchanges yet. Start a run or send a raw request to capture frames.</p>
+      {exchanges.length === 0 ? (
+        <p className="agui-fr-empty">
+          {index.newestFirst.length === 0
+            ? 'No exchanges yet. Start a run or send a raw request to capture frames.'
+            : 'Only preparation requests so far, and they are hidden. Turn on the Preparation chip to list them.'}
+        </p>
       ) : (
         <div className="agui-fr-list">
-          {entries.map(({ entry, count, open }) => (
+          {exchanges.map(({ entry, shown: count }, position) => (
             <ExchangeCard
               key={entry.exchange.id}
               entry={entry}
               shown={count}
               filtering={filtering}
               filter={filter}
-              open={open}
+              // Without an explicit choice the newest exchange that is listed is the open one.
+              open={openExchanges.get(entry.exchange.id) ?? position === 0}
               openFrames={openFrames}
               onToggleExchange={onToggleExchange}
               onToggleFrame={onToggleFrame}
@@ -137,6 +138,17 @@ function FilterBar({ index, filter, onFilter }: { index: SessionIndex; filter: F
           <Icon name="alert" size={13} />
           Issues
         </FilterChip>
+        {/* Pressed means listed, so the default is pressed. Red while a failed preparation is in the session. */}
+        <FilterChip
+          pressed={filter.showPreparation}
+          count={index.preparations}
+          data-preparation-chip=""
+          data-has-issues={index.failedPreparations > 0}
+          title="Show or hide the preparation requests. A failed one stays listed."
+          onClick={() => onFilter({ ...filter, showPreparation: !filter.showPreparation })}
+        >
+          Preparation
+        </FilterChip>
       </div>
     </div>
   );
@@ -159,7 +171,7 @@ interface ExchangeCardProps {
 const ExchangeCard = memo(function ExchangeCard({ entry, shown, filtering, filter, open, openFrames, onToggleExchange, onToggleFrame, onCopy }: ExchangeCardProps): ReactElement {
   const { exchange } = entry;
   const failed = exchange.transport === 'transport-error';
-  const bad = failed || (exchange.status !== undefined && exchange.status >= 400);
+  const bad = exchangeFailed(exchange);
   const status = exchange.status !== undefined ? String(exchange.status) : failed ? 'failed' : exchange.transport === 'user-stopped' ? 'stopped' : '…';
   const kindTag = exchange.kind === 'conversation' ? (entry.runLabel ?? 'run') : exchange.kind === 'preparation' ? 'prepare' : 'raw';
 

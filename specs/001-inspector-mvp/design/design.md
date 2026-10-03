@@ -239,10 +239,18 @@ only while a run streams.
 ### Frames
 
 The filter bar has a search field matching type or raw content, one chip per event family with its
-frame count, and an Issues chip that turns red when issues exist. Filters apply to every exchange,
-and exchange headers show "shown/total frames" while a filter is active.
+frame count, an Issues chip that turns red when issues exist, and a Preparation chip. Filters apply
+to every exchange, and exchange headers show "shown/total frames" while a filter is active.
 
-Exchanges are listed newest first with the newest expanded (FR-010). A header row shows a chevron,
+The Preparation chip is a toggle with the same look and aria-pressed behavior as the others. Its
+count is the number of preparation exchanges in the session. It starts pressed, so preparation is
+listed, and a press hides the preparation exchanges that went well. The choice is held by the view
+only and is not stored. A failed preparation exchange (a transport error, a status of 400 or above,
+or a finding) stays listed, and the chip turns red like the Issues chip while one exists. The text
+filter, the family chips and Issues narrow frames and never add or remove an exchange. When
+only hidden preparation exchanges exist, the list says so instead of "No exchanges yet".
+
+Exchanges are listed newest first with the newest listed one expanded (FR-010). A header row shows a chevron,
 the method, the path (truncated when tight), a kind tag (the run id, `prepare` or `raw`), a live tag
 while streaming, then status, duration, frame count and issue count, with a copy button that copies
 the exchange's frames as JSON. Status codes of 400 and above are red.
@@ -329,7 +337,8 @@ These states are not in the prototype and follow the same parts:
 - A connection failure is an exchange with status "failed" and an error finding naming the browser
   rule that blocked it: CORS, private network access or secure context (FR-005).
 - A failed preparation request is a red `prepare` exchange with its response, followed by a run
-  header with the Error tag and the line "Preparation failed; the run was not sent" (FR-028).
+  header with the Error tag and the line "Preparation failed; the run was not sent" (FR-028). The
+  exchange stays listed while preparation is hidden.
 
 ## Copy
 
