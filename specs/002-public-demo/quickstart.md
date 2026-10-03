@@ -67,7 +67,8 @@ No Pages deployment is required.
 | Scenario | Required evidence |
 | --- | --- |
 | First visit / existing controller | Preparing status then matching worker control/version <=10 seconds; first example succeeds without manual reload; exactly one app mount. |
-| Plain / preparations | Recorded ordered PUT session/POST warm requests followed by POST run and exact shared response bytes. |
+| Plain / preparations | Recorded ordered PUT session/POST warm requests followed by POST run and exact shared response bytes as paced. |
+| Pacing | A plain run outlasts half a second, shows a think pause after RUN_STARTED in the frame offsets, and its reply arrives as several text deltas that join to the original; Stop during the run releases the worker and later frames never arrive. |
 | Interrupt | All interrupts resolved together and separately cancelled; next request matches normal resume contract. |
 | Tools | No early run on subset replies; all results recorded in next run. |
 | Slow / stop | Incremental response visible before close; Stop aborts both client/recorder branches, native producer cleanup observed, partial evidence retained, no invented terminal frame. |
@@ -80,7 +81,8 @@ No Pages deployment is required.
 | Embedding link | Native accessible link to repository docs/embedding.md; explicit navigation only, no prefetch/external asset request. |
 
 Compare complete bytes/order and progressive delivery, not a browser's coalesced chunk boundaries
-or fixed wall-clock timing. G-D03 stays blocked if native stop fails; do not patch the recorder
+or fixed wall-clock timing; pacing is checked against a floor (the run outlasts half a second, the
+think pause shows in the offsets), not exact times. G-D03 stays blocked if native stop fails; do not patch the recorder
 or introduce a transport replacement without coordinator approval.
 
 ## Standard distributions / final CI

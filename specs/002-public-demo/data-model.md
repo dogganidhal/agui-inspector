@@ -26,6 +26,8 @@ URLs; unsupported numeric sources fail visibly, no substring predicate or all-HT
 Pure input: parsed inert run input and explicit scenario selection.
 Response descriptor: status, content type, ordered immutable Uint8Array chunks and ending
 (close / hold-until-abort); reuse recorder fixture descriptor vocabulary where applicable.
+Optional `delaysMs`: the pause before each chunk. Producers omit it; the pacing layer (FX9) fills it
+in where an adapter chooses to, and an absent entry means no pause.
 Error response is bytes/status, never a successful stream. No headers/auth/I/O functions passed
 to producers. Adapters own I/O/cancellation/CORS. Existing Node request logs/failure/open-stream
 controls stay Node-only, never worker storage.

@@ -131,6 +131,19 @@ on 2026-10-02 (FX5) to leave Node 20; the releases changed no inputs or outputs 
 
 **Source**: [GitHub custom Pages workflows](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages).
 
+## R7: Natural pacing of scripted answers (FX9)
+
+**Decision**: One pure `pacing.ts` transform over `ScenarioResponse`, applied by the worker to the agent
+routes (and available to the Node adapter as an opt-in profile). It cuts streamed deltas and adds
+position-hashed pauses; delivery uses an abortable sleep on the adapter's own timers.
+**Rationale**: Whole replies in one millisecond looked fake and hid how a stream builds up. A transform
+at the adapter keeps producers pure (R3), covers every scenario, including later ones, without edits, and
+lets a unit test inject the sleep. Byte-exact fixtures stay evidence: fragments and malformed frames pass
+through, and a delta with no start event is left whole.
+**Alternatives considered**: Delays written into each scenario duplicate timing and put timers in pure
+producers; pacing in the page or recorder would touch the wire path (principle I); `Math.random` jitter
+makes runs unreproducible; a visitor-facing speed control adds surface that no requirement calls for.
+
 ## Research closure
 
 Coordinator confirmed direction after CSP escalation. No unresolved design question; G-D01 through

@@ -10,10 +10,12 @@
 // never enabled, so a hosted page that sent cookies could not even read the answer.
 // What the agent answers is chosen by the environment-neutral producer in scenarios.ts, which the
 // browser demo's service worker shares; this adapter keeps the Node I/O, validation, CORS, request log,
-// failure controls and open-stream accounting.
+// failure controls and open-stream accounting. Runs arrive at wire speed, as tests expect, unless a test
+// opts in to the demo's natural pacing (pacing.ts) with the `pace` option.
 // Erasable TypeScript only, so Node can run it directly.
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { deliver, pace, sleepOn, type PaceProfile } from './pacing.ts';
 import { interactiveResponse, type RunInput } from './scenarios.ts';
 
 export { INTERRUPTS, SCENARIOS } from './scenarios.ts';
@@ -54,9 +56,13 @@ export interface InteractiveOptions {
   readonly assets?: Readonly<Record<string, readonly [contentType: string, body: string]>>;
   /** The one page origin granted CORS. */
   readonly allowOrigin?: string;
+  /** Stream runs the way the public demo does, with this profile (`NATURAL_PACE` for the demo's). Off unless given. */
+  readonly pace?: PaceProfile;
 }
 
 const CREDENTIAL_HEADERS = ['authorization', 'x-api-key', 'cookie'] as const;
+
+const sleep = sleepOn();
 
 export async function createInteractiveServer(options: InteractiveOptions = {}): Promise<InteractiveServer> {
   const recorded: RecordedRequest[] = [];
@@ -82,16 +88,20 @@ export async function createInteractiveServer(options: InteractiveOptions = {}):
     }
   }
 
-  function stream(response: ServerResponse, input: RunInput): void {
-    const answer = interactiveResponse(input);
+  async function stream(response: ServerResponse, input: RunInput): Promise<void> {
+    const reply = interactiveResponse(input);
+    const answer = options.pace === undefined ? reply : pace(reply, options.pace);
     response.writeHead(answer.status, { 'content-type': answer.contentType, 'cache-control': 'no-store' });
-    for (const chunk of answer.chunks) response.write(chunk);
-    if (answer.ending === 'close') return void response.end();
-    open += 1;
     // The response closes when the client goes away; the request's own 'close' fires once its body is read.
-    response.on('close', () => {
-      open -= 1;
-    });
+    const gone = new AbortController();
+    response.on('close', () => gone.abort());
+    if (answer.ending === 'hold-until-abort') {
+      open += 1;
+      response.on('close', () => {
+        open -= 1;
+      });
+    }
+    if ((await deliver(answer, (chunk) => response.write(chunk), sleep, gone.signal)) && answer.ending === 'close') response.end();
   }
 
   const server = createServer(async (request, response) => {

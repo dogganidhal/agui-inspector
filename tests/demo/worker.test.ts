@@ -3,6 +3,8 @@
 // Node import cannot resolve) and drive its listeners with native Request, Response and streams. They
 // prove routing, methods, errors, bytes, hold and cancel at the adapter. They do not prove a first-page
 // controller or native browser abort: that is the integrated browser proof in P03 (G-D03).
+// The worker paces its answers (FX9). The worker's own timers are a fake clock here, so nothing sleeps: it
+// fires every pause at once by default, and a test that wants to hold time still asks for a manual one.
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -13,6 +15,7 @@ import { build } from 'esbuild';
 import { formSurface, continuation, type UserAction } from '../../examples/reference-agent/a2ui-scenarios.ts';
 import { protocolScenarios } from '../../examples/reference-agent/protocol-fixtures.ts';
 import { scenarioBytes } from '../../examples/reference-agent/recorder-fixtures.ts';
+import { pace } from '../../examples/reference-agent/pacing.ts';
 import { a2uiResponse, baselineResponse, interactiveResponse, runErrorResponse, SCENARIOS, type ScenarioResponse } from '../../examples/reference-agent/scenarios.ts';
 
 const root = process.cwd();
@@ -27,7 +30,16 @@ interface Posted {
   readonly message: unknown;
 }
 
+/** The worker's own timers. `delays` is every pause it asked for, in order; `waiting` the ones not yet fired or cleared. */
+interface Clock {
+  readonly delays: number[];
+  readonly waiting: Map<number, () => void>;
+  /** Ends the oldest pause now. Nothing happens when the worker is not waiting. */
+  fire(): void;
+}
+
 interface Harness {
+  readonly clock: Clock;
   /** Runs the worker's fetch listeners; resolves to undefined when none claims the request. */
   fetch(request: Request | FakeRequest): Promise<Response | undefined>;
   /** The event types the worker listens for. */
@@ -90,11 +102,32 @@ function disarmTraps(): void {
 
 type Listener = (event: Record<string, unknown>) => void;
 
-function load(scriptUrl = `${PAGE}service-worker.js`): Harness {
+/** Instant unless `manual`: every pause ends on the next microtask, so a test never waits for a real timer. */
+function load(scriptUrl = `${PAGE}service-worker.js`, { manual = false } = {}): Harness {
   const listeners = new Map<string, Listener[]>();
   const posted: Posted[] = [];
   const calls = { skipWaiting: 0, claim: 0 };
+  const clock: Clock = {
+    delays: [],
+    waiting: new Map(),
+    fire() {
+      const [first] = clock.waiting;
+      if (first === undefined) return;
+      clock.waiting.delete(first[0]);
+      first[1]();
+    },
+  };
+  let timers = 0;
   const scope = {
+    setTimeout(handler: () => void, ms: number) {
+      timers += 1;
+      const id = timers;
+      clock.delays.push(ms);
+      clock.waiting.set(id, handler);
+      if (!manual) queueMicrotask(() => clock.waiting.delete(id) && handler());
+      return id;
+    },
+    clearTimeout: (id: number) => void clock.waiting.delete(id),
     location: new URL(scriptUrl),
     addEventListener: (type: string, listener: Listener) => listeners.set(type, [...(listeners.get(type) ?? []), listener]),
     skipWaiting: async () => void (calls.skipWaiting += 1),
@@ -113,6 +146,7 @@ function load(scriptUrl = `${PAGE}service-worker.js`): Harness {
     await Promise.all(pending);
   };
   return {
+    clock,
     listens: [...listeners.keys()].sort(),
     install: () => waited('install'),
     activate: () => waited('activate'),
@@ -154,8 +188,8 @@ const AGENTS = [
 ] as const;
 
 for (const [route, producer] of AGENTS) {
-  test(`${route} answers a POST with the shared producer's status, type and bytes`, async () => {
-    const expected = producer({});
+  test(`${route} answers a POST with the shared producer's status, type and bytes, paced`, async () => {
+    const expected = pace(producer({}));
     const response = await handled(post(route));
     assert.equal(response.status, 200);
     assert.equal(response.headers.get('content-type'), 'text/event-stream');
@@ -166,7 +200,7 @@ for (const [route, producer] of AGENTS) {
 
 const userAction: UserAction = { name: 'send_note', surfaceId: 'form', sourceComponentId: 'send', context: { note: 'hi', count: 1 }, timestamp: '2026-10-02T10:00:00.000Z' };
 
-test('the interactive route serves every scenario and continuation exactly as the Node fixture would', async () => {
+test('the interactive route serves every scenario and continuation as the shared producer answers it, paced', async () => {
   const bodies = [
     { messages: [{ role: 'user', content: 'plain hello' }] },
     ...Object.values(SCENARIOS).filter((name) => name !== 'slow').map((name) => ({ messages: [{ role: 'user', content: name }] })),
@@ -176,7 +210,7 @@ test('the interactive route serves every scenario and continuation exactly as th
   ];
   for (const extra of bodies) {
     const response = await handled(post('agent/interactive', input(extra)));
-    assert.deepEqual(await bytesOf(response), joined(interactiveResponse({ threadId: 't-1', runId: 'r-1', ...extra })), JSON.stringify(extra));
+    assert.deepEqual(await bytesOf(response), joined(pace(interactiveResponse({ threadId: 't-1', runId: 'r-1', ...extra }))), JSON.stringify(extra));
   }
 });
 
@@ -275,7 +309,7 @@ test('malformed JSON is a 400 and a missing or non-string identifier is a 422, e
 // ---- hold, cancel and incremental delivery -----------------------------------------------------
 
 /** Answers a request while recording every cancel the worker's response stream receives from its consumer. */
-async function answeredWithSpy(request: Request): Promise<{ response: Response; cancelled: unknown[] }> {
+async function answeredWithSpy(request: Request, target: Harness = worker): Promise<{ response: Response; cancelled: unknown[] }> {
   const cancelled: unknown[] = [];
   const Native = globalThis.ReadableStream;
   globalThis.ReadableStream = class extends Native<Uint8Array> {
@@ -284,14 +318,16 @@ async function answeredWithSpy(request: Request): Promise<{ response: Response; 
     }
   } as typeof Native;
   try {
-    return { response: await handled(request), cancelled };
+    const response = await target.fetch(request);
+    assert.ok(response, `${request.method} ${request.url} should be answered`);
+    return { response, cancelled };
   } finally {
     globalThis.ReadableStream = Native;
   }
 }
 
 const slowRequest = () => post('agent/interactive', input({ messages: [{ role: 'user', content: SCENARIOS.slow }] }));
-const slowResponse = () => interactiveResponse({ threadId: 't-1', runId: 'r-1', messages: [{ role: 'user', content: SCENARIOS.slow }] });
+const slowResponse = () => pace(interactiveResponse({ threadId: 't-1', runId: 'r-1', messages: [{ role: 'user', content: SCENARIOS.slow }] }));
 const slowBytes = () => joined(slowResponse());
 const slowChunks = slowResponse().chunks.length;
 const heldFor = (read: Promise<unknown>) => Promise.race([read.then(() => 'ended'), new Promise((resolve) => setTimeout(() => resolve('held'), 60))]);
@@ -355,7 +391,69 @@ test('a finished response closes without extra bytes', async () => {
     if (done) break;
     total += value.length;
   }
-  assert.equal(total, joined(interactiveResponse({ threadId: 't-1', runId: 'r-1' })).length);
+  assert.equal(total, joined(pace(interactiveResponse({ threadId: 't-1', runId: 'r-1' }))).length);
+});
+
+// ---- pacing (FX9) ------------------------------------------------------------------------------
+
+const plainRequest = () => post('agent/interactive', input({ messages: [{ role: 'user', content: 'plain hello' }] }));
+const plainResponse = () => pace(interactiveResponse({ threadId: 't-1', runId: 'r-1', messages: [{ role: 'user', content: 'plain hello' }] }));
+
+test('a run is announced at once, then every chunk waits its pause: a think latency first, then small deltas', async () => {
+  const manual = load(undefined, { manual: true });
+  const expected = plainResponse();
+  const reader = (await manual.fetch(plainRequest()))!.body!.getReader();
+
+  const received: Uint8Array[] = [(await reader.read()).value!];
+  assert.match(decoder.decode(received[0]), /"type":"RUN_STARTED"/, 'the run shows up before the model has "thought"');
+  assert.equal(manual.clock.waiting.size, 1);
+  assert.ok(manual.clock.delays[0]! >= 300 && manual.clock.delays[0]! <= 900, `think latency ${manual.clock.delays[0]}`);
+
+  const next = reader.read();
+  assert.equal(await heldFor(next), 'held', 'nothing arrives while the pause lasts');
+  manual.clock.fire();
+  received.push((await next).value!);
+  assert.match(decoder.decode(received[1]), /"type":"TEXT_MESSAGE_START"/);
+
+  for (;;) {
+    manual.clock.fire();
+    const { value, done } = await reader.read();
+    if (done) break;
+    received.push(value);
+  }
+  assert.deepEqual(Buffer.concat(received), joined(expected));
+  assert.deepEqual(manual.clock.delays, expected.delaysMs!.filter((delay) => delay > 0), 'the worker asked for exactly the pauses the pacing layer set');
+  const deltas = received.map((chunk) => decoder.decode(chunk)).filter((frame) => frame.includes('TEXT_MESSAGE_CONTENT')).map((frame) => JSON.parse(frame.slice('data: '.length)).delta as string);
+  assert.ok(deltas.length > 1, 'the text streams in several deltas');
+  assert.equal(deltas.join(''), 'Hello from the reference agent.');
+});
+
+test('Stop in the middle of a pause ends it, sends nothing more, closes nothing and releases the producer', async () => {
+  const manual = load(undefined, { manual: true });
+  const { response, cancelled } = await answeredWithSpy(plainRequest(), manual);
+  const reader = response.body!.getReader();
+  await reader.read();
+  assert.equal(manual.clock.waiting.size, 1, 'the worker is in its think pause');
+
+  const waiting = reader.read();
+  await reader.cancel(new DOMException('stopped', 'AbortError'));
+  assert.deepEqual(await waiting, { value: undefined, done: true });
+  assert.equal(cancelled.length, 1, 'the producer was told to stop');
+  assert.equal(manual.clock.waiting.size, 0, 'the pause was cleared, not left to fire later');
+  manual.clock.fire();
+  assert.equal(manual.clock.delays.length, 1, 'no later chunk was scheduled');
+});
+
+test('protocol fixtures are byte-exact wire evidence: no pause is asked for and no byte is re-cut', async () => {
+  const manual = load(undefined, { manual: true });
+  for (const [route, expected] of [
+    ['agent/protocol/baseline', baselineResponse({ threadId: 't-1', runId: 'r-1' })],
+    ['agent/protocol/run-error', runErrorResponse({ threadId: 't-1', runId: 'r-1' })],
+  ] as const) {
+    const response = (await manual.fetch(post(route)))!;
+    assert.deepEqual(await bytesOf(response), joined(expected), route);
+  }
+  assert.deepEqual(manual.clock.delays, [], 'a fixture reaches the page at wire speed');
 });
 
 // ---- confinement: everything else passes through unhandled -------------------------------------
@@ -445,9 +543,9 @@ test('an existing controller can ask and gets the same sensitive-data-free answe
 
 // ---- what the worker is made of ----------------------------------------------------------------
 
-test('the worker bundle pulls in only the shared pure producers and no Node, React or storage code', () => {
+test('the worker bundle pulls in only the shared pure producers, their pacing and no Node, React or storage code', () => {
   assert.ok(inputs.length > 1);
-  for (const file of inputs) assert.match(file, /^(demo\/service-worker\.ts|examples\/reference-agent\/(scenarios|a2ui-scenarios|protocol-fixtures|recorder-fixtures)\.ts)$/, file);
+  for (const file of inputs) assert.match(file, /^(demo\/service-worker\.ts|examples\/reference-agent\/(scenarios|pacing|a2ui-scenarios|protocol-fixtures|recorder-fixtures)\.ts)$/, file);
   assert.ok(!code.includes('node:'));
   assert.ok(!/\brequire\(/.test(code));
   for (const forbidden of [/\bcaches\b/, /\bindexedDB\b/, /\blocalStorage\b/, /\bsessionStorage\b/, /\bXMLHttpRequest\b/, /\bWebSocket\b/, /\bimportScripts\b/, /\bfetch\(/, /\.headers\b(?!\s*:)/, /\bcredentials\b/, /\bcookie/i]) {

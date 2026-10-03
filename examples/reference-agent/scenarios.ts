@@ -4,7 +4,8 @@
 // stays open until the caller goes away. The Node fixture servers and the browser service worker both
 // turn the same descriptor into a real HTTP response, so a browser example and a Node fixture cannot
 // drift apart. No headers, credentials, I/O or timers reach a producer; validation, CORS, logging and
-// cancellation belong to the adapters. Imports nothing from Node, React or a worker.
+// cancellation belong to the adapters, and so does pacing: pacing.ts turns a descriptor into a timed one
+// where an adapter chooses to, and no producer sleeps. Imports nothing from Node, React or a worker.
 // Erasable TypeScript only, so Node can run it directly.
 import { continuation, formSurface, type UserAction } from './a2ui-scenarios.ts';
 import { baselineRun, runError, type RunIds } from './protocol-fixtures.ts';
@@ -38,11 +39,15 @@ export interface RunInput extends RunIds {
   readonly forwardedProps?: { readonly a2uiAction?: { readonly userAction?: object } };
 }
 
-/** A response as data. `chunks` are written in order; `hold-until-abort` leaves the body open after the last one. */
+/**
+ * A response as data. `chunks` are written in order; `hold-until-abort` leaves the body open after the last one.
+ * `delaysMs[i]` is the pause before `chunks[i]`; a producer leaves it out, and an adapter that paces fills it in.
+ */
 export interface ScenarioResponse {
   readonly status: number;
   readonly contentType: string;
   readonly chunks: readonly Uint8Array[];
+  readonly delaysMs?: readonly number[];
   readonly ending: Extract<ScenarioEnding, 'close' | 'hold-until-abort'>;
 }
 

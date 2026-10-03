@@ -4,6 +4,8 @@
 // It is not a proxy and not a cache: it forwards nothing, stores nothing, reads nothing of a request
 // but its method, URL and body, and leaves every other request (assets, navigation, other origins, the
 // visitor's own endpoint) to the browser. Classic script, no imports from Node, React or the app.
+// The agents' answers are paced here (FX9), not in the producers: a run streams over a second or two, the
+// way a model would, instead of landing in a millisecond. The only timers are the pauses between chunks.
 
 import {
   a2uiResponse,
@@ -14,6 +16,7 @@ import {
   type RunInput,
   type ScenarioResponse,
 } from '../examples/reference-agent/scenarios.ts';
+import { deliver, pace, sleepOn } from '../examples/reference-agent/pacing.ts';
 
 declare const self: ServiceWorkerGlobalScope;
 
@@ -24,6 +27,9 @@ const READY = { type: 'agui-demo-ready', version: 1, ready: true } as const;
 // The scope is the directory this script is served from, whatever sub-path the site lives under.
 const base = new URL('./', self.location.href);
 const reserved = `${base.pathname}__demo__/`;
+
+// The worker's own timers, so a test can stand in a fake clock for them.
+const sleep = sleepOn(self);
 
 const AGENTS = new Map<string, (input: RunInput) => ScenarioResponse>([
   ['agent/interactive', interactiveResponse],
@@ -50,7 +56,8 @@ async function answer(request: Request, route: string): Promise<ScenarioResponse
     if (typeof input?.threadId !== 'string' || typeof input.runId !== 'string') {
       return jsonResponse(422, { error: 'threadId and runId must be strings' });
     }
-    return agent(input as RunInput);
+    // The protocol fixtures are byte-exact wire evidence in uneven fragments; pacing leaves those unchanged.
+    return pace(agent(input as RunInput));
   }
   // Preparations are accepted and forgotten: the page recorded the request, and nothing is kept here.
   if (route === 'prepare/warm') return request.method === 'POST' ? jsonResponse(200, { ok: true }) : notAllowed('POST');
@@ -59,24 +66,20 @@ async function answer(request: Request, route: string): Promise<ScenarioResponse
 }
 
 /**
- * The descriptor as a native response. Chunks are handed over one per pull, in order. A held response
- * leaves its pull pending, sends no closing frame, and settles that pull when the page cancels.
+ * The descriptor as a native response. Chunks are handed over in order, each after its pause. A held response
+ * sends no closing frame; Stop, or any cancel from the page, ends a pause early, drops what has not been sent
+ * and releases the response, so nothing more is written after the page has gone.
  */
 function toResponse(answered: ScenarioResponse): Response {
-  let next = 0;
-  let release: (() => void) | undefined;
+  const stopped = new AbortController();
   const body = new ReadableStream<Uint8Array>({
-    pull(controller) {
-      const chunk = answered.chunks[next];
-      next += 1;
-      if (chunk !== undefined) return controller.enqueue(chunk);
-      if (answered.ending === 'close') return controller.close();
-      return new Promise<void>((resolve) => {
-        release = resolve;
+    start(controller) {
+      void deliver(answered, (chunk) => controller.enqueue(chunk), sleep, stopped.signal).then((complete) => {
+        if (complete && answered.ending === 'close') controller.close();
       });
     },
     cancel() {
-      release?.();
+      stopped.abort();
     },
   });
   return new Response(body, { status: answered.status, headers: { 'content-type': answered.contentType, 'cache-control': 'no-store' } });

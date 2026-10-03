@@ -15,13 +15,40 @@ and tool replies behave the same way. No model, account or network call is invol
 third party.
 
 The answers come from `examples/reference-agent/scenarios.ts`, the same module the Node reference agent uses for its
-fixtures. The bytes in the browser and in the Node tests cannot drift apart.
+fixtures. The events in the browser and in the Node tests cannot drift apart.
+
+### Pacing
+
+The interactive and A2UI agents answer at the speed of a model, not in one burst. The service worker runs each answer through
+`examples/reference-agent/pacing.ts` before it hands it to the page:
+
+- `RUN_STARTED` goes out at once. The first event after it waits 300 to 900 ms, the way a model reads a request.
+- Text, reasoning and tool-call arguments arrive as many small deltas, 20 to 60 ms apart. Text is cut into words. Arguments are
+  cut a few characters at a time.
+- A new message, step or tool call waits 150 to 400 ms. A tool result waits 400 to 900 ms after its call. A state or surface
+  update waits 250 to 600 ms.
+
+A plain reply takes about 0.7 seconds and the other scenarios up to about 1.2. Pacing changes chunking and timing only. The event types come in the same order, and
+the deltas of a message join back into the original text, so the frames list shows five word-sized deltas where the unpaced
+scenario had one. A delta that has no start event, as in the `broken` scenario, stays the one frame it was, so pacing adds
+nothing to the damage. The `slow` scenario still streams "Thinking about it" and then stays open until you press Stop.
+
+The pauses come from a hash of each chunk's position, with no clock and no `Math.random`, so a run takes the same time on every
+visit. The protocol examples are exempt. Their bytes are the point (uneven chunks, mixed delimiters), so they reach the page
+unchanged and without pauses.
+
+Stop works at any moment of a paced run. It ends the pause the worker is in, drops every frame not yet sent and releases the
+response. No closing frame is made up, and nothing arrives afterwards.
+
+The layer belongs to the adapter, so any scenario that returns a `ScenarioResponse` is paced without knowing about it. The
+Node reference agent stays at wire speed, which keeps tests fast and their frame counts exact. A test that wants the demo's
+behavior passes a profile: `createInteractiveServer({ pace: NATURAL_PACE })`.
 
 | Agent | Quick messages | What it shows |
 | --- | --- | --- |
-| Interactive scenarios | `Hello there`, `interrupt`, `tools`, `slow`, `state`, `broken` | A plain reply; two interrupts to resolve or cancel; two tool calls that need results; a response held open until you press Stop; state snapshot and delta; a run with a broken frame in the middle. Each message first sends the preparation requests (a session `PUT` and a warm-up `POST`) the preset declares. |
+| Interactive scenarios | `Hello there`, `interrupt`, `tools`, `slow`, `state`, `broken` | A plain reply; two interrupts to resolve or cancel; two tool calls that need results; a response held open until you press Stop; state snapshot and delta; a run with a broken frame in the middle. Each message first sends the preparation requests (a session `PUT` and a warm-up `POST`) the preset declares. All of them stream with the pacing described below. |
 | A2UI form | `Show the order form` | A form surface. Edit the note and press Send note: the action goes out in a new run and the surface changes in place. |
-| Protocol baseline | `Run the baseline protocol example` | 30 of the 31 event types, mixed line delimiters, split into uneven chunks. |
+| Protocol baseline | `Run the baseline protocol example` | 30 of the 31 event types, mixed line delimiters, split into uneven chunks. Not paced. |
 | Protocol run error | `Run the failing example` | `RUN_STARTED` then `RUN_ERROR`, the 31st type. |
 
 Choose an agent from the Agent selector beside the endpoint (Settings has the same choice). The first one, Interactive scenarios, is selected at start. The page says in plain text, above
@@ -36,7 +63,8 @@ the page does not fetch it.
   path under `__demo__/` a 404 with a JSON body. Everything else (assets, navigation, other paths on the site, other origins,
   your own server) goes to the browser untouched.
 - It reads a request's method, URL and body. It does not read headers or cookies, forward anything, or write to a cache, a
-  database or storage. Pressing Stop cancels the held response and releases it; no closing frame is made up.
+  database or storage. Its only timers are the pauses between the chunks of a paced answer. Pressing Stop cancels the response,
+  whether it is pausing, streaming or held open, and releases it; no closing frame is made up.
 - It takes control of the page without a reload. The page registers it, waits for it to say its name and version, and only
   then shows the examples.
 

@@ -101,7 +101,8 @@ the demo under `/agui-inspector/`, and review workflow triggers/permissions with
 - First visit, existing controller, stale worker, worker installation failure, activation timeout
   and browser storage restrictions must not strand the inspector or issue example POSTs to Pages.
 - A stop before or during the held-open slow response preserves partial evidence, closes the
-  producer and creates no artificial terminal frame.
+  producer and creates no artificial terminal frame. The same holds for a stop during a paced run,
+  in a pause or mid-stream: nothing more is sent afterwards.
 - Worker route ownership is exact: unrelated page assets, other repository paths, external URLs
   and visitor endpoints are never replaced, cached or proxied.
 - Invalid JSON/missing run identifiers get an inspectable error response, not a successful stream.
@@ -170,6 +171,15 @@ the demo under `/agui-inspector/`, and review workflow triggers/permissions with
 - **FR-017**: Implementation MUST wait for main after W3 D01/D02/D03 merges, use at most three
   implementation slices with disjoint owned paths and at most one unmerged-parent stacking level.
   Publishing workflows, npm/PyPI publication, tags, releases, JS server helpers and CLI are excluded.
+- **FR-018**: Scripted example answers MUST stream the way a model does: a think latency before the
+  first event after the run starts, text, reasoning and tool-call arguments as many small deltas at
+  token-like intervals, and short pauses before a new step, a tool result and a state or surface
+  update. One environment-neutral pacing layer MUST apply this where the example adapter serves a
+  response, so a scenario needs no edits and a later scenario is paced automatically. Pacing MUST be
+  deterministic (no random source), MUST keep event types and order and the text each delta stream
+  joins to, MUST leave byte-exact wire fixtures (baseline, run-error, malformed frames and
+  fragments) as produced, and MUST let Stop cancel promptly. Node fixture servers MUST answer at wire
+  speed unless a test opts in.
 
 ### Key Entities
 
@@ -178,7 +188,8 @@ the demo under `/agui-inspector/`, and review workflow triggers/permissions with
 - **Example agent**: Named browser-local endpoint, scenario selection, capabilities, preset and
   quick messages; uses the same agent configuration format as real endpoints.
 - **Example response**: Status, response type, exact byte sequence/chunks and close/hold behavior
-  produced by a shared deterministic scenario; captured as ordinary request/response evidence.
+  produced by a shared deterministic scenario, with streamed deltas cut into pieces and a pause
+  before each chunk by the pacing layer (FR-018); captured as ordinary request/response evidence.
 - **Demo readiness**: Preparing, controlled/ready or unavailable status, with reason and reload guidance;
   transient page state, not credentials or a stored session.
 - **Demo artifact**: The shared inspector app plus demo-only bootstrap, worker and configuration;
@@ -191,7 +202,7 @@ the demo under `/agui-inspector/`, and review workflow triggers/permissions with
 - **SC-001**: On a fresh supported browser, the first plain example run succeeds without manual
   reload or an external server, and examples become ready or visibly unavailable within 10 seconds.
 - **SC-002**: All six interactive scenarios, interrupt resolve/cancel, all-tool replies, slow stop
-  and the A2UI action round trip match reference request/response evidence; baseline/run-error
+  and the A2UI action round trip match reference request/response evidence, as paced; baseline/run-error
   examples collectively retain all 31 original event types.
 - **SC-003**: A previously unlisted HTTPS target and a browser-compatible localhost target run
   without inspector approval prompts; forbidden destinations make zero target requests and all
@@ -204,6 +215,8 @@ the demo under `/agui-inspector/`, and review workflow triggers/permissions with
   show a reason while own-server use/import remain available, and the embedding link is reachable.
 - **SC-007**: A validated main artifact is deployable through the Pages workflow, with zero PR
   deployments or package publications; actual Pages enablement is authorized separately.
+- **SC-008**: A plain example run lasts more than half a second and its reply arrives in several
+  text deltas; Stop during a paced run releases the worker and no frame arrives afterwards.
 
 ## Assumptions
 
