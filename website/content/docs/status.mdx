@@ -3,8 +3,8 @@ title: Project status and privacy
 description: What is implemented and released, where your data goes, and which formats, versions and browsers you can rely on.
 ---
 
-These docs describe the `main` branch. Every push to `main` also deploys the public demo. The changelog starts with the
-first release.
+These docs describe the `main` branch. Every push to `main` also deploys the public demo. The Python package's
+[changelog](https://github.com/dogganidhal/agui-inspector/blob/main/packages/python/CHANGELOG.md) lists what each release changed.
 
 ## What is implemented
 
@@ -15,7 +15,7 @@ Version 0.1.0 (the minimum viable product) is implemented on `main`. The public 
 | Mode | Status |
 | --- | --- |
 | Hosted static page with a `hosting-config.json` | Available: the [demo](./demo.mdx) is one, or build the page from a checkout |
-| Embedded in Starlette or FastAPI, through `mount_inspector` | Available from a source checkout |
+| Embedded in Starlette or FastAPI, through `mount_inspector` | 0.1.0 on PyPI: `pip install "agui-inspector[embedded]"` |
 | Static assets from the npm package's `staticAssetsPath`, served by any other server | Available from a source checkout |
 | CLI: a local command that serves the page and proxies to a target | Planned for 1.0.0 |
 | JS helpers: Express, Hono and Next.js route-handler integrations | Planned for 1.0.0 |
@@ -26,8 +26,9 @@ server in any language can use the hosted page or serve the static assets.
 
 ## Release status
 
-Nothing is published yet. The package name on npm and PyPI is `agui-inspector`. Release verification is not finished:
-the 5,000-frame benchmark on the reference machine and a manual smoke test of each mode still need to run.
+The Python package `agui-inspector` 0.1.0 has been on [PyPI](https://pypi.org/project/agui-inspector/) since 2026-10-03, published from CI through
+trusted publishing with attestations. The npm package is not published yet, and its release is not set up. The
+5,000-frame responsiveness certification on the reference machine is still open.
 [Release process](./releases.mdx) explains how a release happens. The
 [roadmap](https://github.com/dogganidhal/agui-inspector/blob/main/ROADMAP.md) tracks the release, the 1.0.0 plans and
 the open decisions.

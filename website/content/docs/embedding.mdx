@@ -5,7 +5,7 @@ description: Serve the inspector from your own Starlette or FastAPI application 
 
 Python is the first server language with an embedded helper, and it will not be the only one: JavaScript helpers for Express, Hono and Next.js are planned for 1.0.0. A server in any other language can already use the [hosted page](./hosted.mdx) or [serve the static assets](#serving-the-assets-from-another-server).
 
-The Python package `agui-inspector` (MIT) contains the prebuilt inspector files and one helper, `mount_inspector`, that serves them from your Starlette or FastAPI application. The host needs no Node toolchain, and the helper downloads nothing at startup. The package stays private and unpublished until the first [release](./releases.mdx). Until then, build it from a [source checkout](#working-from-a-source-checkout).
+The Python package `agui-inspector` (MIT) contains the prebuilt inspector files and one helper, `mount_inspector`, that serves them from your Starlette or FastAPI application. The host needs no Node toolchain, and the helper downloads nothing at startup. Version 0.1.0 is on [PyPI](https://pypi.org/project/agui-inspector/).
 
 The helper adds a separate page to your server. That page sends its own requests to your agent URLs, so it records the runs it starts. It does not attach to the agent that your own frontend runs, and it does not see that agent's requests. Watching your application's `AbstractAgent` is the planned in-app mode (see the [roadmap](https://github.com/dogganidhal/agui-inspector/blob/main/ROADMAP.md#100-stable-target)). It is not built yet.
 
@@ -14,17 +14,7 @@ The helper adds a separate page to your server. That page sends its own requests
 <Steps>
 <Step>
 
-Install the package with the `embedded` extra, which adds Starlette. The package is not on PyPI yet, so build the wheel from a [source checkout](#working-from-a-source-checkout) and install that file. The file name contains the version. Use pip in a virtual environment, or uv in a uv project:
-
-```sh tab="pip" tab-group="python-installer"
-pip install "/path/to/agui-inspector/packages/python/dist/agui_inspector-0.1.0-py3-none-any.whl[embedded]"
-```
-
-```sh tab="uv" tab-group="python-installer"
-uv add "agui-inspector[embedded] @ /path/to/agui-inspector/packages/python/dist/agui_inspector-0.1.0-py3-none-any.whl"
-```
-
-After the first release, install it from PyPI instead:
+Install the package from PyPI with the `embedded` extra, which adds Starlette. Use pip in a virtual environment, or uv in a uv project:
 
 ```sh tab="pip" tab-group="python-installer"
 pip install "agui-inspector[embedded]"
@@ -145,7 +135,7 @@ Any static file server can host the same inspector. The npm package exports `sta
 
 ## Working from a source checkout
 
-Nothing is on PyPI yet, so a checkout is how you run the package today. You need git, Node 24 or newer with npm, and [uv](https://docs.astral.sh/uv/): `npm run package:python` builds the wheel with `uv build`. Once the wheel is built, you can install and run it with pip or uv.
+Use a checkout to run the example, to try changes that are on `main` but not released yet, or to work on the package. You need git, Node 24 or newer with npm, and [uv](https://docs.astral.sh/uv/): `npm run package:python` builds the wheel with `uv build`. Once the wheel is built, you can install and run it with pip or uv.
 
 ```sh
 git clone https://github.com/dogganidhal/agui-inspector.git
@@ -156,6 +146,15 @@ npm run package:python
 
 The static files are not committed. A fresh checkout has no `src/agui_inspector/static` directory, and `mount_inspector(enabled=True)` raises an error that names `npm run package:python`. That command builds the assets, copies them into the package, writes `static.sha256` and runs `uv build`. It leaves a wheel and a source distribution in `packages/python/dist`. [Releases](./releases.mdx) describes what it checks.
 
-To see the page working, start the example from [Authentication](#authentication). To use the package in your own project, install the wheel as the [quick start](#quick-start) shows. For the package's test commands, see [Architecture and UI internals](./internals.mdx#python-package-tests).
+To see the page working, start the example from [Authentication](#authentication). To use the built wheel in your own project instead of the PyPI release, install the file. Its name contains the version:
+
+```sh tab="pip" tab-group="python-installer"
+pip install "/path/to/agui-inspector/packages/python/dist/agui_inspector-0.1.0-py3-none-any.whl[embedded]"
+```
+
+```sh tab="uv" tab-group="python-installer"
+uv add "agui-inspector[embedded] @ /path/to/agui-inspector/packages/python/dist/agui_inspector-0.1.0-py3-none-any.whl"
+```
+ For the package's test commands, see [Architecture and UI internals](./internals.mdx#python-package-tests).
 
 Next, read [Connect and send a run](./runs.mdx) for what each run carries, and [Read frames and findings](./inspection.mdx) to understand what the Inspection tab shows.
