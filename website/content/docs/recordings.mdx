@@ -1,0 +1,127 @@
+---
+title: Save and open recordings
+description: Export a session to a file, open it again for inspection, and check what it holds before you share it.
+---
+
+A session lives in the browser's memory only. The inspector never stores it on a server, and a reload empties it. To keep a session, export it to a JSON file. To look at it again, in this browser or another one, import that file. A file exists only if you export one.
+
+Export session and Import session are at the top of the Inspection tab, above the frames list.
+
+## Export a session
+
+<Steps>
+<Step>
+
+Press Export session.
+
+</Step>
+<Step>
+
+Read the dialog. It says the file holds this session's exchanges, every frame as received, run inputs and timings, as pre-stable version 0 JSON. It warns that raw frames and request bodies can contain personal or sensitive data, including credentials, other secrets and a token the server echoed back. It also says headers, including the authentication header, are not captured or exported. A summary line gives the file name, the number of exchanges and frames, and `0 headers`.
+
+</Step>
+<Step>
+
+Press Export session in the dialog. Your browser downloads `agui-inspector-session.json`. Cancel writes nothing.
+
+</Step>
+</Steps>
+
+## Open a recording
+
+<Steps>
+<Step>
+
+Press Import session and choose a `.json` file.
+
+</Step>
+<Step>
+
+The inspector checks the whole file first (see [what import checks](#what-import-checks)). A file that fails is refused with an `Import failed:` error that names the first problem, and the current session stays as it was.
+
+</Step>
+<Step>
+
+A file that passes replaces what is on screen. Its conversation, state and frames appear, and filters, raw expansion and copying work as for a live capture.
+
+</Step>
+</Steps>
+
+You can only inspect an opened recording. A warning under the tabs reads "Imported recording: inspection only", and the footer says the same. The composer is disabled and shows "An imported recording is open for inspection. Reload the page to send requests again." A reply, a raw request or a surface action shows that message instead of sending. Import never sends the recording's requests, runs a preparation or starts a run, and it makes no network request of its own. Export session now writes the recording.
+
+A recording can pass every check and still fail to render. A pane that throws shows its own error, and the rest of the page keeps working. If that happens while a recording is open, the inspector shows the previous capture again and reports `Import failed` with the pane's name and the error. The live capture stays usable and can still be exported.
+
+### Back to live capture
+
+To send requests again, reload the page. The reload starts an empty session. Nothing else brings back the live session you had before the import.
+
+## Export before you reload
+
+A reload, or anything else that closes the page, loses every exchange you have not exported. Export first if you may want to show the session to someone or compare it later. Export before you import a file too, because leaving the recording needs a reload.
+
+## Read this before you share a file
+
+<Callout type="warn">
+A recording holds the request bodies you sent and every frame the server returned, exactly as received. Either can contain personal data, business data or secrets. For example, a tool result can hold a customer record, or a server can repeat a credential in its answer. The inspector does not edit, mask or filter received bytes, so the file contains everything that was sent and received.
+</Callout>
+
+- The export dialog says this every time and adds that headers are not captured or exported. The file is written only after you confirm.
+- Treat the file like the traffic it came from. Check it before you attach it to a ticket, a chat or a public issue, and use synthetic data when it reproduces the problem.
+- If you find a secret in a recording, rotate it. Deleting the file does not remove copies.
+
+## Your token in a recording
+
+The [token you enter](./configuration.mdx#credentials) lives in memory only. It never reaches configuration, browser storage, a request recording, an inspection view, a log or an export. The recorder does not read headers and the file has no header fields, so the token cannot be copied into the file.
+
+A server can still repeat your token in its answer, for example by logging the request it received. Those bytes are evidence of what the server did. The inspector keeps them exactly as received, in capture and in the export, and does not redact, mask, hash or search for your token. So a file contains your token when the server sent it back, and only then. The export dialog and the authentication popover both say so: headers are not recorded or exported, and a payload that repeats the token is kept as received. Rotate the token before you share such a file.
+
+An end-to-end test checks both rules against a server that echoes a synthetic token. [Architecture and UI internals](./internals.mdx#session-file-tests) describes what it covers.
+
+## What a file contains
+
+A file is one JSON object with a version and a session:
+
+```json
+{ "version": 0, "session": { "id": "…", "exchanges": [], "runs": [], "frames": [], "findings": [], "derived": [] } }
+```
+
+| Collection | Holds |
+| --- | --- |
+| `exchanges` | Every preparation request, conversation run and raw submission, in capture order: method, path, exact request body text, response status, any non-stream response body, wall-clock start, elapsed time, how the transport ended, and its frame ids. |
+| `runs` | Each run's thread, run and parent ids, the input as sent, start and end time, and the outcome the stream showed. |
+| `frames` | Every received frame in arrival order: the original envelope text with delimiters, the extracted data text, the offset in milliseconds from the request's start, the event type if known, the summary, the JSON and schema verdicts, and the parsed value. Control and partial frames are included and marked. |
+| `findings` | Judgements that point at a frame, run or exchange. They add to the evidence and never replace it. |
+| `derived` | Client-derived entries such as chunk expansions, each listing its source frames. They are marked `derived` and carry no frame index. |
+
+Order is part of the format. Records are written in store order, and exporting an imported file again gives the same bytes.
+
+A request from the [raw request editor](./runs.mdx#raw-submissions) is an exchange of kind `raw` with no run. Its `requestBody` is the text as entered, with whitespace and key order kept. But a text area reports line breaks as line feeds, so a typed or pasted carriage return is sent as a line feed. The answer is recorded like any other, error responses included.
+
+## What a file never contains
+
+- Request or response headers, the authentication header name, or the token you entered. A token repeated inside a received frame is the server's evidence and stays as sent.
+- The connection's target URL, abort controller or other live connection state.
+- Anything executable. Import only displays a recording.
+
+Export writes a fixed list of fields for each record, so an extra field on an in-memory object cannot reach the file.
+
+## What import checks
+
+Import checks the whole file in memory first. A failing file is refused with a visible error that names the first problem, and the current session stays as it was.
+
+- Valid JSON: an object with exactly `version` and `session`, where the version is the number `0`. A missing version, a string or another number is refused.
+- Every record has exactly its documented fields. An unknown field is refused. If its name suggests a header, cookie, token or credential, the error is more specific. Words inside a payload (for example a tool argument called `headers`) are evidence and are not checked.
+- Ids are unique within each collection.
+- References resolve. A frame or a run names an exchange in the file. A finding names an existing frame, run or exchange. A derived entry's sources are frames in the file, at least one for an `identified` entry.
+- Each exchange lists all its frames in arrival order. Frame `index` counts up from zero within the exchange, and `offsetMs` never decreases.
+- Times are finite and not negative, and a run does not end before it starts. Exchange start times are wall-clock values and do not have to increase, because a clock can change during a session.
+- Each frame is consistent: its JSON verdict matches whether the data text parses, `parsed` equals the data text, and a control or partial frame has no data and no verdicts. A frame whose schema verdict is `valid` must also pass the AG-UI event schema, checked with the same function the live reader uses. The conversation is built from those frames, so the importer refuses a `valid` label on data the schema rejects.
+- A run's input is a run input, an interrupt outcome holds interrupts, and a path holds no URL credentials.
+
+Frames that the schema rejects, unknown event types and data that is not JSON are evidence. They import as recorded when their verdicts say so: `invalid`, `unknown-type`, or `not-applicable` for data that is not JSON. Only a verdict that contradicts its data is an error, and the message names the frame. The inspector does not correct the verdict or the data. Fix the file, or export it again from the session that recorded it.
+
+## Format stability
+
+The format is version 0 and not yet stable. Release 1.0.0 must ship version 1, with published JSON Schemas. Until then, any release can change version 0 incompatibly without changing the number. The changelog announces each change with migration steps. A file from one release may be refused by another, and the error names the part the importer rejected. Any other version number is refused, because this build does not guess at newer or older formats. The changelog starts with the first release.
+
+Next, [read frames and findings](./inspection.mdx) explains what an opened recording shows, and [troubleshooting](./troubleshooting.mdx) covers an import or a request that fails.

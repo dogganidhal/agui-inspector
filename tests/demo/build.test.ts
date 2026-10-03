@@ -162,9 +162,9 @@ test('the demo page has no #root, one module script, worker-src self and no pref
   // Native, labelled status outside the app root, and the one link out: explicit navigation, not a fetch.
   assert.match(html, /<p id="demo-status" role="status">Preparing the browser-local examples…<\/p>/);
   const external = [...html.matchAll(/(?:href|src)="(https?:[^"]+)"/g)].map((m) => m[1]);
-  assert.deepEqual(external, ['https://github.com/dogganidhal/agui-inspector/blob/main/docs/embedding.md']);
-  assert.match(html, /<a href="https:\/\/github\.com\/dogganidhal\/agui-inspector\/blob\/main\/docs\/embedding\.md" rel="noopener noreferrer">Embedding guide<\/a>/);
-  assert.equal(existsSync(path.join(repo, 'docs', 'embedding.md')), true, 'the linked guide exists in the repository');
+  assert.deepEqual(external, ['https://dogganidhal.github.io/agui-inspector/docs/embedding/']);
+  assert.match(html, /<a href="https:\/\/dogganidhal\.github\.io\/agui-inspector\/docs\/embedding\/" rel="noopener noreferrer">Embedding guide<\/a>/);
+  assert.equal(existsSync(path.join(repo, 'website', 'content', 'docs', 'embedding.mdx')), true, 'the linked guide is a page of the docs site');
   assert.match(html, /scripted agents that run inside this page[\s\S]*type its URL in the connection bar/);
 });
 
@@ -444,27 +444,33 @@ test('the Pages workflow gives the build job read access and the deploy job Page
   assert.match(deploy, /id: deployment/);
 });
 
-test('the Pages workflow validates and uploads only the isolated demo directory, with locked installs and pinned actions', () => {
+test('the Pages workflow validates the isolated demo, builds the docs and uploads only their merge, with locked installs and pinned actions', () => {
   const text = source(PAGES);
   const build = jobBlock(text, 'build');
   const order = [
     'npm ci --ignore-scripts',
+    'npm ci --ignore-scripts --prefix website',
     'actions/configure-pages@',
     'node scripts/build-demo.mjs --outdir .build/public-demo',
     'node scripts/bundle-budget.mjs --dir .build/public-demo',
     'npm run test:unit -- tests/demo/build.test.ts',
+    'npm run build --prefix website',
+    ".build/pages', { recursive: true, force: false, errorOnExist: true }",
     'actions/upload-pages-artifact@',
   ].map((needle) => {
     assert.ok(build.includes(needle), `${needle} is a step`);
     return build.indexOf(needle);
   });
-  assert.deepEqual(order, [...order].sort((a, b) => a - b), 'install, site settings, build, budget, checks, then upload');
+  assert.deepEqual(order, [...order].sort((a, b) => a - b), 'install, site settings, demo build, budget, checks, docs build, merge, then upload');
   // The origin and base path come from the site's own settings, so a fork deploys with its own; no literal host.
   assert.match(build, /uses: actions\/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0\n\s+id: pages\n(?!\s+with:)/, 'pinned, and no input: it cannot enable Pages');
   assert.match(build, /node scripts\/build-demo\.mjs --outdir \.build\/public-demo --origin "\$PAGES_ORIGIN" --base-path "\$PAGES_BASE_PATH\/"/);
   assert.match(build, /PAGES_ORIGIN: \$\{\{ steps\.pages\.outputs\.origin \}\}\n\s+PAGES_BASE_PATH: \$\{\{ steps\.pages\.outputs\.base_path \}\}/);
+  // The docs are built for the same base path, and the merge copies the demo and the docs without overwriting a file.
+  assert.match(build, /npm run build --prefix website\n\s+env:\n\s+PAGES_BASE_PATH: \$\{\{ steps\.pages\.outputs\.base_path \}\}\n/);
+  assert.ok(build.includes("for (const dir of ['.build/public-demo', 'website/out'])"), 'the merge takes the demo and the docs');
   assert.doesNotMatch(text, /dogganidhal|github\.io/, 'no literal host in the workflow');
-  assert.match(build, /uses: actions\/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0\n\s+with:\n\s+path: \.build\/public-demo\n/);
+  assert.match(build, /uses: actions\/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0\n\s+with:\n\s+path: \.build\/pages\n/);
   assert.match(text, /uses: actions\/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1\n/);
   assert.match(build, /persist-credentials: false/);
   assert.doesNotMatch(text, /npm (?:ci|install)(?![^\n]*--ignore-scripts)/);
@@ -486,16 +492,15 @@ test('the Pages workflow neither enables Pages, nor ships a package, tags or rel
 // The documentation says what the build does
 // ---------------------------------------------------------------------------------------------
 
-test('the demo guide states the public URL, the matching-origin rule, the commands and the separate authorization', () => {
-  const doc = source('docs/public-demo.md');
+test('the demo pages state the public URL, the matching-origin rule, the commands and the separate authorization', () => {
+  const doc = source('website/content/docs/demo.mdx') + source('website/content/docs/demo-internals.mdx');
   assert.match(doc, /https:\/\/dogganidhal\.github\.io\/agui-inspector\//);
-  assert.match(doc, /\*\*Build for the origin you serve from\.\*\*/);
+  assert.match(doc, /Build for the origin you serve from/);
   assert.match(doc, /node scripts\/build-demo\.mjs --outdir \.build\/public-demo --base-path \/agui-inspector\//);
   assert.match(doc, /--origin http:\/\/127\.0\.0\.1:4173/);
   assert.match(doc, /The workflow does not turn Pages on/);
-  assert.match(doc, /\[embedding guide\]\(https:\/\/github\.com\/dogganidhal\/agui-inspector\/blob\/main\/docs\/embedding\.md\)/);
   for (const topic of ['localhost', 'CORS', 'IPv6', 'reload the page', 'Export session', '10 seconds']) assert.ok(doc.includes(topic), topic);
-  const development = source('docs/development.md');
+  const development = source('website/content/docs/development.mdx');
   for (const command of [
     'npm exec -- tsc -p demo/tsconfig.json',
     'npm exec -- tsc -p demo/tsconfig.worker.json',

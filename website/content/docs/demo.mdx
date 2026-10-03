@@ -1,0 +1,178 @@
+---
+title: Try your first run
+description: Three runs to try in the browser demo, the words the inspector uses, the example agents, and how to use the demo with your own server.
+---
+
+import issuesLight from '../../../docs/images/issues-light.webp';
+import issuesDark from '../../../docs/images/issues-dark.webp';
+
+The public demo is the hosted inspector on GitHub Pages, at [https://dogganidhal.github.io/agui-inspector/](https://dogganidhal.github.io/agui-inspector/). Its example agents are scripts that run inside your browser, so you need no account, no model and no server. You can also type the URL of [your own server](#your-own-server).
+
+## Your first run
+
+Open the demo. At start, the Agent selector shows Interactive scenarios, and its quick messages are under the message box. If the status line says the examples are unavailable, see [When the examples are unavailable](#when-the-examples-are-unavailable).
+
+<Steps>
+<Step>
+
+### Send Hello there
+
+Choose `Hello there`. The conversation shows "Hello from the reference agent." In Inspection, the newest exchange is open. It lists the run's frames from `RUN_STARTED` to `RUN_FINISHED`, each with its arrival time and a check mark if it passes. The two exchanges below it, marked `prepare`, are this example's [preparation requests](./presets.mdx#preparation-requests): a session `PUT` and a warm-up `POST`, sent before every message.
+
+</Step>
+<Step>
+
+### Break the stream
+
+Choose `broken`. The server sends a text delta for a message that never started, then a line that is not JSON, then continues. The conversation shows a "Not shown" note for the delta and says the frame is still in the frames list. In Inspection, the exchange has a `sequence` finding. The unparsed bytes stay in their position with a `json` mark, and the run still ends with `RUN_FINISHED`.
+
+<Screenshot light={issuesLight} dark={issuesDark} alt="A run with a broken frame: the unparsable bytes stay in the frames list at their position, the run shows a sequence error for a message that was never started, and the run still finishes." />
+
+Left: the conversation's "Not shown" note. Right: the `sequence` finding above the timeline and the `unparsed` frame in the frames list.
+
+</Step>
+<Step>
+
+### Stop a run that never finishes
+
+Choose `never finishes`, wait for its sentence, then press Stop. The run shows "Stopped by you". Frames not yet sent are dropped, and nothing arrives afterwards. No event said how the run ended, so Inspection reports "The stream ended without a valid RUN_FINISHED or RUN_ERROR event". After a Stop, this finding is expected. Without a Stop, it means your server's closing event never arrived as a valid, complete frame ([missing terminal events](./inspection.mdx#missing-terminal-events)).
+
+</Step>
+</Steps>
+
+To try this with your own agent, [embed the inspector in Starlette or FastAPI](./embedding.mdx) or [host the static page](./hosted.mdx). [Read frames and findings](./inspection.mdx) explains what you saw in more detail.
+
+## Words you will see
+
+- An exchange is one HTTP request and its response. Each run request, preparation request and raw submission is a separate exchange.
+- A frame is one block received from a Server-Sent Events (SSE) stream. The inspector keeps it raw, in arrival order, with the time since the request was sent. Not every frame is a valid AG-UI event: bytes that are not JSON or fail the schema stay in the list as frames.
+- A finding reports a problem with a frame, a run or its connection, for example `json`, `schema`, `sequence`, `transport` or `terminal`. It points at what it explains and never changes the captured data.
+- A terminal event is `RUN_FINISHED` or `RUN_ERROR`, the event that says how a run ended. Without a valid one, the run's outcome is `unknown`.
+- A preset holds what a server needs around a run: variables, preparation requests, forwarded properties and quick messages. It is part of the agent's configuration ([presets](./presets.mdx)).
+- A profile, or client profile, holds the seven client settings that every run sends, such as tools, context and forwarded properties. You change it in Settings. The page saves it in browser storage, and it can override parts of the preset ([client profile](./configuration.mdx#client-profile)).
+- A surface is a form or other interface that your agent describes in A2UI. The inspector draws it inside an activity card ([A2UI surfaces](./a2ui.mdx)).
+
+## The example agents
+
+Pick an agent in the Agent selector, beside the endpoint or in Settings. A strip above the inspector says the examples are scripted and run inside the page. It links to the [embedding guide](./embedding.mdx), which the page does not fetch.
+
+The page installs a service worker that answers a few fixed routes under the page's own address with normal HTTP responses. The page's `fetch`, recorder and frame reader handle them like a real server's responses. So the Frames, Raw request and State views, Stop, interrupts and tool replies all work the same way. No model, account or network call is involved. The worker answers nothing else. It reads no headers or cookies, forwards nothing and stores nothing. The page requests nothing from a third party. [How the demo works](./demo-internals.mdx) describes the worker, its pacing and the build.
+
+The interactive and A2UI agents answer at about the speed of a model. Text arrives word by word, and tool arguments arrive a few characters at a time. So the frames list shows several word-sized deltas where a run without pacing has one. Most runs take up to about 1.2 seconds, and the sections below name the longer ones. A run takes the same time on every visit.
+
+## Interactive scenarios
+
+Before each message, the page sends the preset's [preparation requests](./presets.mdx#preparation-requests).
+
+### Hello there
+
+A plain reply, "Hello from the reference agent.", in about 0.7 seconds. In Frames, the text arrives as word-sized deltas between the message's start and end.
+
+### interrupt
+
+The agent says it needs two answers. The run finishes with an `interrupt` outcome that holds two interrupts. Each gets a card where you resolve or cancel it. The next run starts when both have an answer. Inspect that run's request body to see the answers in the order the run reported them ([interrupts](./runs.mdx)).
+
+### tools
+
+Two client tool calls, `pick_color` and `pick_size`, that need results. Each gets a card with its arguments and a result editor. When both have results, the next run sends one tool message per call. In Frames, the arguments arrive a few characters at a time.
+
+### slow
+
+A reply of about fifty words, streamed over 6 to 10 seconds, that ends with its own `RUN_FINISHED`. Watch the frames arrive on the timeline, or press Stop before the end.
+
+### never finishes
+
+One sentence, then the response stays open until you press Stop. The run then gets a `terminal` finding, as in [your first run](#stop-a-run-that-never-finishes).
+
+### state
+
+A `STATE_SNAPSHOT` followed by a `STATE_DELTA`. Compare the two frames in the State view.
+
+### broken
+
+The broken stream from [your first run](#break-the-stream), which also says what to look at. Pacing keeps the broken frame as one frame.
+
+## A2UI showcase
+
+Each of this agent's seven quick messages starts a separate story. The stories are built in [`a2ui-showcase.ts`](https://github.com/dogganidhal/agui-inspector/blob/main/examples/reference-agent/a2ui-showcase.ts) and use only the bundled basic catalog (A2UI v0.9). A story keeps nothing between runs. The agent rebuilds each step from the name and resolved context of the action you clicked, so a run's Request body shows what the server received. A story that spans several runs replaces one activity in place, so the surface updates where it is. [A2UI surfaces](./a2ui.mdx) describes the renderer. To write your own story, see [writing a showcase story](./demo-internals.mdx#writing-a-showcase-story).
+
+### Find a table for 4
+
+Three restaurant cards. Book opens a booking form beside them. Confirm deletes both surfaces and shows a confirmation. Cancel removes only the form, and Book another starts again. Inspect the action's request body: its context has `restaurantId` from the card and `party` from the data model.
+
+It uses:
+
+- a List template of Cards with Rows, Dividers and text variants
+- a second surface and `deleteSurface`
+- number, date and time, chip picker and checkbox inputs
+- `checks` on fields and on Confirm, which stays disabled until they pass
+- `formatString`, `formatCurrency`, `formatDate` and `pluralize` to format text
+
+### Open a support ticket
+
+A form with email, description, severity, an urgency slider, a checkbox, a date and a help modal. Send stays disabled until email and description pass their `required`, `email`, `length` and `and` checks. The server refuses low severity with urgency 4 or 5. It answers with one data-only operation, so the form keeps your input. The server files any other ticket. The story shows a `Modal`, and the difference between browser checks and what only the server knows.
+
+### Deploy the release
+
+A board that updates during the run. Seven `ACTIVITY_DELTA` patches append `updateDataModel` operations, one every 250 to 600 ms, so the run takes 3 to 4 seconds. The run ends before the rollout finishes. Text you type in the release note during the run stays. Pause rollout sends the progress and the note, and the answer is one more patch. The story shows deltas on the A2UI path, a surface that is never rebuilt, and `Tabs` for summary and logs.
+
+### Compare three laptops
+
+The activity goes through `building`, a first attempt with a missing card, `retrying` with the validation error, then the valid surface and a closing line. Inspect the lifecycle the A2UI middleware writes on one activity: `status`, `attempt`, `maxAttempts` and `errors`. The middleware never draws a rejected surface. The showcase still sends the invalid attempt so you can inspect it.
+
+### Compare three laptops (never valid)
+
+Three invalid attempts with two `retrying` frames between them. Then `failed` with `error`, `attempts` and `maxAttempts`, and a line that says nothing was drawn. This is the failure state of the same lifecycle. With a surface update every 250 to 600 ms, the run takes 3 to 4 seconds.
+
+### Probe the sandbox
+
+One list asks for a picture, a video, a sound and an `openUrl`. It also has markup in a text and a component missing from the catalog. It is followed by a non-object entry, one with no version, a v0.8 entry, an unknown catalog and an update for a missing surface. Inspect what a client refuses, and check that the rest is still drawn. Every address is on the reserved `.invalid` host, so the page requests nothing.
+
+### Show the order form
+
+The original form. Edit the note and press Send note. This is a continuation: the surface changes in place.
+
+## Protocol examples
+
+These two agents have no pacing because they test uneven chunks and mixed delimiters, which must reach the page unchanged.
+
+### Run the baseline protocol example
+
+Choose this example on the Protocol baseline agent. The run sends 30 of the 31 event types, with mixed line delimiters and uneven chunks. Compare its frames with the [event reference](./event-views.mdx).
+
+### Run the failing example
+
+Choose this example on the Protocol run error agent. The run sends `RUN_STARTED`, then `RUN_ERROR`, the 31st type. The run's outcome is `error`, as that event says.
+
+## Your own server
+
+The page's `hosting-config.json` sets `allowVisitorTargets`. So you can type any HTTPS endpoint, or plain HTTP to `localhost` or `127.0.0.1`, with no allowlist and no approval prompt. [Host the static page](./hosted.mdx#visitor-chosen-targets) explains the policy: it is off by default, and an embedded page rejects it. The footer reads: `requests to this origin, HTTPS targets and supported local servers (use localhost; browser CORS and local-network rules apply) · no telemetry · headers never recorded`.
+
+The page is not a proxy. Your browser sends each request directly to your server, without cookies. The token you type stays in memory, and the page sends it only in the header you choose.
+
+- Type the endpoint in the connection bar and press Use endpoint (or Enter). Typing alone changes nothing. If your server needs a token, set it after that, because changing the endpoint clears the token. Open the Authentication control, keep the header name `Authorization` and type the complete header value in the Token field, for example `Bearer <your-token>`. The inspector sends it exactly as typed and adds no scheme. The page sends no cookies, so this header is the only credential it can present. [What goes in the Authentication control](./hosted.mdx#what-goes-in-the-authentication-control) lists the values for Bearer, Basic and API-key headers.
+- Your server must allow the page's origin, `https://dogganidhal.github.io`, with Cross-Origin Resource Sharing (CORS). If it does not, the inspector shows the failure and does not work around it. [Allow the page in your own server](./hosted.mdx#allow-the-page-in-your-own-server) has a FastAPI setup to copy and a `curl` check for the preflight.
+- For a local server, use `http://localhost:<port>`. `http://127.0.0.1:<port>` also works. The page refuses IPv6 (`http://[::1]:…`) because browsers disagree on how a content security policy names it. Numeric loopback addresses were checked only in Chromium and Safari ([browser check](./hosted.mdx#browser-check)).
+- Your browser may ask for your permission before a public page reaches a local address. The browser shows that prompt, and the inspector cannot answer it. Until you allow it, the browser blocks the request and the exchange shows as failed. See [the browser's permission](./hosted.mdx#the-browsers-permission-for-local-servers).
+- Plain HTTP to any other host is mixed content. The inspector refuses it before sending a request.
+
+<Callout type="warn">
+The inspector records frames and bodies as your server sent them. If your server repeats a credential you typed, the recording keeps that copy unchanged. The export dialog warns you before writing a file. Read [this before you share a file](./recordings.mdx#read-this-before-you-share-a-file).
+</Callout>
+
+If a request fails, start with [Troubleshooting](./troubleshooting.mdx).
+
+## When the examples are unavailable
+
+The page tries for at most 10 seconds to prepare the examples. This fails if:
+
+- the browser has no service workers
+- the page is not a secure context
+- the browser refuses the registration
+- the worker does not take control or answer in time
+
+The status line then names the reason, and the inspector opens with no example agents. You can still type your own server's URL or import a recording. The page sends no example request and fakes nothing in its place.
+
+To try again, reload the page. A reload clears the current session, so use Export session first to keep it. If the worker is replaced while you work, the status line warns that the examples may stop answering. The page does not reload or resend anything automatically.
+
+A worker from an earlier visit may still be in control. The page asks the browser for a newer one. If the old version cannot be replaced, the status line says so and the examples stay off.

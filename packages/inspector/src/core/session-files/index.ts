@@ -6,7 +6,7 @@
 // Import checks the whole file first, in memory, and only then builds a fresh store from it; a file
 // that fails any check changes nothing, and neither step makes a request.
 //
-// The format is pre-stable (docs/recordings.md). Nothing here redacts or rewrites received bytes:
+// The format is pre-stable (website/content/docs/recordings.mdx). Nothing here redacts or rewrites received bytes:
 // frame text goes to the file exactly as the store holds it.
 import { InterruptSchema, RunAgentInputSchema } from '@ag-ui/core/schemas';
 import {

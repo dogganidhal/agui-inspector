@@ -19,18 +19,20 @@ Built and merged on `main`:
   regression) are all merged.
 - The public demo, live at <https://dogganidhal.github.io/agui-inspector/> since 2026-10-02 and deployed from `main` by
   `pages.yml`. It is the hosted page with scripted examples answered by a service worker, and it also accepts a
-  visitor's own HTTPS or `localhost` server. See [public demo](docs/public-demo.md).
+  visitor's own HTTPS or `localhost` server. See [public demo](https://dogganidhal.github.io/agui-inspector/docs/demo/).
+- The docs site, <https://dogganidhal.github.io/agui-inspector/docs/>, built from the MDX pages in `website/` and
+  deployed with the demo by `pages.yml`.
 - The Python release workflow, `release-python.yml`, which keeps a `chore: version packages` pull request open. See
-  [distribution](docs/distribution.md#python-release).
+  [distribution](https://dogganidhal.github.io/agui-inspector/docs/releases/#python-release).
 
 Still to verify:
 
 - SC-009, the 5,000-frame responsiveness check, on the headed Mac mini M2. The Apple M4 Pro headless result is
   development evidence only, so SC-009 stays not passed until the maintainer runs the physical certification. See
-  [development](docs/development.md#5000-frame-benchmark).
+  [development](https://dogganidhal.github.io/agui-inspector/docs/development/#5000-frame-benchmark).
 - A manual smoke run of each distribution mode (hosted, Python and static assets) before any release.
 - Firefox for the numeric loopback addresses. Chromium and Safari are recorded in
-  [hosted](docs/hosted.md#browser-check).
+  [hosted](https://dogganidhal.github.io/agui-inspector/docs/hosted/#browser-check).
 
 Publication gates:
 
@@ -71,6 +73,14 @@ least 95% of filter changes and frame expansions finishing visibly within 200 ms
 The implementation plan fixes the benchmark profile. The M4 Pro headless result is informational;
 headed physical M2 certification remains with the maintainer. The complete client
 bundle is limited to 2 MB minified and 600 KB gzipped.
+
+### Docs site (2026-10-03)
+
+The guides moved from `docs/*.md` to a Fumadocs site in `website/` (Next.js static export, its own lockfile, not a
+workspace). The Pages workflow builds it next to the demo and serves it at
+<https://dogganidhal.github.io/agui-inspector/docs/>; the demo keeps the site root. The theme imports the inspector's
+`tokens.css`, so both share one look. Pull request CI builds the site in a job of its own. `docs/reference/product-brief.md`
+stays as the frozen brief. No package, tag or release is involved.
 
 ## 1.0.0 stable target
 
@@ -165,7 +175,7 @@ up to date on `main`; merging it tags the version, runs the strict gate and publ
 publishing, with no stored token. At that date nothing had run it: the maintainer still had to register the trusted
 publisher, the `pypi` environment and the repository setting that lets the version pull request open, and the manifests
 stay private (the Python classifier included) until the first release PR. The npm release (provenance, a workflow of its
-own) is not set up. See [distribution](docs/distribution.md).
+own) is not set up. See [distribution](https://dogganidhal.github.io/agui-inspector/docs/releases/).
 
 ### Public demo companion (2026-10-02)
 

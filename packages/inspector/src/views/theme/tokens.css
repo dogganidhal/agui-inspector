@@ -1,5 +1,5 @@
 /* Theme tokens (FR-041). Adopters override only the --agui-* properties; every other token below
-   derives from them, and views read the derived tokens. See docs/theming.md.
+   derives from them, and views read the derived tokens. See website/content/docs/theming.mdx.
    Nothing here loads a font or any other asset: fonts are system stacks (FR-037).
 
    Two scopes, on purpose. The public --agui-* properties sit on :root: their names are namespaced, an

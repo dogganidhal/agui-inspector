@@ -1,0 +1,150 @@
+---
+title: How the demo works
+description: How to build and preview the demo, its service worker and pacing, how to write a showcase story, and how it deploys with the docs.
+---
+
+The [public demo](./demo.mdx) at https://dogganidhal.github.io/agui-inspector/ runs its example agents in the
+visitor's browser. A service worker answers their requests, a pacing layer gives them a model's timing, and a separate
+build keeps the demo out of the packages. `.github/workflows/pages.yml` deploys it on every push to `main`.
+
+## Build and preview
+
+```sh
+npm ci --ignore-scripts
+node scripts/build-demo.mjs --outdir .build/public-demo --base-path /agui-inspector/
+node scripts/bundle-budget.mjs --dir .build/public-demo
+```
+
+`scripts/build-demo.mjs` reuses the normal app build, so `app.js` and `app.css` are the same bytes as in
+`packages/inspector/dist`. It adds the demo's page, `bootstrap.js`, `demo.css`, `service-worker.js`, the hosting file
+and the examples' configuration, `examples.json`, in a directory of their own under `.build`. It never writes to the
+package's `dist`. The output has no `config.json`: the bootstrap names `examples.json` only after the worker is ready.
+If the worker does not start, the page asks for `config.json`, gets a 404 and starts with no agents.
+
+A hosted page refuses an endpoint that is not an absolute URL, so the build puts `--origin` and `--base-path` in front
+of each endpoint and preparation path in `examples.json`. It changes nothing else in that file. It fails before
+writing any file when an option is wrong:
+
+| Option | Accepted value |
+| --- | --- |
+| `--origin` | One HTTPS origin, or `http` to `localhost` or `127.0.0.1`, with no path, credentials, query or fragment. Defaults to the Pages site. |
+| `--base-path` | `/` or `/name/`. Defaults to `/agui-inspector/`. |
+| `--outdir` | A directory of its own under `.build`. Defaults to `.build/public-demo`. |
+
+### Build for the origin you serve from
+
+The worker answers only requests to its own origin. If the build names a different origin from the one serving the
+page, the examples' requests go to that origin and never reach the worker. The default origin is the Pages site, so
+the command above builds the deployable artifact. The Pages workflow passes the site's own origin and base path
+instead, so a fork deploys under its own address. To preview locally, build for the origin you will use and serve the
+directory under the sub-path:
+
+```sh
+node scripts/build-demo.mjs --outdir .build/public-demo --origin http://127.0.0.1:4173
+mkdir -p .build/preview && rm -rf .build/preview/agui-inspector && cp -R .build/public-demo .build/preview/agui-inspector
+python3 -m http.server 4173 --bind 127.0.0.1 --directory .build/preview
+```
+
+Then open `http://127.0.0.1:4173/agui-inspector/`. Service workers need a secure context, and loopback is one. After
+an edit, run the build and the copy again, then reload the page. The server can keep running.
+[Make your first change](./development.mdx#make-your-first-change) combines this loop with the tests.
+
+## The service worker
+
+The worker, `service-worker.js` next to the page, answers six fixed routes under `/agui-inspector/__demo__/` with
+normal HTTP responses. The page's own `fetch`, recorder and frame reader handle them exactly as they handle a real
+server's. The answers come from `examples/reference-agent/scenarios.ts`. The Node reference agent uses the same
+module for its fixtures, so the browser and the Node tests always get the same events.
+
+The routes are in `demo/service-worker.ts`:
+
+| Request | Answer |
+| --- | --- |
+| A well-formed request to one of the six routes | The scenario's response, paced |
+| `GET` where a `POST` is expected | 405 |
+| A body that is not valid JSON | 400 |
+| No `threadId` or `runId` | 422 |
+| Any other path under `__demo__/` | 404 with a JSON body |
+| Anything else: assets, navigation, other paths on the site, other origins, your own server | Not intercepted |
+
+The worker reads a request's method, URL and body. It never reads headers or cookies, forwards anything, or writes to
+a cache, a database or storage. Its only timers are the pauses in a paced answer.
+
+It takes control of the page without a reload. The page registers it, waits for it to report its name and
+version, and only then shows the examples. [Try your first run](./demo.mdx) describes what a visitor sees when this
+fails.
+
+## Pacing
+
+The worker sends every interactive and A2UI answer through `examples/reference-agent/pacing.ts`. `RUN_STARTED` goes
+out immediately. Text and reasoning are cut into words, and tool-call arguments into a few characters at a time. Each
+chunk waits according to the profile. `NATURAL_PACE` waits:
+
+| Before | Pause |
+| --- | --- |
+| The first event after `RUN_STARTED` | 300 to 900 ms |
+| Each delta of text, reasoning or tool-call arguments | 20 to 60 ms |
+| A new message, step or tool call | 150 to 400 ms |
+| A tool result, after its call | 400 to 900 ms |
+| A state or surface update | 250 to 600 ms |
+
+`SLOW_PACE`, used only by the `slow` scenario, waits 600 to 1000 ms before the first event after `RUN_STARTED` and 110
+to 170 ms between deltas. [Try your first run](./demo.mdx) lists how long each scenario takes.
+
+- Each pause comes from a hash of the chunk's position, with no clock and no `Math.random`, so a run takes the same
+  time on every visit.
+- Pacing changes only chunking and timing. Event types keep their order, and a message's deltas join back into the
+  original text. A delta with no start event, as in `broken`, stays one frame.
+- The protocol examples are not paced. They show exact bytes (uneven chunks, mixed delimiters), so they reach the
+  page unchanged and without pauses.
+- Stop cancels the response whether it is pausing, streaming or held open. It ends the current pause, drops every
+  frame not yet sent and releases the response. The worker adds no closing frame, and nothing arrives after Stop.
+
+Pacing is part of the adapter, so any scenario that returns a `ScenarioResponse` is paced automatically. The Node
+reference agent sends at full speed, which keeps tests fast and their frame counts exact. A test that wants the demo's
+timing passes a profile: `createInteractiveServer({ pace: NATURAL_PACE })`, or `SLOW_PACE` for `slow`.
+
+## Writing a showcase story
+
+The A2UI showcase's stories are in [`a2ui-showcase.ts`](https://github.com/dogganidhal/agui-inspector/blob/main/examples/reference-agent/a2ui-showcase.ts)
+and use only the bundled basic catalog (A2UI v0.9). Four renderer details matter when you write one:
+
+- A check is `{ "condition": ..., "message": ... }`, and a button with a failing check is disabled.
+- A text field holds text, so check it with `regex` or `length`. `numeric` takes a number and reports an error on a
+  string.
+- A modal's trigger button needs an action. A `functionCall` action opens the modal without sending anything.
+- A child id that matches no component shows as `[Loading id...]` with no error, because a later message may still
+  add it.
+
+## The packages hold none of this
+
+The npm package, the Python wheel and the sdist ship `packages/inspector/dist` and nothing from `demo/`. These checks
+fail if a worker, the bootstrap, the examples' file or a worker registration appears in any of them:
+
+- `tests/demo/build.test.ts` builds the normal app before and after a demo build and compares every byte. Then it
+  packs a normal package with `npm pack --ignore-scripts` into its own directory and checks the contents.
+- `packages/python/tests/test_distribution.py` does the same on the real npm archive, wheel and sdist.
+
+The demo's full asset set and the normal set must each stay under 2,000,000 minified and 600,000 gzip bytes,
+counting every file.
+
+## Deployment
+
+`.github/workflows/pages.yml` runs only for `main`, on a push or by hand. When run by hand, both jobs refuse any other
+branch. Pull requests never run it, and `ci.yml` has no Pages permission.
+
+1. The build job has `contents: read`, and `pages: read` to get the site's origin and base path. It installs with
+   `npm ci --ignore-scripts`, builds the demo for that origin and base path, checks the budget and runs the isolation
+   tests. Then it builds the [docs site](./development.mdx#the-docs-site) with the same base path, copies both outputs
+   into `.build/pages` and uploads that directory.
+2. The deploy job depends on the build job and has only `pages: write` and `id-token: write`. It runs in the
+   `github-pages` environment and reports the page URL. Deployments run one at a time, and a running one is never
+   cancelled.
+
+The copy refuses any file that both outputs contain, so the docs can never overwrite the demo. The demo stays at
+the site root (`/agui-inspector/`), the docs are at `/agui-inspector/docs/`, and the site's 404 page comes from the
+docs build. Every action is pinned to a commit SHA, and a pin changes only after someone reads the new release.
+
+The workflow does not turn Pages on, and no step in it can. In the repository settings, the maintainer sets the
+GitHub Actions source and limits the `github-pages` environment to `main`. Without that, the configure step fails and
+nothing deploys. The workflow publishes no package and creates no tag or release.

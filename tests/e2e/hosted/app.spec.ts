@@ -4,7 +4,7 @@
 // browser before any application request, a hosted run is a direct browser request with no cookies,
 // nothing the page loads can widen the allowlist, failures are shown, and the shell is usable by
 // keyboard. It is scoped acceptance: each lane's own suite covers its features, and the whole
-// quickstart runs again on integrated main (docs/hosted.md).
+// quickstart runs again on integrated main.
 import { readFileSync } from 'node:fs';
 import type { Page } from '@playwright/test';
 import { AGENT_REPLY, SYNTHETIC_TOKEN, expect, expectAllowlisted, open, send, test } from './support';

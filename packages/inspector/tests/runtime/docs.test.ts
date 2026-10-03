@@ -5,13 +5,13 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 
-const doc = readFileSync(path.join(process.cwd(), 'docs', 'conversation.md'), 'utf8');
+const doc = readFileSync(path.join(process.cwd(), 'website', 'content', 'docs', 'runs.mdx'), 'utf8');
 
-test('docs/conversation.md covers each control and barrier', () => {
+test('the runs page covers each control and barrier', () => {
   for (const heading of ['## Where requests go', '## The token', '## Sending a run', '## Replies', '### Interrupts', '### Client tool calls', '### Surface actions', '## Raw submissions']) {
     assert.ok(doc.includes(heading), heading);
   }
-  for (const phrase of ['Stop', 'New thread', 'Quick messages', 'no terminal event is made up', 'does not follow redirects|Never followed', 'G-07']) {
+  for (const phrase of ['Stop', 'New thread', 'Quick messages', 'no terminal event is made up', 'does not follow redirects|Never followed', 'in memory']) {
     assert.match(doc, new RegExp(phrase), phrase);
   }
 });

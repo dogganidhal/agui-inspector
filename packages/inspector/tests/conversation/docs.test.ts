@@ -6,10 +6,10 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { EventType } from '@ag-ui/core';
 
-const doc = readFileSync(path.join(process.cwd(), 'docs', 'event-views.md'), 'utf8');
+const doc = readFileSync(path.join(process.cwd(), 'website', 'content', 'docs', 'event-views.mdx'), 'utf8');
 
 for (const type of Object.values(EventType)) {
-  test(`docs/event-views.md maps ${type}`, () => {
+  test(`the event views page maps ${type}`, () => {
     assert.ok(doc.includes(`\`${type}\``), `${type} is missing from the mapping table`);
   });
 }

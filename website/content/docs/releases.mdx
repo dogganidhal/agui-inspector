@@ -1,0 +1,163 @@
+---
+title: Release process
+description: For maintainers. What must be true before a release, how the Python package is released, and what its build provenance covers.
+---
+
+This page is for maintainers. To learn what you can rely on today, read
+[Project status and privacy](./status.mdx) instead.
+
+The package name is `agui-inspector` on both npm and PyPI. On 2026-10-02 the name was still unregistered on both.
+No command in the repository publishes, tags or releases by itself. A release happens when the maintainer merges the
+version pull request and approves the `pypi` deployment. The roadmap's
+[current status](https://github.com/dogganidhal/agui-inspector/blob/main/ROADMAP.md#current-status) is the one summary of where the release stands. Until a
+release exists, run the package from a source checkout, as
+[Embed in Starlette or FastAPI](./embedding.mdx#working-from-a-source-checkout) describes.
+
+## Current state
+
+- Nothing is published yet. `release-python.yml`, the only workflow that publishes, runs on pushes to `main`, but no
+  tag has run it. The npm release is not set up.
+- The npm manifests have `"license": "MIT"` and `"private": true`. The npm `files` list and the Python
+  `license-files` include `LICENSE` and `THIRD_PARTY_NOTICES.txt` (see [Dependencies](./dependencies.mdx)), so the
+  npm tarball, the wheel and the source distribution (sdist) all contain them.
+- The Python package has `License-Expression: MIT` and still has the `Private :: Do Not Upload` classifier. PyPI
+  rejects an upload with that classifier, so it stays until the first release.
+
+## Gates
+
+| Gate | Status | What it decides |
+| --- | --- | --- |
+| License | Closed: MIT. | `LICENSE` and the third-party notices ship in every distribution. |
+| Package names | Closed: `agui-inspector` on npm and PyPI. | The name in both manifests. The first PyPI publish registers it. |
+| Upstream placement | Open. | Whether upstream accepts the inspector under `apps/inspector`, and when. `@ag-ui/inspector` applies only if upstream adopts the project. Nothing registers or reserves it. |
+
+While a gate is open, stop and ask instead of picking a default.
+
+## Python release
+
+Changesets choose the version, and the workflow does the rest. The repository stores no PyPI token.
+
+1. A pull request that changes what the Python package does or ships, including a user-visible inspector change,
+   adds a [changeset](./development.mdx#changesets). Before 1.0.0, a change to a config, session, profile or plugin
+   format puts its migration in the changeset line. That is how the changelog documents it.
+2. On every push to `main`, `release-python.yml` runs `changesets/action`. With pending changesets, it opens or
+   updates a `chore: version packages` pull request, which runs `scripts/changeset-version.mjs`. That script bumps
+   `packages/python/package.json`, a private file that only holds the version for Changesets. It writes
+   `packages/python/CHANGELOG.md`, copies the version into `pyproject.toml` and updates `uv.lock`. It accepts only
+   plain `x.y.z` versions, so do not use `changeset pre`.
+3. Merging the version pull request is the release. The next run tags the commit `agui-inspector-python@<version>`
+   and runs two more jobs.
+
+The build job has `contents: read`. It stops unless the commit has the tag for the version in
+`packages/python/pyproject.toml` and the `Private ::` classifier is gone. It installs with `npm ci --ignore-scripts`
+and runs the strict gate `npm run check:ci -- --strict` on Python 3.14. Pull request CI already tested 3.10 and 3.14.
+Then it builds the wheel and sdist from the checked build with `npm run package:python -- --no-build`, and uploads
+them as an artifact.
+
+The publish job has `id-token: write` and uses the `pypi` environment. It runs no repository code: it downloads the
+artifact and uploads it with `pypa/gh-action-pypi-publish`. That action also publishes PEP 740 attestations naming the
+workflow and commit.
+
+Only the version job can write to the repository (`contents: write`, `pull-requests: write`). It pushes tags and the
+version branch, and creates no GitHub release. Every action is pinned to a full commit SHA.
+`test_the_release_workflow_versions_with_changesets_and_publishes_only_through_trusted_publishing` in
+`test_distribution.py` fails if the trigger widens, a token or an extra write permission appears, or a pin
+loosens. `tests/release/changeset.test.ts` fails if the version copies differ.
+
+### One-time setup
+
+Only the maintainer can do these. Nothing in the repository changes a setting.
+
+1. On PyPI, add a pending publisher at [pypi.org/manage/account/publishing](https://pypi.org/manage/account/publishing/):
+   project `agui-inspector`, owner `dogganidhal`, repository `agui-inspector`, workflow `release-python.yml`,
+   environment `pypi`. The first successful publish creates the project and registers the name.
+2. In the repository settings, create the `pypi` environment, add yourself as a required reviewer so every publish
+   waits for approval, and limit deployment to `main`.
+3. Under Settings, Actions, General, allow GitHub Actions to create and approve pull requests. Without it, the
+   workflow cannot open the version pull request.
+4. Before the workflow reaches `main`, tag a commit on `main` with the current version and push the tag:
+
+   ```sh
+   git tag agui-inspector-python@0.0.0 <commit> && git push origin agui-inspector-python@0.0.0
+   ```
+
+   Changesets tags any package whose current version has no tag. Without this step, the first run tags 0.0.0 and the
+   build job stops at the classifier check. If that happens, delete that tag.
+
+### Cutting a release
+
+1. Check the gates CI cannot cover: the headed benchmark on the physical runner (see
+   [Integrated-MVP gate](./development.mdx#integrated-mvp-gate)) and a manual smoke test of each distribution mode.
+2. For the first release, merge a pull request that removes the `Private :: Do Not Upload` classifier. It also
+   updates the tests that check for it (`test_distribution.py`) and the docs that call the package private. The build
+   job refuses to publish until that is on `main`. A `minor` changeset moves the package from 0.0.0 to 0.1.0.
+3. Merge the `chore: version packages` pull request. GitHub Actions opened it, so it does not start the pull request
+   workflows, and its required checks stay pending. Close and reopen it once to run `ci.yml`.
+4. Approve the `pypi` deployment when the publish job waits. When it finishes, check the files and their attestations
+   on [pypi.org/project/agui-inspector](https://pypi.org/project/agui-inspector/).
+
+You cannot replace a published version. To fix a bad release, yank it (mark it as withdrawn) on PyPI and publish the
+next version.
+
+## npm release (not set up)
+
+CI must build the npm package from a version tag and publish it with npm provenance. It must use the same build and
+static assets as the wheel, with the wheel's `static.sha256` matching the npm files, as the local tests check now. None
+of that exists. `release-python.yml` uses npm only to build the assets, and Changesets ignores `agui-inspector`
+(`ignore` in `.changeset/config.json`).
+
+To add it, remove that entry, put both packages in a `fixed` group so their versions change together, and add a
+publish job with npm provenance. The root and `packages/inspector` manifests stay `"private": true` until an explicit
+decision to publish. `@ag-ui/inspector` still waits for the upstream placement gate.
+
+## Build provenance
+
+Published distributions must have verifiable build provenance. Nothing is published yet, so provenance depends on
+the checks below and the release safeguards above. The checks run on a developer machine or in pull request CI. The
+safeguards are the tag check, the strict gate, the minimum permissions and trusted publishing with attestations.
+
+`npm run package:python` (`scripts/package-python.mjs`) does this, in order:
+
+1. Checks that `packages/python/LICENSE` and `packages/python/THIRD_PARTY_NOTICES.txt` are byte-identical to the
+   root files, and stops if not. `uv_build` cannot read files outside the project, so the package has committed
+   copies.
+2. Builds the single set of static assets into `packages/inspector/dist`, the directory that `staticAssetsPath`
+   points to. `--no-build` reuses an existing build.
+3. Copies it into `packages/python/src/agui_inspector/static`.
+4. Writes `packages/python/src/agui_inspector/static.sha256`, one `sha256  path` line per file. It fails if the copy's
+   checksums differ from the npm directory's. `--stage-only` stops here.
+5. Runs `uv build --project packages/python`, which writes the wheel and sdist to `packages/python/dist`
+   (`--out-dir` changes this).
+
+Git ignores the staged copy and the checksum file, so nothing generated is committed. Then
+`packages/python/tests/test_distribution.py` opens both artifacts and checks that:
+
+- the files under `agui_inspector/static/` in the wheel and the sdist match `packages/inspector/dist` by name and
+  SHA-256, and match the packaged `static.sha256`.
+- the metadata has `Requires-Python: >=3.10`, a single optional `embedded` extra with Starlette, no required
+  dependency, `License-Expression: MIT`, the `LICENSE` and `THIRD_PARTY_NOTICES.txt` files, no entry point, and the
+  `Private :: Do Not Upload` classifier.
+- the wheel, the sdist and the npm tarball (`npm pack`) each contain `LICENSE` and `THIRD_PARTY_NOTICES.txt`,
+  identical to the root files, and the notices name every runtime package in `package-lock.json`.
+- both npm manifests are private and MIT, and `dompurify` is overridden to 3.4.16 and resolves to exactly that.
+- the pull request workflow runs the Python tests on 3.10 and 3.14 and has no publishing step, and the release
+  workflow keeps its safeguards.
+- an installed wheel serves every asset byte for byte with Node removed from `PATH` and socket connections forced to
+  fail, so nothing is built or downloaded at startup.
+- the package source imports no networking or process module.
+
+A provenance statement would cover these inputs:
+
+| Input | Where it is fixed |
+| --- | --- |
+| npm dependency tree, including esbuild | `package-lock.json`, installed with `npm ci --ignore-scripts` |
+| Python dependency tree | `packages/python/uv.lock`, used with `--locked` |
+| `dompurify` version | Root `package.json` `overrides`, resolved to 3.4.16 in `package-lock.json` |
+| License and notices | `LICENSE` and `THIRD_PARTY_NOTICES.txt`, copied into both packages and compared by tests |
+| Python build backend | `uv_build==0.12.22` in `packages/python/pyproject.toml` |
+| `uv` version used by CI | Pinned in `.github/workflows/ci.yml` |
+| Static asset content | `static.sha256`, compared with the npm directory |
+
+Still needed: publish the npm package with provenance from its own CI build, pass the headed benchmark on the physical
+runner, and decide explicitly to publish. Only that decision removes the npm `"private": true` flag and the Python
+`Private :: Do Not Upload` classifier. Until then, the classifier stops an accidental PyPI upload.

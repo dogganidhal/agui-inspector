@@ -1,0 +1,287 @@
+---
+title: Host the static page
+description: Serve the inspector as a static site that sends requests directly to the agent a developer names.
+---
+
+A hosted inspector is a static site. A developer opens it in a browser, and the page sends requests directly to the agent they name. To serve the same files from a Starlette or FastAPI application, see [Embed in Starlette or FastAPI](./embedding.mdx).
+
+## Quick start
+
+These steps build the page, allow one agent, and send a first run to the repository's reference agent, a model-free test server.
+
+<Steps>
+<Step>
+
+From a checkout installed with `npm ci --ignore-scripts` (see [development](./development.mdx)), build the page into `packages/inspector/dist`.
+
+```sh
+npm run build
+```
+
+</Step>
+<Step>
+
+Replace `packages/inspector/dist/hosting-config.json` with a hosted policy that allows your agent's origin. This one allows the reference agent:
+
+```json title="hosting-config.json"
+{
+  "mode": "hosted",
+  "allowedOrigins": ["http://127.0.0.1:8787"]
+}
+```
+
+The next `npm run build` empties `dist`, so keep your copy of this file elsewhere.
+
+</Step>
+<Step>
+
+Serve the directory with any static file server, for example:
+
+```sh
+python3 -m http.server 8080 --bind 127.0.0.1 --directory packages/inspector/dist
+```
+
+</Step>
+<Step>
+
+In a second terminal, start the reference agent and allow the page's origin. It listens on `127.0.0.1:8787` and prints its URL.
+
+```sh
+node examples/reference-agent/server.ts --allow-origin http://127.0.0.1:8080
+```
+
+</Step>
+<Step>
+
+Open `http://127.0.0.1:8080/`. Type `http://127.0.0.1:8787/agent` in the Endpoint URL field and choose Use endpoint. Then type `Hello` in the message box and send it. The agent replies "Hello from the reference agent." The Inspection tab shows the request as one exchange with its frames.
+
+</Step>
+</Steps>
+
+For your own agent, put its origin in `allowedOrigins` and make sure its CORS (Cross-Origin Resource Sharing) headers allow the page's origin ([direct browser requests](#direct-browser-requests)).
+
+## What you deploy
+
+`npm run build` writes `packages/inspector/dist`, the directory `staticAssetsPath` in the npm package points at. The package is not published yet (see [releases](./releases.mdx)). Put it on any static host:
+
+| File | What it is |
+| --- | --- |
+| `index.html` | The page. Its `<meta>` content security policy and its one script tag are fixed. |
+| `app.js`, `app.css` | The application and its styles. The A2UI renderer is inside `app.js`. |
+| `hosting-config.json` | The deployment's own policy: mode and allowed origins. Edit this one. |
+| `config.json` | Optional. The agents to list, in the [configuration](./configuration.mdx) format. The build does not include one. |
+
+The page loads nothing else: no fonts, no analytics, no third-party scripts, no server-side code. It never sends a captured session anywhere. Exports are files the user saves.
+
+## hosting-config.json
+
+The quick start file is the smallest hosted policy: a mode and the origins the page can call.
+
+| Field | Meaning |
+| --- | --- |
+| `version` | Optional. Only `0` is accepted. |
+| `mode` | Required. `hosted` or `embedded`. |
+| `allowedOrigins` | Hosted only. Each entry is one absolute `http` or `https` origin: no path, no credentials, no wildcard. |
+| `config` | Optional. Where the agent configuration comes from, instead of `config.json` next to the page. A relative value is also read next to the page: under `/tools/inspector/`, `agents.json` means `/tools/inspector/agents.json`. Start it with `/` to read from the origin root. A URL must be on the page's origin or an allowed one. When `config` is set, a missing file is an error. |
+| `allowVisitorTargets` | Optional boolean, `false` when absent. Hosted only. The page refuses an embedded file that mentions it, even as `false`, and any value other than `true` or `false`. See [Visitor-chosen targets](#visitor-chosen-targets). |
+
+To list agents, put a `config.json` next to the page or name the file with `config`. This policy allows two origins and reads its agents from one of them:
+
+```json title="hosting-config.json"
+{
+  "version": 0,
+  "mode": "hosted",
+  "allowedOrigins": ["https://agent.example", "http://127.0.0.1:8787"],
+  "config": "https://agent.example/inspector.json"
+}
+```
+
+The file in the build says `embedded` with no allowed origins, so a page deployed unchanged reaches only its own origin. A missing file gives the same result. A file that exists but is wrong (bad JSON, an unknown field, a wildcard) stops the page from starting and shows the reason. The page never guesses a wider policy. Unknown fields are errors, so a misspelled `allowedOrigin` or `allowVisitorTarget` cannot silently mean "no restriction".
+
+## What happens at startup
+
+1. The page reads `hosting-config.json` from its own directory, on its own origin. This is the only request made under the static policy in `index.html`. The request uses the page's own credentials, follows no redirect and is never cached.
+2. From the file's origin list, the page builds the guarded transport's policy and a second content security policy, which it adds to the document.
+3. After that, the page creates the runtime and reads the configuration and the saved profile, all through the guarded transport.
+
+For the two-origin file above, the added policy is:
+
+```text
+default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self';
+connect-src 'self' https://agent.example http://127.0.0.1:8787; object-src 'none'; base-uri 'none';
+form-action 'none'
+```
+
+Scripts come only from the page's origin. `eval` and inline scripts are blocked. `connect-src` is the page plus the allowed origins. The policy in `index.html` stays active next to it, and a second policy can only narrow the first.
+
+Nothing the page reads later can change either policy. The page checks a configuration file, a capabilities URL, a typed endpoint, an agent's `url` and a redirect against the same list. It refuses a destination outside the list before any request, with a message that names the origin. To allow another origin, edit `hosting-config.json` and reload.
+
+### Sending the policy as a header
+
+The `<meta>` policy applies from the moment the script runs. If your host can set response headers, also send it as a `Content-Security-Policy` header, so the browser enforces it from the first byte. `contentSecurityPolicy(policy)` in [`packages/inspector/src/app/security.ts`](https://github.com/dogganidhal/agui-inspector/blob/main/packages/inspector/src/app/security.ts) returns the exact string for an origin list.
+
+### The blocked eval report in the console
+
+The console shows one blocked-`eval` report at startup. A bundled validation library (zod) calls `new Function('')` inside a `try` to check whether it can compile validators. The browser reports the refusal, and the library uses its interpreted path. Nothing is evaluated, and no other report appears in normal use.
+
+## Visitor-chosen targets
+
+A deployment such as a public demo cannot list the endpoints its visitors will try. With `allowVisitorTargets: true`, the visitor can type any endpoint inside one fixed boundary, with no deployer allowlist and no approval prompt from the inspector:
+
+```json title="hosting-config.json"
+{
+  "version": 0,
+  "mode": "hosted",
+  "allowedOrigins": [],
+  "allowVisitorTargets": true
+}
+```
+
+The boundary is the same everywhere it is enforced:
+
+- any `https` origin, on any port
+- plain `http` to exactly `localhost` or `127.0.0.1`, on any port
+- the page's own origin, as always
+
+The inspector refuses everything else before it makes a request:
+
+- `http` to any other host, and other schemes
+- `user:password@` in a URL
+- hostnames that only contain or end with `localhost` or `127.0.0.1` (`localhost.example`, `foo.localhost`)
+- other loopback addresses such as `127.0.0.2`
+- IPv6 literals such as `http://[::1]:8787`
+
+Numeric spellings of the IPv4 address (`127.1`, `2130706433`) are accepted exactly like `127.0.0.1`, because the guard reads the URL the way the browser parses it. The [request rules](#direct-browser-requests) still apply: no redirects, no cookies, and the token in one chosen header.
+
+The option does not change where the page reads its own configuration: the page's origin or one named in `allowedOrigins`, never an address a visitor could type. Targets declared in the configuration have the same boundary as the run. The page reads a capabilities URL when its agent is selected: the first agent at start, then the one the visitor picks next to the endpoint field. It sends a preparation request when the visitor sends a message. If you list agents, list only targets you want the page to contact. An A2UI surface still loads no remote image, video, audio or catalog and opens no link.
+
+With the option on, one directive of the added policy changes. `img-src` and `default-src` stay the same:
+
+```text
+connect-src 'self' https: http://localhost:* http://127.0.0.1:*
+```
+
+The guard and this directive are built from the same host list in [`packages/inspector/src/core/runtime/transport.ts`](https://github.com/dogganidhal/agui-inspector/blob/main/packages/inspector/src/core/runtime/transport.ts), so the guard and the browser accept the same destinations. The directive has no bare `http:`, no wildcard host and no IPv6 entry.
+
+Entries in `allowedOrigins` must already be inside the boundary (an `https` origin, or `http` to one of the two hosts), because a fixed origin cannot widen it. A file that lists anything else stops the page at startup and names the entry. The transport also refuses every request for a policy object built that way. Without the option, `allowedOrigins` can hold any `http` or `https` origin.
+
+With the option on, the footer reads `2 exchanges · 14 frames · requests to this origin, HTTPS targets and supported local servers (use localhost; browser CORS and local-network rules apply) · no telemetry · headers never recorded`. It names the kind of target, never an address, a query or a token.
+
+Embedded pages reject the option. Nothing the page reads later can turn it on: not a configuration, an agent, a profile or a typed endpoint. In `config.json` it is an unknown field and an error. Only the deployment's `hosting-config.json` sets it.
+
+### Local servers: use localhost
+
+For a server on the visitor's own machine, type `http://localhost:<port>`. Every browser matches this form exactly against the policy. `http://127.0.0.1:<port>` is also accepted, and Chromium and Safari match it exactly ([browser check](#browser-check)). IPv6 loopback is not supported. Browsers disagree on how a content security policy source names `[::1]`, so the inspector refuses it with a message that refers to this section.
+
+The browser still decides whether the request goes out. The local server must allow the page's origin through CORS. A browser may also show its own permission prompt before a public page reaches a local address. The inspector adds no prompt and does not bypass the browser's.
+
+### Browser check
+
+The Chromium rows are automated in [`tests/e2e/visitor-policy/policy.spec.ts`](https://github.com/dogganidhal/agui-inspector/blob/main/tests/e2e/visitor-policy/policy.spec.ts), which compares the browser's decision with the guard's for each destination. The Safari rows were recorded by hand on 2026-10-02. A probe page on a loopback port, under the `connect-src` above, ran `fetch` against a loopback server that answers CORS. It noted whether the request arrived and whether the browser reported a `connect-src` violation.
+
+| Destination | Chromium 153.0.8010.12 (Playwright 1.63.0) | Safari 27.0 (macOS 26.7.1) | Firefox |
+| --- | --- | --- | --- |
+| `http://127.0.0.1:<port>` | reached | reached | not run |
+| `http://localhost:<port>` | reached | reached | not run |
+| `http://127.1:<port>`, `http://2130706433:<port>` | reached as `127.0.0.1` | reached as `127.0.0.1` | not run |
+| `http://127.0.0.2:<port>` | blocked by connect-src | blocked by connect-src | not run |
+| `http://foo.localhost:<port>` | blocked by connect-src | blocked by connect-src | not run |
+| `http://[::1]:<port>` | blocked by connect-src | blocked by connect-src | not run |
+| non-loopback `http` host | blocked by connect-src | not tried | not run |
+
+Firefox has not been checked. To fill its column, serve a page with the policy above and run the same seven fetches against a loopback server that allows CORS. Note which ones the browser blocks. Until a row says otherwise, treat any form other than `localhost` and `127.0.0.1` as unsupported.
+
+## Direct browser requests
+
+A hosted run is a request from the user's browser to the agent, with no proxy and no bypass. The browser's rules apply:
+
+- CORS. The agent must answer with `Access-Control-Allow-Origin` set to the page's origin, `Access-Control-Allow-Methods: POST, OPTIONS`, and `Access-Control-Allow-Headers` naming `Content-Type`, `Accept` and the token's header. A reply without these is blocked.
+- Local network access. When a page on a public address calls a loopback or private address, the browser checks this separately from CORS. Depending on the browser, the visitor sees a permission prompt, or the browser sends a preflight with `Access-Control-Request-Private-Network: true` and the target must answer `Access-Control-Allow-Private-Network: true`. See [the browser's permission](#the-browsers-permission-for-local-servers).
+- Secure context. An `https` page cannot call a plain `http` target, except loopback addresses.
+
+When the browser blocks a request, the page only learns that the fetch failed. The inspector shows the target's origin and these three likely causes. It keeps the request as an exchange marked `failed`, with a transport finding, and sends nothing else.
+
+Requests carry no cookies, not even to the page's own origin, because a hosted page has no host authentication to reuse. The inspector never follows redirects. It sends the token the user types in one header the user chooses, and clears it on reload or when the target changes. Received frames are kept exactly as they arrived, so a server that repeats the token puts it in the session (see [recordings](./recordings.mdx#read-this-before-you-share-a-file)).
+
+The inspection pane's footer states the facts for the current mode, for example `7 exchanges · 54 frames · requests only to this origin and https://agent.example · no telemetry · headers never recorded`.
+
+## Allow the page in your own server
+
+Read this if you run a server and reach it from the public demo or from your own hosted copy of the page. An embedded page shares your server's origin and needs none of it.
+
+A FastAPI server needs one middleware. This setup allows only the public page, and only the requests a run sends:
+
+```python title="app.py"
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://dogganidhal.github.io"],
+    allow_methods=["POST"],
+    allow_headers=["Content-Type", "Accept", "Authorization"],
+    allow_private_network=True,
+)
+```
+
+- `allow_origins` holds one origin: scheme, host and port, with no path and no `*`. For your own hosted copy of the page, use that page's origin.
+- `allow_methods` is `POST`, the method of a run. Add the method of each preparation request that the agent's preset declares. Add `GET` if the configuration names a capabilities URL on this server.
+- `allow_headers` names what the page sends. Every run sends `Content-Type` and `Accept`. `Authorization` is the default header for the token. The `*` wildcard does not cover it, so list it. If your token uses another header, list that header instead.
+- Leave credentials off. The page sends no cookies, so `allow_credentials` has nothing to allow. Never combine it with a wildcard origin.
+- `allow_private_network=True` answers the preflight that some browsers send when a public page calls a local address. It applies only to the origin above. Starlette 1.7.0, the version this repository pins, accepts it. Leave it out for a server that is not on a local address.
+
+Check the preflight before you open the page. With `http://localhost:8000/agent` as the endpoint:
+
+```sh
+curl -si -X OPTIONS http://localhost:8000/agent \
+  -H 'Origin: https://dogganidhal.github.io' \
+  -H 'Access-Control-Request-Method: POST' \
+  -H 'Access-Control-Request-Headers: content-type,accept,authorization'
+```
+
+The answer is a 200 with these headers:
+
+```text
+access-control-allow-origin: https://dogganidhal.github.io
+access-control-allow-methods: POST
+access-control-allow-headers: Accept, Accept-Language, Authorization, Content-Language, Content-Type
+```
+
+The same request with another `Origin` gets a 400 `Disallowed CORS origin` and no `access-control-allow-origin` header, so the browser refuses it. The run itself, a `POST` with an `Origin` header, comes back with `access-control-allow-origin: https://dogganidhal.github.io` next to the event stream.
+
+### The browser's permission for local servers
+
+A public page that calls `localhost` reaches into the visitor's own machine. Browsers check this separately from CORS. Chrome 142 and later asks the visitor to allow local network access the first time the page tries. Other browsers and versions may send the private network preflight that `allow_private_network=True` answers. Until the visitor allows the request, the browser stops it before it reaches your server, and the inspector shows a failed exchange with the likely causes.
+
+The inspector cannot answer that prompt for the visitor. Allow it in the browser's permission settings for the page, then send again. Do not turn the check off with launch flags or extensions: that removes the protection for every site.
+
+### What goes in the Authentication control
+
+Press Use endpoint first, because changing the endpoint clears the token. Then open the Authentication control. The Token field takes the complete header value, and the inspector sends it exactly as you type it:
+
+| Your server expects | Header name | Token field |
+| --- | --- | --- |
+| `Authorization: Bearer <token>` | `Authorization` | `Bearer <token>` |
+| `Authorization: Basic <base64 of user:password>` | `Authorization` | `Basic <base64 of user:password>` |
+| `X-Api-Key: <key>` | `X-Api-Key` | `<key>` |
+
+A header other than `Authorization` must also be in `allow_headers`. The token stays in memory, goes only to the target and is cleared on reload. See [the token](./runs.mdx#the-token).
+
+### A server to try it against
+
+The reference agent has no model. It is a local server that allows exactly one page origin and streams one scripted run. From a checkout, after `npm ci --ignore-scripts`:
+
+```sh
+node examples/reference-agent/server.ts --port 8787 --allow-origin https://dogganidhal.github.io
+```
+
+It prints `{"url": "http://127.0.0.1:8787"}`. In the demo, type `http://localhost:8787/agent`, press Use endpoint and send a message. You should see one run with its frames. The browser may ask for local network permission first.
+
+## Imported recordings
+
+Importing a session file opens it for inspection. The import makes no request, and you cannot send anything until you reload the page. The composer says why, and the footer and the inspection pane show the state. A file that fails validation shows its error and leaves the session on screen unchanged.
+
+For the tests that cover hosted mode, see [Architecture and UI internals](./internals.mdx#hosted-deployment-tests).
+
+Next, read [Connect and send a run](./runs.mdx) for what each run carries. If a request fails, start with [Troubleshooting](./troubleshooting.mdx).

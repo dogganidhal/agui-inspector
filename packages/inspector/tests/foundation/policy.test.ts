@@ -10,19 +10,23 @@ const read = (file: string) => readFileSync(path.join(root, file), 'utf8');
 const json = (file: string) => JSON.parse(read(file)) as Record<string, any>;
 
 const manifests = ['package.json', 'packages/inspector/package.json', 'packages/python/package.json'];
+// The docs site installs on its own, from its own lockfile, so it is checked apart from the workspace.
+const website = 'website/package.json';
 const lifecycle = ['preinstall', 'install', 'postinstall', 'prepare', 'prepublish', 'prepublishOnly', 'prepack', 'postpack', 'publish', 'postpublish'];
 
+function dependenciesOf(manifest: string): Array<[name: string, version: string, manifest: string]> {
+  const pkg = json(manifest);
+  return ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies'].flatMap((field) =>
+    Object.entries((pkg[field] ?? {}) as Record<string, string>).map(([name, version]): [string, string, string] => [name, version, manifest]),
+  );
+}
+
 function directDependencies(): Array<[name: string, version: string, manifest: string]> {
-  return manifests.flatMap((manifest) => {
-    const pkg = json(manifest);
-    return ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies'].flatMap((field) =>
-      Object.entries((pkg[field] ?? {}) as Record<string, string>).map(([name, version]): [string, string, string] => [name, version, manifest]),
-    );
-  });
+  return manifests.flatMap(dependenciesOf);
 }
 
 test('manifests are private MIT packages with no bin, publish config or lifecycle scripts', () => {
-  for (const manifest of manifests) {
+  for (const manifest of [...manifests, website]) {
     const pkg = json(manifest);
     assert.equal(pkg.private, true, `${manifest} is private`);
     assert.equal(pkg.license, 'MIT', `${manifest} is MIT licensed`);
@@ -46,7 +50,7 @@ test('LICENSE is MIT with the exact copyright line and the package copies equal 
 });
 
 test('every direct dependency is pinned to an exact version', () => {
-  const deps = directDependencies();
+  const deps = [...directDependencies(), ...dependenciesOf(website)];
   assert.ok(deps.length >= 14);
   for (const [name, version, manifest] of deps) {
     assert.match(version, /^\d+\.\d+\.\d+$/, `${name} in ${manifest} must be an exact version, got ${version}`);
@@ -68,9 +72,22 @@ test('the committed lockfile resolves every direct dependency to its pinned vers
   assert.doesNotMatch(JSON.stringify(lock), /codeartifact|tokenHelper|_authToken/);
 });
 
+test('the docs site lockfile resolves its pinned dependencies from the public registry', () => {
+  const lock = json('website/package-lock.json');
+  assert.equal(lock.lockfileVersion, 3);
+  const packages = lock.packages as Record<string, { version: string; resolved?: string; link?: boolean }>;
+  for (const [name, version] of dependenciesOf(website)) assert.equal(packages[`node_modules/${name}`]?.version, version, `${name} locked at ${version}`);
+  for (const [location, entry] of Object.entries(packages)) {
+    if (entry.resolved && !entry.link) assert.match(entry.resolved, /^https:\/\/registry\.npmjs\.org\//, `${location} resolves from the public registry`);
+  }
+  assert.doesNotMatch(JSON.stringify(lock), /codeartifact|tokenHelper|_authToken/);
+});
+
 test('installation runs no lifecycle scripts', () => {
-  assert.match(read('.npmrc'), /^ignore-scripts=true$/m);
-  assert.match(read('.npmrc'), /^save-exact=true$/m);
+  for (const npmrc of ['.npmrc', 'website/.npmrc']) {
+    assert.match(read(npmrc), /^ignore-scripts=true$/m, npmrc);
+    assert.match(read(npmrc), /^save-exact=true$/m, npmrc);
+  }
 });
 
 test('the esbuild binary is functional although its postinstall never ran', () => {
@@ -85,11 +102,11 @@ test('the TypeScript configuration is strict', () => {
   assert.equal(options.noEmit, true);
 });
 
-test('docs/dependencies.md records purpose and rejected alternative for every direct dependency', () => {
-  const doc = read('docs/dependencies.md');
-  for (const [name, version] of directDependencies()) {
-    const row = doc.split('\n').find((line) => line.includes(`\`${name}\``));
-    assert.ok(row, `${name} has a row in docs/dependencies.md`);
+test('the dependencies page records purpose and rejected alternative for every direct dependency', () => {
+  const doc = read('website/content/docs/dependencies.mdx');
+  for (const [name, version] of [...directDependencies(), ...dependenciesOf(website)]) {
+    const row = doc.split('\n').find((line) => line.includes(`\`${name}\``) && line.includes(version));
+    assert.ok(row, `${name} ${version} has a row on the dependencies page`);
     assert.ok(row.includes(version), `${name} row records ${version}`);
     assert.equal(row.split('|').filter((cell) => cell.trim() !== '').length >= 4, true, `${name} row has purpose and alternative cells`);
   }
@@ -107,10 +124,10 @@ test('contracts and sources stay framework-free where required and never evaluat
   }
 });
 
-test('docs/development.md documents every root command and the missing validation infrastructure', () => {
-  const doc = read('docs/development.md');
+test('the development page documents every root command and the missing validation infrastructure', () => {
+  const doc = read('website/content/docs/development.mdx');
   for (const script of Object.keys(json('package.json').scripts)) {
-    assert.ok(doc.includes(`npm run ${script}`), `docs/development.md documents npm run ${script}`);
+    assert.ok(doc.includes(`npm run ${script}`), `the development page documents npm run ${script}`);
   }
   assert.match(doc, /npm ci --ignore-scripts/);
   assert.match(doc, /not yet|missing|pending/i, 'absent suites are reported as missing, not passing');

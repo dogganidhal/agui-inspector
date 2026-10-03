@@ -1,0 +1,75 @@
+---
+title: Presets
+description: Per-agent variables, forwarded properties, message mode, preparation requests and quick messages.
+---
+
+Add a preset when your server needs setup requests before a run, extra forwarded properties, or messages you send often. The inspector core has no server-specific routes or message rules. Anything specific to your server comes from the agent's `preset` in the [configuration file](./configuration.mdx#configuration-file). Presets are version 0 and not yet stable, like the rest of that file.
+
+This preset defines and forwards two variables. It sends only each turn's new messages, sets up a server-side session for the thread before every run, and offers `/help` as a one-click message:
+
+```json title="config.json"
+{
+  "version": 0,
+  "agents": [
+    {
+      "id": "support",
+      "url": "/agents/support/stream",
+      "preset": {
+        "variables": {
+          "userId": { "default": "dev-{{uuid}}" },
+          "seed": { "default": { "plan": "free" }, "type": "json" }
+        },
+        "forwardedProps": { "user_id": "{{userId}}", "seed": "{{seed}}" },
+        "messages": "turn",
+        "prepare": [
+          {
+            "method": "PUT",
+            "path": "/agents/support/sessions/{{threadId}}",
+            "body": { "user_id": "{{userId}}", "context": "{{seed}}" }
+          }
+        ],
+        "quickMessages": ["/help"]
+      }
+    }
+  ]
+}
+```
+
+## Variables
+
+`variables` maps each name to a `default` and a `type`: `text` (the default) or `json`. A text default must be a string. A name uses letters, digits and underscores, and must not start with a digit. `threadId`, `runId` and `uuid` are built in and cannot be redefined.
+
+- The runtime sets `threadId` and `runId` for the run it sends.
+- The runtime generates `uuid` with Web Crypto once per dispatch attempt. Every variable value, preparation request and forwarded property in that attempt uses the same value. The next attempt gets a new one.
+- A variable value can use the built-ins, as in `"dev-{{uuid}}"`, but not another variable.
+- The user can edit variables in the settings. A JSON variable is edited as JSON. If the text does not parse, the settings show an error and the inspector keeps the last valid value.
+
+## Templates
+
+The inspector replaces `{{name}}` in string values of `forwardedProps` and of the preparation `path` and `body`. It never fills placeholders in keys and never evaluates anything.
+
+| Where the placeholder sits | Result |
+| --- | --- |
+| The whole string, `"{{seed}}"` | The variable's JSON value. An object stays an object and a number stays a number. |
+| Inside a longer string, text variable | The text as written. |
+| Inside a longer string, JSON variable | The value as JSON text, so a string gets quotes. |
+
+If a placeholder names an unknown variable or is not a valid name, the dispatch fails. The message gives the name and where it was used, for example `prepare[0].body.x[0]: undefined variable "ghost"`. The inspector never uses an empty string instead. A user value for a variable the preset does not declare is also an error.
+
+## Forwarded properties and message mode
+
+The inspector merges `forwardedProps` into every conversation run, including continuations. `a2uiAction` is reserved and cannot be set here.
+
+`messages` is `full` (the default) or `turn`. `full` sends the whole transcript. `turn` sends only what the turn adds: the new user message, the tool results, or nothing for a resume.
+
+The [client profile](./configuration.mdx#client-profile) can override both. Its `messageMode`, if set, replaces the preset's mode. Its `forwardedProps` are merged over the preset's, so the profile wins when both define a name.
+
+## Preparation requests
+
+`prepare` is an ordered list of `{ method, path, body? }`. Before every conversation run and continuation, the runtime sends the requests in this order and records each one as an exchange. If one fails, the run fails without sending the agent request. `preparePreset` returns the resolved list. The runtime sends it through the same guarded transport as the run.
+
+## Quick messages
+
+`quickMessages` is a list of strings the composer offers as one-click messages. They use the normal send path from [Connect and send a run](./runs.mdx).
+
+Next, see how the [client profile](./configuration.mdx#client-profile) combines with a preset, or follow a run's preparation exchanges in [Read frames and findings](./inspection.mdx).

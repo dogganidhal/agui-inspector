@@ -1,0 +1,182 @@
+---
+title: A2UI surfaces
+description: What an A2UI surface is, how you use one in the inspector, and which v0.9 components, functions and catalogs work.
+---
+
+import runLight from '../../../docs/images/run-light.webp';
+import runDark from '../../../docs/images/run-dark.webp';
+
+An A2UI surface is a form or other interface that your agent describes and the inspector draws inside an activity card. You fill it in and press its buttons as a user would. Each action starts a run that sends it to your agent, so you can check the surface and your agent's answer. Only A2UI v0.9 is supported.
+
+<Screenshot light={runLight} dark={runDark} alt="A release deploy board drawn as an A2UI surface on the left, and on the right the run's ten frames, from RUN_STARTED through an ACTIVITY_SNAPSHOT and seven ACTIVITY_DELTA frames to RUN_FINISHED." />
+
+The left pane shows the activity card, with its Rendered and JSON switch at the top. The frames list on the right shows the snapshot and each delta that built the board, with arrival times. To try it, pick the A2UI showcase agent in the [demo](./demo.mdx) and choose Deploy the release.
+
+## Use a surface
+
+- A surface appears when your agent sends an `ACTIVITY_SNAPSHOT` of type `a2ui-surface`, and changes with each `ACTIVITY_DELTA`.
+- Switch the card to JSON to see the operations as received. Switching back redraws the surface and loses typed text.
+- Fill in the fields and press a button to start a run that sends the action to your agent (see [Actions](#actions)).
+- Two independent [client profile](./configuration.mdx#client-profile) settings apply, each a switch in Settings. Render A2UI surfaces (`renderA2ui`) turns surface drawing on or off. Inject render_a2ui tool (`injectA2uiTool`) adds the official `render_a2ui` tool declaration to the run input.
+
+## What is drawn
+
+An `ACTIVITY_SNAPSHOT` of type `a2ui-surface` carries `{ "a2ui_operations": [...] }`, a list of v0.9 messages: `createSurface`, `updateComponents`, `updateDataModel` or `deleteSurface`. `@a2ui/web_core/v0_9` builds the surfaces and `@a2ui/react/v0_9` draws them. Both are [pinned](./dependencies.mdx) and bundled, so surfaces render offline.
+
+| Situation | What you see |
+| --- | --- |
+| Rendering on, valid operations | One block per surface |
+| Rendering off | The operations as JSON, with a note that rendering is off |
+| Another activity type | JSON in the activity card, outside this view |
+| No `a2ui_operations`, `status` of `building`, `retrying` or `failed` | The status (see [generation lifecycle](#generation-lifecycle)) |
+| No `a2ui_operations`, any other case | "No A2UI operations yet." |
+| An operation the renderer cannot apply | An error naming its position, with the entry as received. The others still apply |
+| `a2ui_operations` is not a list | One error showing the value received |
+| A component type not in the catalog | An error in its place naming the type, with its definition under "As received". The rest still draws |
+
+## Actions
+
+When a user activates a control, the surface creates an action with exactly five fields:
+
+```json
+{
+  "name": "send_note",
+  "surfaceId": "form",
+  "sourceComponentId": "send",
+  "context": { "note": "edited by hand", "count": 1 },
+  "timestamp": "2026-10-02T14:47:13.359Z"
+}
+```
+
+The renderer resolves the bindings in `context`, copies it at the click and sets `timestamp`. The inspector puts the object in `forwardedProps.a2uiAction.userAction` and starts a normal [run](./runs.mdx). It never sends the action as a tool reply.
+
+## How operations are applied
+
+On each change, the inspector passes the activity's operation list to a session. An identical list changes nothing. A list that only grew at the end applies the new entries and keeps typed text. Any other change, such as an `ACTIVITY_DELTA` that rewrites an earlier operation, rebuilds the surfaces and loses typed values.
+
+The session gives the renderer copies, so the received list never changes. Typing into a bound field changes only the surface's data model. The JSON view, the frames, the exported session and the projection still show what the agent sent.
+
+## Generation lifecycle
+
+`@ag-ui/a2ui-middleware` 0.0.11 sends an `a2ui-surface` snapshot before there is anything to draw, then replaces it under the same message id. Its `status` sits next to `a2ui_operations`, never inside it, and shows while there are no operations:
+
+| `status` | Fields read | What you see |
+| --- | --- | --- |
+| `building` | `progressTokens` | A pulsing "Building" tag, "The surface is being generated." and the token estimate if any. Announced as a status |
+| `retrying` | `attempt`, `maxAttempts`, `errors` | A "Retrying" warning with "Attempt 2 of 3". Announced as a status |
+| `failed` | `error`, `attempts`, `maxAttempts` | A "Failed" error with the middleware's message and "3 of 3 attempts used". Announced as an alert |
+
+The inspector lists `errors` (a list of `{ path, message }`) under "Validation errors (n)". For `failed`, it adds the `errors` of each `attempts` entry. The server's `debugExposure` sets that list to `hidden`, `collapsed` (default) or `verbose` (open). `attempts` can also be a number. Operations, when present, take priority over the status. An unknown status shows "No A2UI operations yet."
+
+## Nothing leaves the page
+
+A surface cannot make the inspector request, open or load anything:
+
+- `Image`, `Video` and `AudioPlayer` become a note with the address as plain text. The inspector creates no `img`, `video` or `audio` element.
+- `openUrl` only adds a visible "Blocked openUrl ..." line.
+- No Markdown renderer is configured, so link and image syntax stay as typed.
+- The Material Symbols font behind `Icon` names never loads.
+- Catalogs are never fetched.
+
+## Versions and catalogs
+
+The inspector accepts only `"version": "v0.9"`. It reports an operation with no version or `v0.8` as unsupported and skips it.
+
+The only catalog is the bundled basic catalog, under exactly two ids with the same guards:
+
+| Catalog id | Source |
+| --- | --- |
+| `https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json` | Declared by the renderer package |
+| `https://a2ui.org/specification/v0_9/basic_catalog.json` | Default of `@ag-ui/a2ui-middleware` 0.0.11 when the agent sets none (the one built-in alias) |
+
+One activity can use both. The inspector never rewrites `createSurface`, so the activity JSON and the recording show the id the agent sent. Any other id gives "Catalog not found" with the entry as received. Near misses fail too, for example a trailing slash or a `v0_8` path. Other aliases, and loading catalogs from an address, are left for 1.0.0.
+
+## Components
+
+All 18 basic-catalog components are bundled. The inspector draws eight itself (`Row`, `Divider`, `Icon`, `Button`, `TextField`, `ChoicePicker`, `Tabs`, `Modal`), because the renderer's markup has no labels or its styles never load. They keep the official schemas and bindings, so basic-catalog surfaces work unchanged.
+
+| Component | Behavior |
+| --- | --- |
+| `Text` | All variants. `h1` to `h5` are real headings, `caption` is small and muted, `body` is plain text |
+| `Image`, `Video`, `AudioPlayer` | A note with the address as text (see [nothing leaves the page](#nothing-leaves-the-page)) |
+| `Icon` | A named icon shows its name in a small tag, announced as an image with that name. An `svgPath` icon draws normally |
+| `Row` | Wraps instead of overflowing. `justify`, `align` and `weight` work |
+| `Column`, `List` | The renderer's own. `List` takes a fixed list or a template, `children: { "componentId": "row", "path": "/items" }`. In the template, a path without a leading slash resolves inside the item |
+| `Card` | Bordered and padded, no shadow, no outer margin |
+| `Divider` | Horizontal or vertical. A vertical one takes its row's height |
+| `Tabs` | WAI-ARIA tabs (`tablist`, `tab`, `tabpanel`). Only the selected tab is in the tab order. Left, Right, Home and End move to a tab and select it |
+| `Modal` | Opens a native dialog over an inert page. Escape, Close or a backdrop click closes it, and focus returns to the trigger |
+| `Button` | `default`, `primary`, and `borderless` (an underlined accent link). Disabled while a check fails |
+| `TextField` | Label above. `shortText`, `longText`, `number`, `obscured`. A failing check's message shows under it as its description |
+| `CheckBox` | The renderer's own, with an error line when a check fails |
+| `ChoicePicker` | A group named by its label. `mutuallyExclusive` gives radio buttons, `multipleSelection` checkboxes, and `displayStyle: "chips"` toggle buttons with `aria-pressed`. `filterable` adds a filter field |
+| `Slider` | The renderer's own: label, range input, current value |
+| `DateTimeInput` | The renderer's own native date, time or date-time input |
+
+When you write a surface:
+
+- A `number` `TextField` stores text. If the data model held `2` and the user types 3, it holds `"3"`, and a bound action context sends `"3"`.
+- The pinned renderer ignores `validationRegexp` on `TextField`. Use a `regex` check.
+- A `Button` used as a `Modal` trigger still runs its own action. Give it a `functionCall` action so the modal opens locally.
+- `accessibility.label` and `accessibility.description` become `aria-label` and `aria-description` only on the eight components the inspector draws. An input with a visible label takes its name from it. Otherwise `accessibility.label` applies.
+
+## Functions and checks
+
+A surface can call basic-catalog functions anywhere a value is dynamic: `{ "call": "formatDate", "args": { ... } }`. The pinned renderer does not need the `"returnType": "string"` from the official samples.
+
+| Function | Arguments | Example result |
+| --- | --- | --- |
+| `formatString` | `value`: text with `${/path}` and `${fn(name: arg)}` parts | `Hello Ada` |
+| `formatNumber` | `value`, `decimals`, `grouping` | `1,234.50`, or `1235` with `grouping: false` |
+| `formatCurrency` | `value`, `currency`, `decimals`, `grouping` | `$1,234.50` |
+| `formatDate` | `value` (ISO text), `format` (Unicode TR35 pattern) | `Saturday, October 3, 2026` for `EEEE, MMMM d, yyyy` |
+| `pluralize` | `value`, `zero`, `one`, `two`, `few`, `many`, `other` | `No seats`, `One seat`, `Some seats` |
+
+The check functions are:
+
+- `required` (`value`), false for an empty string or a missing path.
+- `email` (`value`).
+- `length` and `numeric` (`value`, `min`, `max`).
+- `regex` (`value`, `pattern`).
+- `and` and `or` (`values`, at least two).
+- `not` (`value`).
+
+`openUrl` (`url`) is blocked.
+
+`formatDate` uses UTC, so every time zone shows the same text. The `pluralize` arguments are plain strings, so `${/n}` inside `one` or `other` is not replaced. To add the count, use `formatString` around the call (`"${/n} ${pluralize(value: ${/n}, one: 'seat', other: 'seats')}"`) or as the argument (`"other": { "call": "formatString", "args": { "value": "${/n} seats" } }`).
+
+### The CheckRule shape
+
+`Button`, `TextField`, `CheckBox`, `ChoicePicker`, `Slider` and `DateTimeInput` accept `checks`, a list of `CheckRule` objects with exactly two required keys:
+
+```json
+"checks": [
+  {
+    "condition": { "call": "and", "args": { "values": [
+      { "path": "/signup/terms" },
+      { "call": "email", "args": { "value": { "path": "/signup/email" } } }
+    ] } },
+    "message": "Accept the terms and enter a valid email address"
+  }
+]
+```
+
+`condition` is a boolean, a binding such as `{ "path": "/signup/terms" }`, or a function call. The check passes when it is true, and `message` shows when it fails. The renderer rejects any other shape: a bare call, a call with `message` beside it, no `message`, or an extra key. Its "Validation failed for component ... checks.0 ..." appears as an operation error, and the component is not created.
+
+Checks re-run when the data they read changes, so a button enables itself when the form becomes valid. `ChoicePicker`, `Slider` and `DateTimeInput` show no message.
+
+### Where a failing message appears
+
+A `TextField` shows its first failing message under itself. A `Button` shows its first failing message that no `TextField` on the surface already shows, under itself and as its accessible description. If the fields already show them all, the button stays disabled and adds no line. Fixing a field removes its message, and the button's next message, if any, takes its place.
+
+The renderer's `CheckBox` draws its own message, and the button cannot see it. A button that repeats a `CheckBox` message shows it twice. Give the button a form-level message ("Accept the terms and fix the fields above").
+
+## Theme and size
+
+Surfaces follow the inspector's theme in light and dark mode, so overriding the [public `--agui-*` properties](./theming.mdx#public-properties) restyles them without a rebuild.
+
+In 0.1.0 the renderer is in the main bundle. Loading it on first use is left for 1.0.0.
+
+For the view's module wiring, its stylesheet and the tests, see [Architecture and UI internals](./internals.mdx#a2ui-view-wiring).
+
+Next, [Connect and send a run](./runs.mdx) covers the run an action starts and the replies it can bring. The [event reference](./event-views.mdx) shows the other events in that run.

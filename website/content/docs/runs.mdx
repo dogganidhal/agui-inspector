@@ -1,0 +1,151 @@
+---
+title: Connect and send a run
+description: Connect the inspector to your agent, send a message, answer what a run waits for, and see what each request carries.
+---
+
+Each message you send becomes one run: a request to your agent that streams AG-UI events back. The inspector checks each request before sending and refuses some. A run can end waiting for your answer to an interrupt or client tool call. The [event reference](./event-views.mdx) shows how the streamed events appear.
+
+## Send a message
+
+<Steps>
+<Step>
+
+Choose an agent in the Agent selector, or type its endpoint URL and press Use endpoint. A hosted page needs an absolute `http` or `https` URL. An embedded page also accepts a path on its own origin, such as `/agents/support/stream`.
+
+</Step>
+<Step>
+
+If the agent needs a token, open the lock button, which shows No token. Set the header name and enter the token. See [the token](#the-token).
+
+</Step>
+<Step>
+
+Type a message and press Enter (Shift+Enter adds a line), or choose one of the preset's quick messages below the box.
+
+</Step>
+<Step>
+
+The reply streams into the conversation. The request and its frames appear in Inspection, which [Read frames and findings](./inspection.mdx) explains.
+
+</Step>
+</Steps>
+
+If the inspector refuses the message or the request fails, the error appears beside the composer. Your text stays in the box to send again. [Troubleshooting](./troubleshooting.mdx) lists each message and what to check first.
+
+## Where requests go
+
+Configuration and capabilities files, preparation requests, runs and raw submissions all go through one guarded transport.
+
+| Rule | What happens |
+| --- | --- |
+| Destinations | The page's origin, plus the origins the deployment allowed at startup. Configuration files and typed endpoints cannot add one. Any other origin is refused before sending, and the error names it. |
+| Embedded | A relative endpoint resolves against the page's origin. Requests there carry the host's same-origin credentials, so the host's own authentication applies. |
+| Hosted | Endpoints must be absolute `http` or `https` URLs. Requests carry no cookies, not even to the page's own origin. See [hosted deployment](./hosted.mdx#visitor-chosen-targets). |
+| URLs with credentials | `https://user:password@host/` is refused, and the error does not repeat what you typed. Use the token field. |
+| Redirects | Never followed. A redirect shows the error "The target answered with a redirect", and no second request is sent. Enter the final URL as the target. |
+| Browser blocks | CORS (cross-origin resource sharing), private-network access, mixed content and an unreachable server all reach the page as one failed fetch. The error lists those causes and names the origin. There is no proxy or bypass: fix the target's headers or the allowlist. |
+| Request headers | The transport sets `Content-Type` and `Accept` and sends no referrer. The only other header is the token. |
+
+A refused or failed request is still an exchange in the session, with its error.
+
+## The token
+
+The token stays in memory only, in the runtime's connection state. You choose the header name (default `Authorization`). The value is sent as typed, so type `Bearer …` if the target expects it.
+
+- Only the guarded transport reads it. The recorder never sees it, and no request or response header is recorded or exported.
+- The inspector never writes it to browser storage, configuration, a profile, a session file or a log. A reload clears it.
+- Changing the agent or endpoint clears it before anything reaches the new target, and the page tells you.
+- The transport refuses header names that the browser controls (`Cookie`, `Host`, `Content-Length`) or that it sets itself (`Content-Type`, `Accept`), so a token cannot be sent as a cookie.
+
+Keep the token out of the endpoint URL, forwarded properties, context and tool schemas, because they are recorded and exported. A server can also echo the token in a response body. The inspector keeps received frames exactly as they arrived, so the echoed token stays in that frame and the export warning applies. See [recordings](./recordings.mdx#read-this-before-you-share-a-file).
+
+## Sending a run
+
+A message, a continuation and a surface action each become one ordinary run, in these steps:
+
+1. The inspector resolves the preset: variables, the built-in `threadId`, `runId` and `uuid`, templates and forwarded properties. An unknown variable stops the run with a message.
+2. It builds the run input from the profile, the preset and the conversation, then checks it against the protocol's input schema. An input that fails is shown and not sent.
+3. It sends the [preparation requests](./presets.mdx#preparation-requests) in the order the preset lists them, each as its own recorded exchange.
+4. It sends the run request through the protocol client, whose `fetch` is the recorder.
+
+A failure stops every later step. If a preparation fails, by status or by connection, the run request is not sent. The preparation exchanges stay, the error names the failed request, and your message stays in the box to send again. Preparations run before every run of a thread, continuations included.
+
+### What the input carries
+
+| Field | Value |
+| --- | --- |
+| `threadId` | The current thread. A new thread gets a new UUID. |
+| `runId` | A new UUID for each attempt. |
+| `parentRunId` | On a continuation (interrupt answers or tool results), the run it continues. Not set on an ordinary message or a surface action. |
+| `protocolVersion`, `tools`, `context` | From the [client profile](./configuration.mdx#client-profile). |
+| `forwardedProps` | The preset's properties, with the profile's on top. A surface action adds `a2uiAction`. |
+| `state` | The last snapshot with every delta applied. `{}` on a new thread. |
+| `messages` | Full mode: the client's whole transcript (assistant messages and tool calls included) plus this turn's. Turn mode: only this turn's messages (the user message, the tool results, or nothing for a resume). |
+| `resume` | The answers to the interrupts that ended the previous run. Absent otherwise. |
+
+The recorded body is the exact text sent, and the run record holds the same input. A message that failed before sending does not enter the transcript.
+
+### Stop, New thread and quick messages
+
+- Stop closes every connection still open: the active run, a running preparation, a raw submission whose answer is still streaming, and a run response the recorder is still reading after the protocol client rejected it. It stays available while any of them is open, even after the run has ended. Each exchange is marked stopped by the user and keeps the frames received so far. Nothing the server sends after that is kept, and no terminal event is made up: the outcome stays unknown, and the missing `RUN_FINISHED` or `RUN_ERROR` becomes a finding on the run. Stop is a transport control and does not answer an interrupt.
+- New thread stops every open connection the same way, then starts a new thread: new `threadId`, empty transcript and state, nothing waiting. The conversation and State views switch immediately, before the new thread has a run. Recorded exchanges and frames stay in the Inspection pane. Selecting another agent or endpoint does the same.
+- Quick messages are the preset's [one-click messages](./presets.mdx#quick-messages). They follow the same steps as a typed message, preparations included.
+
+### What the client reports
+
+The protocol client checks the stream while the recorder keeps every byte.
+
+| The client reports | You see |
+| --- | --- |
+| A sequence violation (for example `TEXT_MESSAGE_CONTENT` before `TEXT_MESSAGE_START`) | A `sequence` finding on the run. |
+| A frame it cannot parse as JSON | A `json` finding on the run, beside the frame's own finding. |
+| A frame that fails the event schema | A `schema` finding on the run, beside the frame's own finding. |
+| A connection or HTTP error | The exchange's status or transport error, and a message beside the composer. |
+
+When the client rejects a stream, it stops processing and the run is over, so you can send a new message. The recorder continues to the end of the response, so the exchange stays live and Stop stays available until the response ends or you press it.
+
+A run's outcome comes from a valid terminal event: `success` with its result and pending tool calls, `interrupt`, `cancelled` or `error`. Without one, it is `unknown`. See [read frames and findings](./inspection.mdx#missing-terminal-events).
+
+## Replies
+
+A finished run can wait for your answer. The inspector never answers for you.
+
+### Interrupts
+
+A run that ends with an `interrupt` outcome shows one card for each interrupt, with its prompt, a JSON editor for the answer, and two buttons. Resolve sends the editor's content as the payload. Cancel interrupt sends a cancellation with no payload. The client library builds these as the protocol's `resolved` and `cancelled` resume entries.
+
+- The editor starts from the interrupt's response schema: a `default`, `const` or first `enum` value if one exists, otherwise the empty value of each declared type.
+- Resolve stays disabled until the text is valid JSON.
+- If an answer does not match the schema (a wrong type, a missing required field), a warning says what the schema requires. You can still send it: the protocol does not enforce the schema, and a wrong answer is a fair test of your server.
+- An answer is final once given.
+
+The next run starts when every interrupt has an answer. Until then nothing is sent, preparations included. The continuation carries every answer in the order the run reported the interrupts.
+
+### Client tool calls
+
+A run that finishes with unanswered client tool calls shows one card for each call, with the tool name, the arguments and a result editor. Arguments show parsed once complete, otherwise as streamed text with the parse error. Submit result marks the call answered. When every call has a result, the next run starts with one tool message for each call. Each holds your text exactly as typed, which the transcript card also shows.
+
+### While something is waiting
+
+- The message box, Send and the quick messages are disabled, and a notice counts the missing answers. Surface actions are refused too.
+- If every answer is in but the continuation was not sent (for example, after a failed preparation), the cards keep their answers and a button sends the continuation again.
+- New thread leaves this state and discards everything that was waiting.
+
+### Surface actions
+
+An action from a rendered [A2UI surface](./a2ui.mdx) becomes a new run. Its `forwardedProps.a2uiAction.userAction` holds `name`, `surfaceId`, `sourceComponentId`, `context` and `timestamp` exactly as the renderer gave them. An action with a missing field is refused with a message. The run goes through the preparations and adds no user message.
+
+## Raw submissions
+
+The raw request editor (Inspection, then Raw request) sends valid JSON to the current target exactly as typed, as its own exchange. Anything else is not sent, and the error says why. No preset, profile, preparation, conversation update or schema check applies beyond the editor's own check. The exchange keeps the server's answer, including an error. A streaming answer is recorded until it ends or you press Stop.
+
+## Limits
+
+- One run at a time. Starting another while one streams is refused with a message.
+- Preparation responses are recorded but never used in a later request.
+- HTTP and SSE (Server-Sent Events) only. A dropped stream is not reconnected or resumed.
+- The inspector never answers an interrupt, runs a tool or retries a request automatically.
+
+For the runtime calls behind each control, and how a page connects them to the views, see [Architecture and UI internals](./internals.mdx#runtime-api).
+
+Next, [read frames and findings](./inspection.mdx) to see what your run sent back, or go to [troubleshooting](./troubleshooting.mdx) if a request failed.

@@ -1,0 +1,121 @@
+---
+title: Troubleshooting
+description: What to check first when a request is refused or fails, a run does not end, Send is disabled, or the page does not start.
+---
+
+Start with the message the inspector shows. A failed browser request can have several causes, so check the browser's error before you change your server. The inspector cannot bypass Cross-Origin Resource Sharing (CORS) or local-network permissions.
+
+Most messages appear beside the composer (the message box). The request itself stays in Inspection as an exchange with its error.
+
+## The page could not start
+
+"The inspector could not start", followed by a reason, means the page could not read the deployment's `hosting-config.json`, or the file is invalid. Invalid means bad JSON, an unknown field (such as a misspelled `allowedOrigin`), a wildcard or a path in an origin, or `allowVisitorTargets` in a file whose mode is embedded. The page then requests nothing else and never guesses a wider policy. Fix the file the message names, then reload. A missing file is not an error: the page starts in embedded mode and reaches only its own origin.
+
+[Host the static page](./hosted.mdx) lists the fields.
+
+## The endpoint is refused before sending
+
+These messages mean nothing reached your server. A page fixes the destinations it may reach when it starts. A typed endpoint or a configuration file cannot add one.
+
+| The message says | First check |
+| --- | --- |
+| `… is not an allowed destination` | On a page with a fixed list, add the origin to `allowedOrigins` in `hosting-config.json` and reload. On a page that allows visitor targets, such as the public demo, use `https`, or `http://localhost:<port>` for a local server. An embedded page reaches only its own origin. |
+| `Hosted endpoint URLs must be absolute` | Type the full URL, for example `https://agent.example/run`. |
+| `The URL must not contain credentials` | Remove `user:password@` from the URL and enter the token in the lock button's field. |
+| `The URL must use http or https` | Only these two schemes are sent. |
+
+On a page that allows visitor targets, the inspector refuses plain `http` to any host other than `localhost` or `127.0.0.1`. It also refuses other loopback addresses such as `127.0.0.2`, names such as `foo.localhost`, and IPv6 addresses such as `http://[::1]:8787`. See [visitor-chosen targets](./hosted.mdx#visitor-chosen-targets).
+
+## The browser could not complete the request
+
+"The browser could not complete the request to `<origin>`" means the browser blocked the request or could not reach the server. The browser tells the page only that the fetch failed. So the inspector lists the likely causes, keeps the exchange as `failed` with a `transport` finding, and sends nothing else. Open your browser's developer tools: the console and the network panel show the real cause.
+
+Check, in this order:
+
+1. Is the server running, and is the URL correct? An unreachable server fails in the same way as a blocked request.
+2. Does the console report a CORS error? Your server must allow the page's origin. [Allow the page in your own server](./hosted.mdx#allow-the-page-in-your-own-server) has a FastAPI setup to copy and a `curl` check for the preflight.
+3. Is the page `https` and the target plain `http`? A secure page can call plain `http` only on loopback addresses.
+4. Is a public page calling a local or private address? Your browser may ask you to allow local network access first, and it blocks the request until you do. The inspector cannot answer that prompt. Some browsers send a preflight instead, and the target must answer `Access-Control-Allow-Private-Network: true`. See [the browser's permission](./hosted.mdx#the-browsers-permission-for-local-servers).
+
+An embedded page calls agents on its own origin, so it needs no CORS. [Direct browser requests](./hosted.mdx#direct-browser-requests) lists what a hosted page needs from your server.
+
+## The target answered with a redirect
+
+The inspector never follows redirects and makes no second request. Enter the final URL, the one your server redirects to, as the target. For example, add or remove a trailing slash, or use `https` instead of `http`. See [Connect and send a run](./runs.mdx).
+
+## The server answers 401 or 403
+
+The exchange shows the status and keeps the response body as text. Check the token:
+
+- The lock button shows No token when none is set. A reload, or a change of agent or endpoint, clears the token.
+- The default header name is `Authorization`. The inspector sends the value as you type it, so type `Bearer …` if your server needs it.
+- On an embedded page, requests to the page's own origin include the host's same-origin credentials, so your application's own sign-in applies.
+
+See [the token](./runs.mdx#the-token) and [credentials](./configuration.mdx#credentials).
+
+## The run was not sent
+
+- `Preparation failed: … The run was not sent.` One of the preset's [preparation requests](./presets.mdx#preparation-requests) failed, with an error status or a connection error. Open its exchange in Inspection. A failed preparation stays in the list even when the Preparation chip hides the others. Your message stays in the box so you can send it again.
+- `undefined variable "…"` A placeholder names a variable that does not exist. The message gives the name and where it was used ([presets](./presets.mdx)).
+- If an input fails the protocol's input schema, the inspector shows it and does not send it. Check the tools, context and forwarded properties in Settings ([client profile](./configuration.mdx#client-profile)).
+- `A run is already in progress. Stop it or wait for it to end` The inspector sends only one run at a time.
+
+## The run has no terminal event
+
+"The stream ended without a valid RUN_FINISHED or RUN_ERROR event" means no valid closing event arrived. If you pressed Stop, this finding is expected. Otherwise, check that the last event passed validation: its frame has no `json` or `schema` tag. Check that its Server-Sent Events (SSE) block ended with a blank line. Also look for a `transport` finding, which shows the connection was lost first. See [missing terminal events](./inspection.mdx#missing-terminal-events).
+
+## An event is in Frames but not in the conversation
+
+The inspector builds the conversation from valid events only. A frame with a `json` or `schema` tag adds nothing to it. A "Not shown" note in the conversation marks a valid event that refers to something that never started, such as text for a message with no `TEXT_MESSAGE_START`. In that case the run has a `sequence` finding. See [Read frames and findings](./inspection.mdx) and the [event reference](./event-views.mdx).
+
+## Send is disabled
+
+- A notice shows how many answers are waiting, for example "1 interrupt waiting. Answer it to continue the run." Answer every interrupt or submit every tool result, and the next run starts. New thread discards everything that was waiting.
+- If every answer is in but the continuation was not sent, for example after a failed preparation, the cards keep their answers and a button sends it again.
+- If an imported recording is open, see the next section.
+
+See [Replies](./runs.mdx#replies).
+
+## An imported recording cannot send
+
+An imported recording is for inspection only. The composer says "An imported recording is open for inspection. Reload the page to send requests again." A reload clears the session, including the recording you opened. The file on your disk stays. See [Save and open recordings](./recordings.mdx).
+
+## The examples are unavailable
+
+On the public demo, the page tries for at most 10 seconds to prepare its scripted examples. This fails if:
+
+- the browser has no service workers
+- the page is not a secure context
+- the browser refuses the registration
+- the worker does not take control or answer in time
+
+The status line then names the reason, and the inspector opens with no example agents. You can still type your own server's URL or import a recording.
+
+To try again, use Export session to keep anything you need, then reload. If the status line says an older worker could not be replaced, the examples stay off. See [Try your first run](./demo.mdx).
+
+## A configuration warning or error
+
+- A "Configuration" warning under the top bar means the page rejected a theme entry. It ignores only that entry, and agents and presets keep working. See [theming](./theming.mdx).
+- An error and no agents means the page could not use the agent configuration. The cause is an unknown field, a field that looks like a credential, an unsupported version, or a missing `config` file that `hosting-config.json` names. The endpoint field and import still work. See [Configuration and client profiles](./configuration.mdx).
+- If the page cannot read a saved profile, it reports this and uses the defaults.
+
+## The embedded page is not there
+
+- When `enabled` is off, `mount_inspector` registers no route. Your application then answers the inspector path like any unknown path, usually with a 404. Check the setting that controls `enabled`.
+- In a source checkout, `mount_inspector(enabled=True)` raises an error that names `npm run package:python`. The static files are not committed, so build them first.
+
+See [Embed in Starlette or FastAPI](./embedding.mdx).
+
+## The console shows a blocked eval report
+
+One blocked-`eval` report at startup is expected. A bundled validation library checks whether it may compile validators. The browser refuses, so the library uses its interpreted mode. Nothing is evaluated. See [Host the static page](./hosted.mdx).
+
+## Report a bug
+
+<Callout type="warn">
+Frames and request bodies can contain personal data or credentials, including a token your server repeated. Read [this before you share a file](./recordings.mdx#read-this-before-you-share-a-file). Paste only synthetic or redacted data, and rotate any secret you find in a recording.
+</Callout>
+
+Open a bug report from the [GitHub issue forms](https://github.com/dogganidhal/agui-inspector/issues/new/choose). The form asks for what happened, the steps to reproduce it from opening the page, the mode, the commit or version, your browser and operating system, and the relevant frames. For the public demo, the steps include the example agent and the quick message. You can copy frames from the frames list or take them from a redacted session export. Include the exact message the inspector showed.
+
+Report a security vulnerability privately, as [SECURITY.md](https://github.com/dogganidhal/agui-inspector/blob/main/SECURITY.md) describes. Do not use a public issue.

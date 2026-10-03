@@ -136,7 +136,7 @@ test('HttpAgent sends through the injected fetch and the client does not need ou
 
 test('the pinned client cuts events on two LF only: CRLF and CR streams fail in it, which is why the runtime hands it an LF copy', async () => {
   // Issue #49. The runtime's copy (src/core/runtime/line-endings.ts) is temporary: when this test fails, the pinned
-  // client frames CRLF and CR itself (ag-ui-protocol/ag-ui#2939), so delete the copy and update docs/dependencies.md.
+  // client frames CRLF and CR itself (ag-ui-protocol/ag-ui#2939), so delete the copy and update website/content/docs/dependencies.mdx.
   const events = [runStarted, runFinishedSuccess];
   for (const [name, delimiter] of [['LF', '\n\n'], ['CRLF', '\r\n\r\n'], ['CR', '\r\r']] as const) {
     const seen: { failed?: Error; finished?: boolean } = {};

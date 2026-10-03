@@ -6,12 +6,12 @@
 
 A developer tool for [AG-UI](https://docs.ag-ui.com) servers. Point it at an agent and see the wire.
 
-[Try the playground](https://dogganidhal.github.io/agui-inspector/) · [Embed in Python](#embed-in-python) · [Documentation](#documentation) · [Roadmap](ROADMAP.md) · [Contributing](CONTRIBUTING.md)
+[Try the playground](https://dogganidhal.github.io/agui-inspector/) · [Embed in Python](#embed-in-python) · [Documentation](https://dogganidhal.github.io/agui-inspector/docs/) · [Roadmap](ROADMAP.md) · [Contributing](CONTRIBUTING.md)
 
 [![Pages](https://github.com/dogganidhal/agui-inspector/actions/workflows/pages.yml/badge.svg)](https://github.com/dogganidhal/agui-inspector/actions/workflows/pages.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-0a0a0a.svg)](LICENSE)
 [![AG-UI 1.0](https://img.shields.io/badge/AG--UI-1.0-0a0a0a.svg)](https://docs.ag-ui.com)
-[![A2UI v0.9](https://img.shields.io/badge/A2UI-v0.9-0a0a0a.svg)](docs/a2ui.md)
+[![A2UI v0.9](https://img.shields.io/badge/A2UI-v0.9-0a0a0a.svg)](https://dogganidhal.github.io/agui-inspector/docs/a2ui/)
 
 </div>
 
@@ -36,7 +36,7 @@ service worker inside the page, so no model or server is involved.
 Your browser sends the requests straight to your server. The inspector has no proxy and cannot get around a browser rule.
 
 1. Allow the page's origin, `https://dogganidhal.github.io`, in your server's CORS settings. The
-   [FastAPI example](docs/hosted.md#allow-the-page-in-your-own-server) is narrowly scoped and ready to copy. The same
+   [FastAPI example](https://dogganidhal.github.io/agui-inspector/docs/hosted/#allow-the-page-in-your-own-server) is narrowly scoped and ready to copy. The same
    section explains the permission a browser may ask for before a public page reaches `localhost`.
 2. Type the endpoint in the connection bar and press Use endpoint (or Enter). Typing alone changes nothing. For a local
    server use `http://localhost:<port>/...`, the form the inspector accepts in every browser. Remote servers need HTTPS.
@@ -45,7 +45,7 @@ Your browser sends the requests straight to your server. The inspector has no pr
    `Bearer <your-token>`. The inspector sends the value exactly as typed and adds no scheme.
 
 The playground sends no cookies, so a token in that header is the only credential it can present. The
-[public demo guide](docs/public-demo.md#your-own-server) covers the limits.
+[public demo guide](https://dogganidhal.github.io/agui-inspector/docs/demo/#your-own-server) covers the limits.
 
 ## Embed in Python
 
@@ -99,13 +99,13 @@ mount_inspector(
 
 The page appears at `/agui-inspector/` and calls your agent routes on the same origin. `enabled` defaults to `False`.
 Keep it tied to a debug setting: anyone who reaches the route sees request bodies and raw frames. See
-[embedding](docs/embedding.md) and the [FastAPI example](examples/fastapi/app.py).
+[embedding](https://dogganidhal.github.io/agui-inspector/docs/embedding/) and the [FastAPI example](examples/fastapi/app.py).
 
 The mount adds no authentication. The page, its `config.json` and its assets sit behind the guards your app already
 has: middleware, a reverse proxy or, on FastAPI, dependencies set on the app you pass to `mount_inspector`. Dependencies
 on an enclosing app that mounts yours do not run for it. The guard has to accept what a browser sends when it opens a
 page, such as a session cookie or HTTP Basic credentials. A bearer header cannot be attached to a page load. See
-[authentication](docs/embedding.md#authentication).
+[authentication](https://dogganidhal.github.io/agui-inspector/docs/embedding/#authentication).
 
 ### What the mount is
 
@@ -148,7 +148,7 @@ already runs is the planned in-app mode, which is not built.
 `hosting-config.json` that names the agent origins the page may call, and optionally a `config.json` that lists your
 agents. The page builds its content security policy from that file at startup and refuses every other destination. The
 npm package that exports `staticAssetsPath` is private, so serve `packages/inspector/dist` from your checkout. See
-[hosted](docs/hosted.md) and [configuration](docs/configuration.md).
+[hosted](https://dogganidhal.github.io/agui-inspector/docs/hosted/) and [configuration](https://dogganidhal.github.io/agui-inspector/docs/configuration/).
 
 ## Privacy
 
@@ -170,22 +170,24 @@ needs.
 
 ## Documentation
 
+The guides are at <https://dogganidhal.github.io/agui-inspector/docs/>, built from the MDX pages in [website/content/docs](website/content/docs).
+
 | Page | What it covers |
 | --- | --- |
-| [Public demo](docs/public-demo.md) | The example agents, their pacing, and pointing the demo at your own server. |
-| [Embedding](docs/embedding.md) | `mount_inspector` for Starlette and FastAPI: arguments, routes, authentication. |
-| [Hosted](docs/hosted.md) | Static deployment, `hosting-config.json` and the content security policy. |
-| [Configuration](docs/configuration.md) | `config.json`, presets, client profiles and migrations. |
-| [Connecting and driving runs](docs/conversation.md) | Endpoints, tokens, interrupts, tool results, raw submissions, Stop and New thread. |
-| [Event views](docs/event-views.md) | How each of the 31 event types reaches the conversation and state views. |
-| [Inspection](docs/inspection.md) | What the recorder keeps, how bytes become frames, and the findings it reports. |
-| [A2UI surfaces](docs/a2ui.md) | Rendering `a2ui-surface` activities and sending their actions. |
-| [Session recordings](docs/recordings.md) | The session file format and what to check before sharing one. |
-| [Theming](docs/theming.md) | The `--agui-*` properties and the view primitives. |
-| [Distribution](docs/distribution.md) | Release gates and how the Python release works. |
-| [Build provenance](docs/build-provenance.md) | The checks that tie packaged assets to the build. |
-| [Dependencies](docs/dependencies.md) | Why each dependency is there. |
-| [Development](docs/development.md) | Every command, the CI gate and the benchmark. |
+| [Try your first run](https://dogganidhal.github.io/agui-inspector/docs/demo/) | A guided first run in the demo, the example agents and the words the inspector uses. |
+| [Project status and privacy](https://dogganidhal.github.io/agui-inspector/docs/status/) | What is implemented, where your data goes and what you can rely on. |
+| [Connect and send a run](https://dogganidhal.github.io/agui-inspector/docs/runs/) | Endpoints, tokens, interrupts, tool results, raw submissions, Stop and New thread. |
+| [Read frames and findings](https://dogganidhal.github.io/agui-inspector/docs/inspection/) | Exchanges, frames, findings and missing terminal events. |
+| [Troubleshooting](https://dogganidhal.github.io/agui-inspector/docs/troubleshooting/) | What to check for each failure the inspector shows. |
+| [Event reference](https://dogganidhal.github.io/agui-inspector/docs/event-views/) | How each of the 31 event types reaches the conversation and state views. |
+| [A2UI surfaces](https://dogganidhal.github.io/agui-inspector/docs/a2ui/) | Rendering `a2ui-surface` activities and sending their actions. |
+| [Save and open recordings](https://dogganidhal.github.io/agui-inspector/docs/recordings/) | Exporting and importing sessions, and what to check before sharing one. |
+| [Embed in Starlette or FastAPI](https://dogganidhal.github.io/agui-inspector/docs/embedding/) | `mount_inspector`: arguments, routes, authentication. |
+| [Host the static page](https://dogganidhal.github.io/agui-inspector/docs/hosted/) | Static deployment, `hosting-config.json` and the content security policy. |
+| [Configuration and client profiles](https://dogganidhal.github.io/agui-inspector/docs/configuration/) | `config.json`, client profiles, credentials and migrations. |
+| [Presets](https://dogganidhal.github.io/agui-inspector/docs/presets/) | Variables, preparation requests, forwarded properties and quick messages. |
+| [Theming](https://dogganidhal.github.io/agui-inspector/docs/theming/) | The `--agui-*` properties for light and dark mode. |
+| [Development](https://dogganidhal.github.io/agui-inspector/docs/development/) | Commands, the CI gate, internals, the demo build, dependencies and releases. |
 
 The [constitution](.specify/memory/constitution.md) holds the engineering rules, and [specs/](specs) holds the feature
 specifications, plans and tasks.
@@ -201,7 +203,7 @@ npm run check:ci                   # the pull request gate
 ```
 
 `npm run build` builds the page and `npm run package:python` builds the wheel and sdist into `packages/python/dist`.
-[docs/development.md](docs/development.md) lists every command, and [CONTRIBUTING.md](CONTRIBUTING.md) explains how
+[Development](https://dogganidhal.github.io/agui-inspector/docs/development/) lists every command, and [CONTRIBUTING.md](CONTRIBUTING.md) explains how
 to propose a change.
 
 ## License

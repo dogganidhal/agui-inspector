@@ -1,6 +1,6 @@
 // FX11 (FR-020; US3.4): the A2UI basic catalog, audited without a browser. The gallery fixture applies
 // cleanly and uses all 18 components; the basic functions the demo needs produce the documented output
-// through the real binder; and the CheckRule shape the pinned renderer accepts is the one docs/a2ui.md
+// through the real binder; and the CheckRule shape the pinned renderer accepts is the one the A2UI docs page
 // states. What the components look like and how they behave is in tests/e2e/a2ui/components.spec.ts.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -152,8 +152,8 @@ test('the CheckRule shape is { condition, message } and nothing else: a bare cal
   assert.deepEqual(check(rule(bare), { a: 'x' }).issues, []);
 });
 
-test('docs/a2ui.md states the CheckRule shape and the function notes the audit settled', () => {
-  const doc = readFileSync(path.join(process.cwd(), 'docs', 'a2ui.md'), 'utf8');
+test('the A2UI page states the CheckRule shape and the function notes the audit settled', () => {
+  const doc = readFileSync(path.join(process.cwd(), 'website', 'content', 'docs', 'a2ui.mdx'), 'utf8');
   for (const name of ['CheckRule', 'condition', 'message', 'formatString', 'formatNumber', 'formatCurrency', 'formatDate', 'pluralize', 'required', 'email', 'length', 'regex', 'and', 'or', 'not', 'building', 'retrying', 'failed']) {
     assert.ok(doc.includes(name), `${name} is documented`);
   }

@@ -6,7 +6,7 @@
 // arbitrary ports. What this proves: the browser's own content security policy and the guarded transport
 // make the same decision at the boundary, the page sends no cookie and shows no approval prompt of its
 // own, forbidden destinations never produce a request, and the startup policy cannot be widened by a
-// resource the page loads. Firefox and Safari are not driven here: docs/hosted.md records the manual
+// resource the page loads. Firefox and Safari are not driven here: website/content/docs/hosted.mdx records the manual
 // numeric-loopback matrix.
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';

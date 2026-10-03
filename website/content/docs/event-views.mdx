@@ -1,0 +1,137 @@
+---
+title: Event reference
+description: What each of the 31 AG-UI event types becomes in the conversation and state views, and which parts are received or derived.
+---
+
+The conversation and state views turn the 31 AG-UI event types into a transcript and a current state. The frames list in Inspection shows every event exactly as received ([read frames and findings](./inspection.mdx)). Find an event here to see where it appears on screen, or why a frame has no entry in the conversation.
+
+## Received and derived
+
+The recorder keeps raw frames: the text received, in arrival order, with its offset. These views never change them. What the views show is derived: a projection builds it from the frames that are valid events. Each entry lists the frames it came from, and computed values are marked:
+
+- Durations of runs and steps are the closing frame's offset minus the opening frame's offset. A tooltip says "Derived from frame offsets, not received".
+- Parsed tool arguments show once the call completes. Until then the raw fragments show, and stay inspectable.
+- Expanded chunk events are derived entries whose source is the chunk frame. The chunk stays in the frames list, and the entry it opened has a dashed `from …_CHUNK` tag.
+- The current state is the snapshots and deltas applied in order (see [State](#state)).
+- The transcript is built from events, plus the messages in each run's recorded input.
+
+Frames that are not valid events (not JSON, unknown type, failed schema) add nothing here. Their finding stays in the frames list. A valid event that refers to something that never started, such as `TEXT_MESSAGE_CONTENT` for an unknown message, gets a "Not shown" note linked to its frame. The note sits inside its run, where that frame arrived, so later runs never move it. The projection never invents the missing start.
+
+## Events by family
+
+Each family lists its events and what they show in the conversation. An event without an entry of its own closes or updates the entry its family opened.
+
+### Run
+
+- `RUN_STARTED` fills in the run header with the run id and, for a child run, the `← parent` id.
+- `RUN_FINISHED` completes the header: duration, outcome tag, result, pending tool calls and interrupt count.
+- `RUN_ERROR` completes it with the Error tag and the error message.
+
+In the frames list, run events also mark run boundaries. [Runs](#runs) explains each outcome tag.
+
+### Steps
+
+- `STEP_STARTED` opens a collapsible group with the step name. It holds the events that arrive until the step finishes.
+- `STEP_FINISHED` closes the group and gives it a duration.
+
+### Text messages
+
+- `TEXT_MESSAGE_START` opens a message.
+- `TEXT_MESSAGE_CONTENT` adds a delta, the next piece of text. The message grows as deltas arrive and shows a caret while it streams. Each delta is listed under it.
+- `TEXT_MESSAGE_END` closes the message.
+- `TEXT_MESSAGE_CHUNK` builds the same entry, tagged `from TEXT_MESSAGE_CHUNK` (see [Chunks](#chunks)).
+
+### Tool calls
+
+- `TOOL_CALL_START` opens a card with the tool name, whether it is a client or server tool, and the call id.
+- `TOOL_CALL_ARGS` streams argument fragments into the card.
+- `TOOL_CALL_END` completes the call, and the card shows the parsed arguments.
+- `TOOL_CALL_RESULT` adds the result to the card.
+- `TOOL_CALL_CHUNK` builds the same card, tagged `from TOOL_CALL_CHUNK`.
+
+### Reasoning
+
+- `REASONING_START` and `REASONING_MESSAGE_START` open a collapsible entry, which stays expanded while it streams.
+- `REASONING_MESSAGE_CONTENT` adds text to it.
+- `REASONING_MESSAGE_END` and `REASONING_END` close it.
+- `REASONING_MESSAGE_CHUNK` builds the same entry, tagged `from REASONING_MESSAGE_CHUNK`.
+- `REASONING_ENCRYPTED_VALUE` shows a marker with the subtype, the entity id, the size in bytes and "not decoded". The marker does not show the value, and the frames list shows it raw.
+
+### State
+
+- `STATE_SNAPSHOT` and `STATE_DELTA` add nothing to the conversation. They appear in the state view (see [State](#state)).
+
+### Messages snapshot
+
+- `MESSAGES_SNAPSHOT` shows a divider, "Transcript replaced by MESSAGES_SNAPSHOT", with added and removed counts. In the frames list, it lists the messages it added and removed. See [Message snapshots](#message-snapshots).
+
+### Activities
+
+- `ACTIVITY_SNAPSHOT` shows a card with the activity type and content. An `a2ui-surface` activity is drawn inside the card, and the card gets a Rendered and JSON switch (see [A2UI surfaces](./a2ui.mdx)).
+- `ACTIVITY_DELTA` updates the card.
+
+### Subagents
+
+- `SUBAGENT_STARTED`, `SUBAGENT_FINISHED` and `SUBAGENT_ERROR` share one dashed marker for each subagent, under its parent run, with a line for each start, finish or error.
+
+### Custom and raw
+
+- `CUSTOM` shows a marker with its name and value.
+- `RAW` shows a marker with its source and value.
+
+## Plain text
+
+Conversation text is shown as plain text. HTML does not run and Markdown is not interpreted, so `[link](url)` and `<img>` appear as typed. Optional Markdown rendering is not in 0.1.0.
+
+## Runs
+
+Each conversation exchange gets a run header, even before its first frame. The outcome tag comes from the terminal event:
+
+| Tag | Source |
+| --- | --- |
+| Streaming | No terminal event yet, and the exchange is still open |
+| Finished | `RUN_FINISHED` with a success outcome, or none |
+| Interrupted | `RUN_FINISHED` with an interrupt outcome |
+| Cancelled | `RUN_FINISHED` with a cancelled outcome |
+| Error | `RUN_ERROR` |
+| Stopped by you | You stopped the exchange. This is transport status, not a protocol outcome |
+| No terminal event | The stream ended without `RUN_FINISHED` or `RUN_ERROR`. No outcome is shown or made up |
+
+If you see No terminal event, [missing terminal events](./inspection.mdx#missing-terminal-events) helps you find the cause.
+
+A success outcome names its pending tool calls. If it names none, the pending calls are the ones the run started and never answered, as the protocol defines. Their cards show "Pending result".
+
+A run's recorded input adds your turn to the transcript, with a line that says what it carried: resume answers, a tool result or an A2UI action. When a run sends the transcript again, messages already shown (by id) are not repeated. A result you entered for a pending call joins the original card and names the run that carried it.
+
+## Following a reference
+
+A run id in a run header, and each `frame #n` next to an entry, is a button. A run id shows its exchange in the frames list. A frame reference shows that frame. The references in the state view and in a "Not shown" note work the same way.
+
+A reference finds its target by recorded ids: the exchange id and the frame id. Frame numbers restart in every exchange, so `frame #4` can exist in two exchanges. The button opens the one the entry came from. When you press it, the inspector:
+
+- selects the Inspection pane (under 960 px wide, this is the only way to see it), its Inspection tab and the Frames view;
+- opens the exchange and, for a frame, the frame's detail;
+- keeps the filter if it lists the target, or clears it if it would hide the target, and shows a toast that says so;
+- scrolls the target to the middle of the pane, marks it with `aria-current` and moves keyboard focus to it, so Tab continues from there.
+
+This changes only what the page shows. It sends no request and does not change the capture, so it also works on an imported recording.
+
+## Chunks
+
+The inspector expands chunks the same way the protocol client does. A chunk with a new id opens a message, tool call or reasoning message. Chunks without an id continue the open one. The next explicit event of the same kind, or the end of the run, closes it. `RAW`, activity events and `SUBAGENT_STARTED` close nothing.
+
+Each expansion is a derived entry (`derivation: chunk-expansion`) whose `sources` is the chunk frame. The closing event has no frame of its own, so its attribution is `ambiguous` and its source is the stream's last chunk. In the frames list, each chunk shows its derived expansion.
+
+## Message snapshots
+
+`MESSAGES_SNAPSHOT` replaces the transcript, so you can see what the snapshot did. The protocol client would merge it instead. The divider lists the messages it added and the ones it left out, with their text. Some entries stay so later deltas can find them: a message still streaming, an open step or subagent, an activity the snapshot does not restate, and the run headers.
+
+## State
+
+The current state is what the next run carries. It starts from the first run's recorded input state. Then each `STATE_SNAPSHOT` (replace) and `STATE_DELTA` (JSON Patch, RFC 6902) applies in order. The state view lists them newest first, with its run, offset and one line for each operation. A delta that cannot be applied shows as "not applied" with the reason. The state keeps its last valid value, and the frame stays in the frames list.
+
+A new thread starts from its own state. Earlier exchanges leave the current conversation but stay in the session. Both views show the current thread, even before it has an exchange. An imported recording has no live thread, so the views show the thread of its latest conversation exchange. The views read only raw frames, so a recording shows the same conversation and state as the live capture did.
+
+For how these views are built and tested, see [Architecture and UI internals](./internals.mdx#event-views-wiring).
+
+Next, [A2UI surfaces](./a2ui.mdx) covers activity cards that draw a form, and [Save and open recordings](./recordings.mdx) shows how to keep a session for later.

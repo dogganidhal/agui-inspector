@@ -1,0 +1,27 @@
+{
+  "pages": [
+    "---Start here---",
+    "index",
+    "demo",
+    "status",
+    "---Use it---",
+    "runs",
+    "inspection",
+    "troubleshooting",
+    "event-views",
+    "a2ui",
+    "recordings",
+    "---Set it up---",
+    "embedding",
+    "hosted",
+    "configuration",
+    "presets",
+    "theming",
+    "---Contribute---",
+    "development",
+    "internals",
+    "demo-internals",
+    "dependencies",
+    "releases"
+  ]
+}

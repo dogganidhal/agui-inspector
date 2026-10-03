@@ -1,0 +1,130 @@
+---
+title: Dependencies
+description: Every direct dependency with its version, purpose and rejected alternative, plus licensing and known upstream issues.
+---
+
+Every direct dependency has an exact version in a `package.json` and resolves through a committed
+`package-lock.json`. Installs run no lifecycle scripts (`.npmrc` sets `ignore-scripts=true`). A dependency is added
+only for a proven need, and its row says why the platform or an existing dependency could not do the job. "The
+constitution" in a row means the project's
+[constitution](https://github.com/dogganidhal/agui-inspector/blob/main/.specify/memory/constitution.md). The
+repository uses npm workspaces and Node 24 LTS (`engines.node` is `>=24`).
+
+## Runtime dependencies (`packages/inspector`)
+
+| Package | Version | Purpose | Rejected alternative |
+| --- | --- | --- | --- |
+| `@ag-ui/core` | 1.0.1 | Event, run-input and resume types, and the Zod schemas that validate frames. Implements the 31-event protocol 1.0 baseline. | Local copies of the schemas would diverge from the protocol. |
+| `@ag-ui/client` | 1.0.1 | `HttpAgent` keeps the derived transcript, state, interrupts and outcomes, reports sequence errors, and takes the recorder's `fetch`. | A hand-written client repeats the protocol rules. `EventSource` cannot POST a run body. |
+| `@ag-ui/a2ui-middleware` | 0.0.11 | Only the official `RENDER_A2UI_TOOL` declaration and the A2UI action types. | Re-declaring the tool schema would diverge from the middleware. |
+| `@a2ui/react` | 0.12.0 | The A2UI v0.9 React renderer (`@a2ui/react/v0_9`). | A custom renderer or a chat framework: the constitution requires the official renderer packages. |
+| `@a2ui/web_core` | 0.12.0 | `MessageProcessor` and the surface model that drive the v0.9 renderer. | Hand-written message processing. |
+| `react` | 19.3.0 | Views, and a peer of the renderer. | Plain DOM: the constitution requires React views. |
+| `react-dom` | 19.3.0 | Browser rendering, and server rendering in unit tests of the scaffold. | None: it is the React DOM target. |
+| `zod` | 3.25.76 | Peer of both `@ag-ui/core` and the renderer. Stays on 3.x because the renderer's peer range is `^3.25.76`. | Zod 4, which is outside the renderer's peer range. |
+
+## Development dependencies (repository root)
+
+| Package | Version | Purpose | Rejected alternative |
+| --- | --- | --- | --- |
+| `typescript` | 7.0.2 | Strict type checking (`npm run typecheck`). | JSDoc checking: the sources are TypeScript. |
+| `esbuild` | 0.28.2 | Production bundle and compilation of unit tests. Works without its postinstall because the platform binary is an optional dependency. | Vite or webpack: more tooling than a static build with one bundle needs. |
+| `@playwright/test` | 1.63.0 | End-to-end tests and the network-allowlist check. An explicit command installs the browsers. Package installs never do. | jsdom: no real layout or network, and the A2UI renderer does not support server rendering. |
+| `@changesets/cli` | 3.0.3 | Release versioning for the Python package: pending changesets, the version pull request, the changelog and the release tag. Every manifest is private, so it never publishes to npm. | Commit-message tools, such as release-please. A changeset is an explicit note a reviewer sees, and the npm package can be added later. |
+| `@types/node` | 24.19.1 | Types for `node:test` and the build scripts, matching Node 24. | None. |
+| `@types/react` | 19.3.0 | Types for React 19.3. | None. |
+| `@types/react-dom` | 19.3.0 | Types for React DOM 19.3. | None. |
+
+## Docs site (`website/`)
+
+The [docs site](./development.mdx#the-docs-site) has its own manifest, locked in `website/package-lock.json`. Its
+packages only build a static site and never ship in the npm package or the Python wheel.
+
+| Package | Version | Purpose | Rejected alternative |
+| --- | --- | --- | --- |
+| `next` | 16.3.8 | Renders the site as a static export. It is Fumadocs' most mature static-export target. | esbuild with hand-written pages: no MDX pipeline, navigation or search. |
+| `fumadocs-core` | 16.15.18 | Page tree, MDX source loader and the static search index. | Hand-written navigation and search. |
+| `fumadocs-ui` | 16.15.18 | Docs layout, sidebar, search dialog, code blocks and callouts. | Building the docs UI by hand. |
+| `fumadocs-mdx` | 15.4.6 | Compiles the MDX content and validates frontmatter at build time. | `@next/mdx` alone: no collections, frontmatter or page tree. |
+| `react` | 19.3.0 | Peer of Next and Fumadocs, the same version as the inspector. | None: Next and Fumadocs require it. |
+| `react-dom` | 19.3.0 | Peer of Next and Fumadocs, the same version as the inspector. | None: Next and Fumadocs require it. |
+| `tailwindcss` | 4.3.3 | Fumadocs UI's styles are Tailwind sources that must be compiled. | None: Fumadocs ships no prebuilt CSS. |
+| `@tailwindcss/postcss` | 4.3.3 | Compiles those Tailwind sources in the Next build's PostCSS step. | None: Fumadocs ships no prebuilt CSS. |
+| `typescript` | 7.0.2 | Type checking during `next build`, the same version as the root. | None. |
+| `@types/mdx` | 2.0.14 | Types for MDX content. | None. |
+| `@types/node` | 24.19.1 | Types for Node 24. | None. |
+| `@types/react` | 19.3.0 | Types for React 19.3. | None. |
+| `@types/react-dom` | 19.3.0 | Types for React DOM 19.3. | None. |
+
+## License and notices
+
+The project is MIT, `Copyright (c) 2026 Nidhal Dogga` (`LICENSE`). `THIRD_PARTY_NOTICES.txt` lists every
+non-development package in `package-lock.json` (42 at the time of writing) with its license. It says which of them
+`dist/app.js` bundles and includes the full license texts, such as the Apache-2.0 text for `@a2ui/react`,
+`@a2ui/web_core` and `@a2ui/markdown-it`. No listed package, these three included, ships a `NOTICE` file. For
+packages whose tarball has no license file (`@bufbuild/protobuf`, `@lit-labs/ssr-dom-shim`, `@protobuf-ts/protoc`),
+the file uses the text from their upstream repository and says so.
+
+The notices come from the license files in the installed packages. Regenerate them when a dependency changes. A
+Python test fails when a runtime package in the lockfile is missing from the file, or when an upstream `NOTICE` file
+is missing from it. npm and `uv_build` cannot pack files from outside the package, so both package directories
+have byte-identical copies of `LICENSE` and `THIRD_PARTY_NOTICES.txt`, and a test compares them.
+
+## Known upstream findings
+
+These come from the pinned baseline. They are recorded here, not worked around by changing the baseline.
+
+### DOMPurify override
+
+`@a2ui/react` 0.12.0 depends on `@a2ui/markdown-it` 0.2.0, which pins DOMPurify 3.4.11. That version is affected by
+[GHSA-c2j3-45gr-mqc4](https://github.com/advisories/GHSA-c2j3-45gr-mqc4) and
+[GHSA-55q2-fjhq-7xh7](https://github.com/advisories/GHSA-55q2-fjhq-7xh7). The root `package.json` sets
+`"overrides": { "dompurify": "3.4.16" }`, and the committed lockfile resolves exactly 3.4.16. Check it with
+`npm ls dompurify --all`. The override changes neither the required renderer nor the direct dependency list.
+
+The production bundle does not include DOMPurify or `@a2ui/markdown-it` today, because conversation Markdown is out
+of scope. So the override protects the installed tree and any future use of the renderer's Markdown path.
+Remove it when A2UI ships a fixed pin, and review the lockfile in the same change. The lockfile was updated with
+`npm update dompurify --ignore-scripts`, so no lifecycle script ran.
+
+### CRLF and CR event streams
+
+`@ag-ui/client` 1.0.1 splits events with `split(/\n\n/)`, so its parser fails on a stream whose lines end in CRLF or
+in a lone carriage return (CR) ([issue #49](https://github.com/dogganidhal/agui-inspector/issues/49)). The client
+loses the run. The next request then has neither the assistant's reply nor the updated state, although the recording
+and the conversation look correct.
+
+On 2026-10-03, the last version in `npm view @ag-ui/client versions` was 1.0.1 (published 2026-09-29), with no later
+version or dist-tag. The 1.0.1 tarball still split on line feeds (LF) only. The upstream fix,
+[ag-ui-protocol/ag-ui#2939](https://github.com/ag-ui-protocol/ag-ui/pull/2939), was opened on 2026-10-02. At the time
+of writing it is not reviewed, merged or released, so the pin stays at 1.0.1.
+
+Until a release contains the fix, the runtime gives the client a copy of the response with LF line endings
+(`packages/inspector/src/core/runtime/line-endings.ts`). The recorder clones the response first, so recorded
+envelopes, arrival order and findings keep the server's bytes. The recorder's own frame reader still splits on all
+three delimiters. Nothing else about the client's input changes. This is the only exception to "the
+client's stream is untouched", written into principle I of the
+[constitution](https://github.com/dogganidhal/agui-inspector/blob/main/.specify/memory/constitution.md) and described
+in [Architecture and UI internals](./internals.mdx#the-recorder).
+
+LF, CRLF, CR and streams that mix them give the same messages, state and outcomes, including interrupt and client
+tool continuations. No other line ending is supported. A frame that is not valid JSON still ends the client's run as a
+finding, and capture continues.
+
+Two tests check this:
+
+- `packages/inspector/tests/runtime/line-endings.test.ts` checks the next request body (state and message roles)
+  after a run over each line ending.
+- `packages/inspector/tests/foundation/compatibility.test.ts` pins the client's LF-only framing.
+
+When the compatibility test fails after an update, remove the copy: delete `line-endings.ts` and its call in
+`runtime/index.ts`, remove the exception from principle I, from the
+[MVP specification](https://github.com/dogganidhal/agui-inspector/blob/main/specs/001-inspector-mvp/spec.md) and from
+the internals page, and delete this section.
+
+### Other findings
+
+- `@ag-ui/a2ui-middleware` imports Node's `crypto` at module scope. `scripts/build.mjs` resolves that import to a
+  small browser replacement: `randomUUID` comes from Web Crypto, and `createHash` throws.
+- `clarinet`, which the middleware depends on, calls `require("stream")` inside a try/catch. The browser bundle keeps
+  that guarded call.

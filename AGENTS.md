@@ -23,7 +23,7 @@ static assets. A public demo runs on GitHub Pages. Nothing is published to npm o
 | `examples/fastapi` | Embedded example host. |
 | `tests/e2e` | Playwright specs. `tests/demo`, `tests/ci`, `tests/release` and `tests/benchmarks` hold unit tests for those areas. |
 | `scripts` | Build, test runner, bundle budget, CI gate, Python packaging, changeset versioning. |
-| `docs` | User and developer documentation. Several tests read these files. |
+| `website` | The docs site (Next.js static export with Fumadocs, its own lockfile, not a workspace). Pages are MDX in `website/content/docs`; several tests read them. `docs/` keeps only the frozen product brief and the README screenshots. |
 | `specs`, `.specify` | Spec Kit feature specs, plans and tasks, and the constitution at `.specify/memory/constitution.md`. |
 | `branding` | The mark, the icon and the social preview. |
 
@@ -61,7 +61,7 @@ These come from the [constitution](.specify/memory/constitution.md). Read it bef
   recordings, views, logs or exports. The recorder never reads headers.
 - Every one of the 31 baseline event types keeps a frames-list view and a fixture test. Changing protocol support
   updates views, fixtures and docs together.
-- Dependencies: exact versions, committed lockfile, and a row in `docs/dependencies.md` with the purpose and the
+- Dependencies: exact versions, committed lockfile, and a row in `website/content/docs/dependencies.mdx` with the purpose and the
   alternative that falls short (a test enforces it). Prefer the platform or an existing dependency.
 - Behavior changes need a regression test. End-to-end tests run against `examples/reference-agent`, never a model or an
   outside service.
@@ -70,12 +70,12 @@ These come from the [constitution](.specify/memory/constitution.md). Read it bef
 
 ## Things tests check that are easy to miss
 
-- `docs/development.md` must mention every root `npm run` script. Add a script, document it.
-- `docs/event-views.md` maps each event type, and `docs/conversation.md` covers each control.
+- `website/content/docs/development.mdx` must mention every root `npm run` script. Add a script, document it.
+- `website/content/docs/event-views.mdx` maps each event type, and `website/content/docs/runs.mdx` covers each control.
 - The brand mark exists in four copies (`branding/mark.svg`, `branding/icon.svg`, `icons.mark` in
   `views/theme/primitives.tsx`, and the favicon data URI in both `index.html` files). Change all or none. Repo assets stay
   black and white; adopters recolor through `--agui-accent`.
-- Workflows pin every action to a full commit SHA. `ci.yml` only checks, `pages.yml` only deploys the demo, and
+- Workflows pin every action to a full commit SHA. `ci.yml` only checks, `pages.yml` only deploys the demo and the docs site, and
   `release-python.yml` is the only publisher; tests fail if triggers or permissions widen.
 - Python package versions move only through Changesets. A change to what the wheel does or ships adds a changeset
   (`npx changeset`, package `agui-inspector-python`). Never edit versions by hand.

@@ -4,7 +4,7 @@
 # from the tagged commit with the strict gate, and publishes them through PyPI trusted publishing. Only the publish
 # job holds the OIDC token for it, and it runs no repository code. No PyPI token is stored anywhere.
 # The trusted publisher on PyPI, the `pypi` environment and the repository's pull request setting are the maintainer's
-# to configure (docs/distribution.md); nothing here changes a setting.
+# to configure (website/content/docs/releases.mdx); nothing here changes a setting.
 name: Release Python
 
 on:

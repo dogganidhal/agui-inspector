@@ -9,6 +9,6 @@ The mark is an agent (the solid dot) joined to a UI (the outlined square). The l
 | `social-preview.png` | The 1280 by 640 card GitHub shows when the repository is linked, rendered at 2x from `icon.svg`. Upload it under Settings, General, Social preview. |
 
 - The repo's own assets stay black and white. Don't add a color, gradient or outline to the mark.
-- The inspector's top bar draws the mark in `--agui-accent`, so an adopter's theme recolors it there. See [theming](../docs/theming.md).
+- The inspector's top bar draws the mark in `--agui-accent`, so an adopter's theme recolors it there. See [theming](https://dogganidhal.github.io/agui-inspector/docs/theming/).
 - Keep the 2 px round stroke. The mark stays legible down to 16 px.
 - The favicon is `icon.svg` inlined as a data URI in `packages/inspector/src/app/index.html` and `demo/index.html`. A test fails if either copy, the two SVGs or the in-app icon stop matching.

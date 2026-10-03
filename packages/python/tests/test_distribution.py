@@ -200,14 +200,16 @@ class DistributionTest(unittest.TestCase):
         self.assertIsNone(re.search(r"^\s*(tags|release|workflow_dispatch|push):", text, re.M))
         self.assertIsNone(re.search(r"\bpublish\b|pypi|npm publish|gh release", text, re.I))
 
-    def test_the_pages_workflow_deploys_the_demo_from_main_and_ships_no_package(self):
+    def test_the_pages_workflow_deploys_the_demo_and_docs_from_main_and_ships_no_package(self):
         workflows = sorted(p.name for p in (REPO / ".github" / "workflows").glob("*.yml"))
         self.assertEqual(["ci.yml", "pages.yml", "release-python.yml"], workflows)
         text = (REPO / ".github" / "workflows" / "pages.yml").read_text()
         self.assertIn("branches: [main]", text)
         self.assertIsNone(re.search(r"^\s*(tags|release|pull_request|pull_request_target|schedule):", text, re.M))
         self.assertIsNone(re.search(r"\bpublish\b|pypi|npm publish|uv publish|twine|gh release|git tag|attest", text, re.I))
-        self.assertIn("path: .build/public-demo", text)
+        # The uploaded directory is the demo merged with the docs site, never a package build.
+        self.assertIn("path: .build/pages", text)
+        self.assertIn("for (const dir of ['.build/public-demo', 'website/out'])", text)
 
     def test_the_release_workflow_versions_with_changesets_and_publishes_only_through_trusted_publishing(self):
         workflows = REPO / ".github" / "workflows"
