@@ -3,7 +3,9 @@
 `agui-inspector` is the approved package name on npm and PyPI (gate G-02). On 2026-10-02 it was unregistered on
 both registries. Nothing is published today. The Python release workflow exists, but no tag has run it, both
 package manifests are still private, and the npm release is not set up. This page lists what has to be true
-before a release and how to cut the Python one.
+before a release and how to cut the Python one. [ROADMAP.md](../ROADMAP.md#current-status) holds the one current
+status summary. Until a release exists, run the package from a source checkout, as the
+[README](../README.md#embed-in-python) and [embedding](embedding.md#working-from-a-source-checkout) describe.
 
 ## Current state
 

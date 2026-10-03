@@ -165,7 +165,8 @@ on the tagged commit; publishing is still the maintainer's decision, see `docs/d
 ## What exists and what is still missing
 
 The MVP is implemented on `main`. Release verification is not complete; the table separates what is
-checked by the gate from what is still open.
+checked by the gate from what is still open. The roadmap's [current status](../ROADMAP.md#current-status) is the one
+summary of the release, including the publication gates.
 
 | Check | Status |
 | --- | --- |
@@ -175,7 +176,7 @@ checked by the gate from what is still open.
 | End-to-end tests and network-allowlist checks | Present under `tests/e2e`. |
 | Python package and tests | Present (slice L06). Packaging and tests run through `npm run package:python` and the uv commands in [embedding](embedding.md). |
 | 5,000-frame benchmark fixture, manifest and browser measurement | Present (slices F03 and L04). |
-| Public demo build, worker typecheck, isolation checks and browser tests | Present (feature 002, slice P03); run by `npm run check:ci`. The first Pages deployment happens when `pages.yml` reaches `main`. |
+| Public demo build, worker typecheck, isolation checks and browser tests | Present (feature 002, slice P03); run by `npm run check:ci`. `pages.yml` has deployed the demo from `main` since 2026-10-02. |
 | 5,000-frame responsiveness certification (SC-009) | Pending: measured on an Apple M4 Pro with headless Chromium (development evidence only); the headed Mac mini M2 run is pending with the maintainer. |
 
 The foundation tests prove that the pinned baseline works together: the 31 event types, the fetch

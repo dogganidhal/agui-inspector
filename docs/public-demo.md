@@ -102,11 +102,20 @@ HTTP to `localhost` or `127.0.0.1`, with no allowlist and no approval prompt fro
 apply) · no telemetry · headers never recorded`. The page is not a proxy. Your browser sends the request straight to your
 server, with no cookies, and the token you type stays in memory and goes out only under the header you choose.
 
+- **First use.** Type the endpoint in the connection bar and press Use endpoint (or Enter). Typing alone changes nothing.
+  If the server wants a token, set it after that: changing the endpoint clears the token. Open the Authentication control,
+  keep the header name `Authorization` and type the complete header value in the Token field, for example
+  `Bearer <your-token>`. The inspector sends it as typed and adds no scheme. A page that is not embedded sends no cookies,
+  so this header is the only credential the playground can present. [Hosted](hosted.md#what-goes-in-the-authentication-control)
+  lists the values for Bearer, Basic and API-key headers.
 - **CORS.** Your server has to allow the page's origin, `https://dogganidhal.github.io`. A refusal is shown as the failure it
-  is; the inspector does not work around it.
+  is; the inspector does not work around it. [Hosted](hosted.md#allow-the-page-in-your-own-server) has a narrowly scoped
+  FastAPI setup you can copy, and a `curl` check for the preflight.
 - **Local servers.** Use `http://localhost:<port>`. `http://127.0.0.1:<port>` is also accepted. IPv6 (`http://[::1]:…`) is
   refused: browsers do not agree on how a content security policy names it. Your browser may also ask permission before a
   public page reaches a local address. That prompt is the browser's, not the inspector's, and the inspector cannot answer it.
+  Until you allow it, the browser blocks the request and the exchange shows as failed. See
+  [the browser's permission](hosted.md#the-browsers-permission-for-local-servers).
 - **Mixed content.** Plain HTTP to anything but those two local hosts is refused before a request is made.
 - **What is recorded.** Frames and bodies are kept as your server sent them. If a server repeats a credential you typed, the
   copy in the recording is unchanged, and the export dialog warns you before it writes a file. See

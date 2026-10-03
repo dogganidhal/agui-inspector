@@ -188,8 +188,10 @@ browser's own rules apply:
 - CORS: the agent must allow this page's origin: `Access-Control-Allow-Origin` with the page's
   origin, `Access-Control-Allow-Methods: POST, OPTIONS`, and `Access-Control-Allow-Headers` naming
   `Content-Type`, `Accept` and the header the token travels in. A reply without these is blocked.
-- Private network access: a page on a public address that calls a loopback or private address needs
-  the target to answer the preflight with `Access-Control-Allow-Private-Network: true`.
+- Local network access: a page on a public address that calls a loopback or private address is checked
+  apart from CORS. Depending on the browser, the visitor sees a permission prompt, or the browser sends a
+  preflight with `Access-Control-Request-Private-Network: true` and the target has to answer
+  `Access-Control-Allow-Private-Network: true`. See [the browser's permission](#the-browsers-permission-for-local-servers).
 - Secure context: an `https` page cannot call a plain `http` target, except for loopback addresses.
 
 When the browser blocks a request, it tells the page only that the fetch failed. The inspector shows
@@ -203,6 +205,99 @@ cleared on reload or when the target changes. Redirects are never followed.
 The footer of the inspection pane states the facts for the running mode: for example
 `7 exchanges · 54 frames · requests only to this origin and https://agent.example · no telemetry · headers never recorded`.
 With visitor-chosen targets it names that scope instead, as described above.
+
+## Allow the page in your own server
+
+This is for a server you run, reached from the public playground or from a hosted copy of the page. An embedded
+page shares your server's origin and needs none of it.
+
+A FastAPI server needs one middleware. This setup allows only the public page, and only the requests a run sends:
+
+```python
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://dogganidhal.github.io"],
+    allow_methods=["POST"],
+    allow_headers=["Content-Type", "Accept", "Authorization"],
+    allow_private_network=True,
+)
+```
+
+- `allow_origins` holds one origin: scheme, host and port, with no path and no `*`. For your own hosted copy of the
+  page, use that page's origin instead.
+- `allow_methods` is `POST`, the method of a run. Add the method of any preparation request the agent's preset
+  declares, and `GET` if the configuration names a capabilities URL on this server.
+- `allow_headers` names what the page sends. `Content-Type` and `Accept` go with every run. `Authorization` is the
+  header the token uses by default. The `*` wildcard does not cover it, so list it. If your token travels in another
+  header, list that header instead.
+- Credentials stay off. The page sends no cookies, so there is nothing for `allow_credentials` to allow, and it must
+  never be combined with a wildcard origin.
+- `allow_private_network=True` answers the preflight some browsers send when a public page calls a local address. It
+  only applies to the origin listed above. Starlette 1.7.0, the version this repository pins, accepts it. Leave it out
+  for a server that is not on a local address.
+
+Check the preflight before you open the page. With `http://localhost:8000/agent` as the endpoint:
+
+```sh
+curl -si -X OPTIONS http://localhost:8000/agent \
+  -H 'Origin: https://dogganidhal.github.io' \
+  -H 'Access-Control-Request-Method: POST' \
+  -H 'Access-Control-Request-Headers: content-type,accept,authorization'
+```
+
+The answer is a 200 that carries these headers:
+
+```
+access-control-allow-origin: https://dogganidhal.github.io
+access-control-allow-methods: POST
+access-control-allow-headers: Accept, Accept-Language, Authorization, Content-Language, Content-Type
+```
+
+The same request with another `Origin` gets a 400 `Disallowed CORS origin` and no `access-control-allow-origin`
+header, so the browser refuses it. The run itself, a `POST` with an `Origin` header, comes back with
+`access-control-allow-origin: https://dogganidhal.github.io` beside the event stream.
+
+### The browser's permission for local servers
+
+A public page that calls `localhost` reaches into the visitor's own machine, and browsers guard that apart from CORS.
+Chrome 142 and later asks the visitor to allow local network access the first time the page tries. Other browsers and
+versions may send the private network preflight that `allow_private_network=True` answers. Until the request is
+allowed, the browser stops it before it reaches your server, and the inspector shows a failed exchange that lists the
+likely causes.
+
+The inspector cannot answer that prompt for the visitor. Allow it in the browser's permission
+settings for the page, then send again. Do not switch the check off with launch flags or extensions, which remove the
+protection for every site.
+
+### What goes in the Authentication control
+
+Press Use endpoint first, because changing the endpoint clears the token. Then open the Authentication control. The
+Token field takes the complete header value, which the inspector sends as typed:
+
+| Your server expects | Header name | Token field |
+| --- | --- | --- |
+| `Authorization: Bearer <token>` | `Authorization` | `Bearer <token>` |
+| `Authorization: Basic <base64 of user:password>` | `Authorization` | `Basic <base64 of user:password>` |
+| `X-Api-Key: <key>` | `X-Api-Key` | `<key>` |
+
+A header other than `Authorization` also has to appear in `allow_headers`. The token lives in memory, goes only to the
+target and is cleared on reload. See [the token](conversation.md#the-token).
+
+### A server to try it against
+
+The model-free reference agent is a local server that allows exactly one page origin and streams one scripted run.
+From a checkout after `npm ci --ignore-scripts`:
+
+```sh
+node examples/reference-agent/server.ts --port 8787 --allow-origin https://dogganidhal.github.io
+```
+
+It prints `{"url": "http://127.0.0.1:8787"}`. In the playground, type `http://localhost:8787/agent`, press Use endpoint
+and send a message. Expect one run with its frames. The browser may ask for local network permission first.
 
 ## An imported recording
 
