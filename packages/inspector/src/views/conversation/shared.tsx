@@ -31,7 +31,7 @@ export const DERIVED_NOTE = 'Derived from frame offsets, not received';
 /** "frame #12": where the evidence for an entry sits in its exchange's raw frames. */
 export function FrameRef({ frameId, frames }: { frameId: FrameId; frames: ReadonlyMap<FrameId, RawFrame> }): ReactElement {
   const frame = frames.get(frameId);
-  return <span className="agui-conv-mono agui-conv-faint">{frame ? `frame #${frame.index}` : 'frame'}</span>;
+  return <span className="agui-conv-mono agui-conv-evidence">{frame ? `frame #${frame.index}` : 'frame'}</span>;
 }
 
 /**

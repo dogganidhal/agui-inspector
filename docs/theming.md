@@ -120,7 +120,7 @@ add one without changing the theme.
 | `--sunk` | `fg` 4% into `bg` | Code blocks, inputs, selected rows |
 | `--hover` | `fg` 5.5% | Row and button hover |
 | `--line`, `--line-2` | `fg` 10% and 18% | Dividers, control borders |
-| `--muted`, `--faint` | `fg` 64% and 40% | Secondary text; decoration only |
+| `--muted`, `--faint` | `fg` 64% and 40% | Secondary text, which includes the conversation's frame references and offsets; `--faint` is for decoration only |
 | `--acc-ink`, `--acc-soft`, `--acc-line` | Accent mixed into `fg` or `bg` | Accent text, fills, borders and focus halos |
 | `--err`, `--warn`, `--ok` and `-soft` fills | `oklch()` at fixed hues 27, 70 and 150 | Findings, outcomes, status codes |
 | `--f-text`, `--f-tool`, `--f-reason`, `--f-state`, `--f-activity`, `--f-neutral` | `oklch()` at hues 255, 300, 200, 75 and 350; neutral is `--muted` | Event family dots and timeline ticks |
@@ -129,6 +129,10 @@ add one without changing the theme.
 | `--r`, `--r-sm`, `--r-xs` | Radius × 1, 0.7, 0.45 | Cards, controls, tags |
 | `--pop`, `--lift`, `--scrim` | Shadows and the dialog backdrop | Floating layers, raised controls |
 | `--ease` | `cubic-bezier(.16, 1, .3, 1)` | Every transition |
+
+In the default light and dark themes, the conversation's frame references and offsets are at least 4.5:1
+against the background behind them. `tests/e2e/hosted/evidence-contrast.spec.ts` measures this in the built
+page. Colors an adopter sets are not checked.
 
 The derived tokens have short unprefixed names, so they are declared on the inspector's mount
 element, `#root`, together with their dark variants, and never on the document's `:root`. A host

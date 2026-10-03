@@ -26,7 +26,8 @@
 
 .agui-conv-mono { font-family: var(--agui-font-mono); }
 .agui-conv-muted { color: var(--muted); }
-.agui-conv-faint { color: var(--faint); font-size: 11px; }
+/* Frame references and offsets show where a value came from, so they use --muted. --faint is for decoration. */
+.agui-conv-evidence { color: var(--muted); font-size: 11px; }
 /* Long received values wrap instead of widening the pane. */
 .agui-conv-value { overflow-wrap: anywhere; white-space: pre-wrap; min-width: 0; }
 .agui-conv-empty { margin: 0; color: var(--muted); }
