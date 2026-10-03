@@ -425,10 +425,36 @@ npm run build && npm run check:bundle
 | What | Command |
 | --- | --- |
 | Package, wheel and sdist | `npm run package:python` |
-| Python tests | `uv sync --project packages/python --locked --extra embedded --group test`, then `uv run --project packages/python python -m unittest discover -s packages/python/tests` |
+| Python tests | The commands below |
 | Browser tests against the FastAPI example | `npm run test:e2e -- tests/e2e/python` |
 
+Run the Python tests from the repository root. CI uses uv with the lockfile. With pip, an editable install in a
+virtual environment works too (`--group` needs pip 25.1 or newer):
+
+```sh tab="pip" tab-group="python-installer"
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e "packages/python[embedded]" --group packages/python/pyproject.toml:test
+python -m unittest discover -s packages/python/tests
+```
+
+```sh tab="uv" tab-group="python-installer"
+uv sync --project packages/python --locked --extra embedded --group test
+uv run --project packages/python python -m unittest discover -s packages/python/tests
+```
+
 `packages/python/.python-version` pins Python 3.10, the minimum version, so CI and the default local run use it. To
-test another version, run `uv run --python 3.14 ...` with its own `UV_PROJECT_ENVIRONMENT`, so the two environments
-do not overwrite each other. `test_distribution.py` and the browser tests need Node and a built
+test another version, give it an environment of its own, so the two environments do not overwrite each other:
+
+```sh tab="pip" tab-group="python-installer"
+python3.14 -m venv .venv-3.14
+source .venv-3.14/bin/activate
+pip install -e "packages/python[embedded]" --group packages/python/pyproject.toml:test
+python -m unittest discover -s packages/python/tests
+```
+
+```sh tab="uv" tab-group="python-installer"
+UV_PROJECT_ENVIRONMENT=.venv-3.14 uv run --python 3.14 --project packages/python \
+  --extra embedded --group test python -m unittest discover -s packages/python/tests
+``` `test_distribution.py` and the browser tests need Node and a built
 `packages/inspector/dist`. Without them, those tests fail instead of being skipped.

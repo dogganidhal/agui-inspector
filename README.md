@@ -49,13 +49,17 @@ The playground sends no cookies, so a token in that header is the only credentia
 
 ## Embed in Python
 
+Python is the first server language with an embedded helper, not the only one: JavaScript helpers for Express, Hono
+and Next.js are planned for 1.0.0, and a server in any language can already use the hosted page or the static assets.
+
 `mount_inspector` serves the inspector page from your Starlette or FastAPI app, on the same origin as your agents. The
 Python package is private and unpublished, and so is the npm package. There is no registry install yet; build the
 package from a source checkout.
 
 ### Run the example from a source checkout
 
-You need git, Node 24 or newer with npm, and [uv](https://docs.astral.sh/uv/), which provides Python 3.10 or newer.
+You need git, Node 24 or newer with npm, and [uv](https://docs.astral.sh/uv/), which builds the wheel and provides
+Python 3.10 or newer. Once the wheel is built, pip or uv can install and run it.
 
 ```sh
 git clone https://github.com/dogganidhal/agui-inspector.git
@@ -66,11 +70,22 @@ npm run package:python
 
 `npm run package:python` builds the page, copies it into the Python package and builds a wheel and an sdist into
 `packages/python/dist`. Then start the model-free FastAPI example. Its routes sit behind HTTP Basic authentication, so
-you choose the user and password:
+you choose the user and password. With uv:
 
 ```sh
 EXAMPLE_USER=dev EXAMPLE_PASSWORD=choose-a-password EXAMPLE_DEBUG=1 \
   uv run --project packages/python --locked --extra embedded --group test \
+  python examples/fastapi/app.py --port 8000
+```
+
+With pip 25.1 or newer, in a virtual environment:
+
+```sh
+python3 -m venv .venv
+source .venv/bin/activate
+pip install "packages/python/dist/agui_inspector-0.1.0-py3-none-any.whl[embedded]" \
+  --group packages/python/pyproject.toml:test
+EXAMPLE_USER=dev EXAMPLE_PASSWORD=choose-a-password EXAMPLE_DEBUG=1 \
   python examples/fastapi/app.py --port 8000
 ```
 
@@ -81,10 +96,16 @@ the URL.
 ### Mount it in your own app
 
 Install the wheel from `packages/python/dist` into your project's environment. Point the path at your checkout; the file
-name carries the version:
+name carries the version. With pip:
 
 ```sh
-pip install "/path/to/agui-inspector/packages/python/dist/agui_inspector-0.0.0-py3-none-any.whl[embedded]"
+pip install "/path/to/agui-inspector/packages/python/dist/agui_inspector-0.1.0-py3-none-any.whl[embedded]"
+```
+
+With uv, in a uv project:
+
+```sh
+uv add "agui-inspector[embedded] @ /path/to/agui-inspector/packages/python/dist/agui_inspector-0.1.0-py3-none-any.whl"
 ```
 
 ```python

@@ -3,6 +3,8 @@ title: Embed in Starlette or FastAPI
 description: Serve the inspector from your own Starlette or FastAPI application with one helper call.
 ---
 
+Python is the first server language with an embedded helper, and it will not be the only one: JavaScript helpers for Express, Hono and Next.js are planned for 1.0.0. A server in any other language can already use the [hosted page](./hosted.mdx) or [serve the static assets](#serving-the-assets-from-another-server).
+
 The Python package `agui-inspector` (MIT) contains the prebuilt inspector files and one helper, `mount_inspector`, that serves them from your Starlette or FastAPI application. The host needs no Node toolchain, and the helper downloads nothing at startup. The package stays private and unpublished until the first [release](./releases.mdx). Until then, build it from a [source checkout](#working-from-a-source-checkout).
 
 The helper adds a separate page to your server. That page sends its own requests to your agent URLs, so it records the runs it starts. It does not attach to the agent that your own frontend runs, and it does not see that agent's requests. Watching your application's `AbstractAgent` is the planned in-app mode (see the [roadmap](https://github.com/dogganidhal/agui-inspector/blob/main/ROADMAP.md#100-stable-target)). It is not built yet.
@@ -12,13 +14,25 @@ The helper adds a separate page to your server. That page sends its own requests
 <Steps>
 <Step>
 
-Install the package with the `embedded` extra, which adds Starlette. The package is not on PyPI yet, so build the wheel from a [source checkout](#working-from-a-source-checkout) and install that file. The file name contains the version:
+Install the package with the `embedded` extra, which adds Starlette. The package is not on PyPI yet, so build the wheel from a [source checkout](#working-from-a-source-checkout) and install that file. The file name contains the version. Use pip in a virtual environment, or uv in a uv project:
 
-```sh
-pip install "/path/to/agui-inspector/packages/python/dist/agui_inspector-0.0.0-py3-none-any.whl[embedded]"
+```sh tab="pip" tab-group="python-installer"
+pip install "/path/to/agui-inspector/packages/python/dist/agui_inspector-0.1.0-py3-none-any.whl[embedded]"
 ```
 
-After the first release, `pip install "agui-inspector[embedded]"` replaces this step.
+```sh tab="uv" tab-group="python-installer"
+uv add "agui-inspector[embedded] @ /path/to/agui-inspector/packages/python/dist/agui_inspector-0.1.0-py3-none-any.whl"
+```
+
+After the first release, install it from PyPI instead:
+
+```sh tab="pip" tab-group="python-installer"
+pip install "agui-inspector[embedded]"
+```
+
+```sh tab="uv" tab-group="python-installer"
+uv add "agui-inspector[embedded]"
+```
 
 </Step>
 <Step>
@@ -104,9 +118,19 @@ One setup is not covered: a dependency on an application that mounts yours. Fast
 
 The guard must accept what a browser sends when it opens a page. A plain page load sends cookies and saved HTTP Basic credentials, but it cannot send a custom header. So a guard that accepts only `Authorization: Bearer <token>` blocks the inspector page itself. Typing a token into the page cannot help, because the page never loads. Guard the inspector paths with a session cookie, HTTP Basic or a proxy that adds the credential. Your agent routes behind that guard can still require a bearer token: the page's Authentication control sends one header with each agent request. Keep the header name `Authorization` and type the complete value, `Bearer <token>`, in the Token field. See [the token](./runs.mdx#the-token).
 
-[`examples/fastapi/app.py`](https://github.com/dogganidhal/agui-inspector/blob/main/examples/fastapi/app.py) is a host with no model. Middleware checks HTTP Basic authentication on every route. It reads `EXAMPLE_USER` and `EXAMPLE_PASSWORD` from the environment and mounts the inspector only when `EXAMPLE_DEBUG=1`. It streams one scripted run from `POST /agents/demo/stream`. From the repository root:
+[`examples/fastapi/app.py`](https://github.com/dogganidhal/agui-inspector/blob/main/examples/fastapi/app.py) is a host with no model. Middleware checks HTTP Basic authentication on every route. It reads `EXAMPLE_USER` and `EXAMPLE_PASSWORD` from the environment and mounts the inspector only when `EXAMPLE_DEBUG=1`. It streams one scripted run from `POST /agents/demo/stream`. From the repository root, build the package, then run the example. With pip, a virtual environment holds the package and the example's FastAPI and uvicorn, which the package's `test` dependency group lists (`--group` needs pip 25.1 or newer). With uv, `uv run` uses the locked versions:
 
-```sh
+```sh tab="pip" tab-group="python-installer"
+npm run package:python
+python3 -m venv .venv
+source .venv/bin/activate
+pip install "packages/python/dist/agui_inspector-0.1.0-py3-none-any.whl[embedded]" \
+  --group packages/python/pyproject.toml:test
+EXAMPLE_USER=dev EXAMPLE_PASSWORD=choose-a-password EXAMPLE_DEBUG=1 \
+  python examples/fastapi/app.py --port 8000
+```
+
+```sh tab="uv" tab-group="python-installer"
 npm run package:python
 EXAMPLE_USER=dev EXAMPLE_PASSWORD=choose-a-password EXAMPLE_DEBUG=1 \
   uv run --project packages/python --locked --extra embedded --group test \
@@ -121,7 +145,7 @@ Any static file server can host the same inspector. The npm package exports `sta
 
 ## Working from a source checkout
 
-Nothing is on PyPI yet, so a checkout is how you run the package today. You need git, Node 24 or newer with npm, and [uv](https://docs.astral.sh/uv/).
+Nothing is on PyPI yet, so a checkout is how you run the package today. You need git, Node 24 or newer with npm, and [uv](https://docs.astral.sh/uv/): `npm run package:python` builds the wheel with `uv build`. Once the wheel is built, you can install and run it with pip or uv.
 
 ```sh
 git clone https://github.com/dogganidhal/agui-inspector.git

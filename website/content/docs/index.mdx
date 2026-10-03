@@ -35,7 +35,10 @@ For your own agent, pick one of these:
 
 ## Ways to run it
 
-It works with any AG-UI server over HTTP and Server-Sent Events (SSE). All modes use the same static bundle.
+It works with any AG-UI server over HTTP and Server-Sent Events (SSE), whatever language the server is written in. All
+modes use the same static bundle. The hosted page and the static assets work with any server. The embedded helper
+exists for Python first, and helpers for other languages follow: JavaScript helpers for Express, Hono and Next.js are
+planned for 1.0.0.
 
 | Mode | How it runs | Status |
 | --- | --- | --- |
@@ -43,7 +46,7 @@ It works with any AG-UI server over HTTP and Server-Sent Events (SSE). All modes
 | Embedded | A Python helper mounts it next to your Starlette or FastAPI agent routes, on the same origin. | Available from a [source checkout](./embedding.mdx#working-from-a-source-checkout) |
 | Static assets | Any other server serves the directory that the npm package's `staticAssetsPath` points to. | Available from a source checkout |
 
-[Project status and privacy](./status.mdx) lists the planned modes.
+[Project status and privacy](./status.mdx) lists the planned modes and helpers.
 
 ## What it promises
 

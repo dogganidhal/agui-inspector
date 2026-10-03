@@ -13,8 +13,10 @@ publishes, tags or releases nothing. The only workflow that publishes is the [Py
   TypeScript ship their binaries as optional platform packages, so they work without scripts.
 - For the end-to-end tests, a browser: `npx playwright install chromium`. `npm ci` never
   downloads it.
-- For the Python package and the full gate only, [uv](https://docs.astral.sh/uv/). The package needs Python 3.10 or
-  newer.
+- For the Python package and the full gate only, [uv](https://docs.astral.sh/uv/): `npm run package:python` builds
+  the wheel with `uv build`, and the gate runs the Python tests with uv. The package needs Python 3.10 or newer. To
+  install the package or run its tests by hand, pip works too; the commands are in
+  [Python package tests](./internals.mdx#python-package-tests).
 
 ## Make your first change
 
@@ -248,6 +250,9 @@ Then open `http://localhost:3000/agui-inspector/docs/`. `npm run build --prefix 
   `docs/reference/product-brief.md`, and the screenshots in `docs/images/`. Each screenshot has a light and a dark
   version, and the README and the pages share them. A page imports both and shows them with the `Screenshot`
   component, which picks the one that matches the reader's theme.
+- A Python install or run command comes in two versions, pip and uv, as consecutive code blocks with
+  `tab="pip"` and `tab="uv"` and the same `tab-group="python-installer"`. Fumadocs turns them into tabs, and the
+  reader's choice applies to every such block on every page.
 - `node scripts/record-showcase.mjs` records the animation at the top of the README and the introduction. It plays
   three scenes on the public demo in a fresh browser, once per theme, and replaces `docs/images/showcase-light.webp`
   and `showcase-dark.webp`, which the README shows, and `website/public/docs/showcase-light.mp4` and
