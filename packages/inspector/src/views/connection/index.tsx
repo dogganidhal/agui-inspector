@@ -24,6 +24,8 @@ import { Button, Card, CardBody, CardFooter, CardHeader, CodeBlock, Editor, Fiel
 export interface ConnectionViewExtras {
   /** Why the composer is disabled while answers are owed; the runtime's `notice`. */
   readonly notice?: string;
+  /** A response is still being recorded, so Stop stays available after the run has ended. The runtime's `capturing`. */
+  readonly capturing?: boolean;
   /** Names the deployment in the target bar; the assembly knows it from the startup policy. */
   readonly mode?: DeploymentMode;
   /** The agent picker, drawn before the endpoint field. The assembly supplies it, since agents belong to settings. */
@@ -153,7 +155,7 @@ export function TargetControls({ connection, mode, agentPicker, onChangeTarget, 
 // Composer
 // ---------------------------------------------------------------------------------------------
 
-export function Composer({ running, quickMessages, notice, onSend, onStop, onNewThread, error }: Pick<ConnectionViewProps, 'running' | 'quickMessages' | 'onSend' | 'onStop' | 'onNewThread' | 'error'> & Pick<ConnectionViewExtras, 'notice'>): ReactElement {
+export function Composer({ running, quickMessages, notice, capturing, onSend, onStop, onNewThread, error }: Pick<ConnectionViewProps, 'running' | 'quickMessages' | 'onSend' | 'onStop' | 'onNewThread' | 'error'> & Pick<ConnectionViewExtras, 'notice' | 'capturing'>): ReactElement {
   const boxId = useId();
   const [text, setText] = useState('');
   const sent = useRef(false);
@@ -202,7 +204,7 @@ export function Composer({ running, quickMessages, notice, onSend, onStop, onNew
             <Icon name="plus" size={14} />
             New thread
           </Button>
-          <Button small disabled={!running} onClick={onStop} aria-label="Stop">
+          <Button small disabled={!running && capturing !== true} onClick={onStop} aria-label="Stop">
             <Icon name="stop" size={14} />
             Stop
           </Button>
@@ -232,12 +234,12 @@ export function Composer({ running, quickMessages, notice, onSend, onStop, onNew
 
 /** The frozen entry export: the endpoint and authentication controls, then the composer. */
 export function ConnectionView(props: ConnectionViewProps & ConnectionViewExtras): ReactElement {
-  const { connection, running, quickMessages, error, notice, mode, onChangeTarget, onChangeAuth, onSend, onStop, onNewThread } = props;
+  const { connection, running, quickMessages, error, notice, capturing, mode, onChangeTarget, onChangeAuth, onSend, onStop, onNewThread } = props;
   return (
     <section aria-labelledby="connection-heading" data-view="connection" className="agui-conn">
       <h2 id="connection-heading">Connection</h2>
       <TargetControls connection={connection} onChangeTarget={onChangeTarget} onChangeAuth={onChangeAuth} {...(mode !== undefined && { mode })} />
-      <Composer running={running} quickMessages={quickMessages} onSend={onSend} onStop={onStop} onNewThread={onNewThread} {...(error !== undefined && { error })} {...(notice !== undefined && { notice })} />
+      <Composer running={running} quickMessages={quickMessages} onSend={onSend} onStop={onStop} onNewThread={onNewThread} {...(error !== undefined && { error })} {...(notice !== undefined && { notice })} {...(capturing !== undefined && { capturing })} />
     </section>
   );
 }

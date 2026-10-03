@@ -12,6 +12,11 @@
 //
 // Event-stream bytes go to the sink as they arrive. Splitting them into frames is the frame
 // reader's job; the recorder invents no frames, events or outcomes, including when a run is stopped.
+//
+// Capture has its own lifetime, apart from the request and from the protocol client: it ends when the
+// response body ends, fails or is stopped, and `onEnd` tells the caller when. A caller that passes a
+// signal can stop it. Once the signal aborts, the recorder keeps what it already read, reads and keeps
+// nothing more, and marks the exchange `user-stopped`, even if the response body never notices the abort.
 import type {
   Exchange,
   ExchangeId,
@@ -43,6 +48,18 @@ export interface RecorderClock {
   epoch(): number;
 }
 
+/** `record` may also take these; the frozen interface needs no more than two parameters. */
+export interface CaptureOptions {
+  /** Aborting it stops capture: the exchange becomes `user-stopped` and nothing read after that is kept. */
+  readonly signal?: AbortSignal;
+  /** Called once, after the exchange's last update, however capture ended. */
+  readonly onEnd?: () => void;
+}
+
+export interface CaptureRecorder extends Recorder {
+  record(request: RecordedRequest, send: () => Promise<Response>, capture?: CaptureOptions): Promise<Response>;
+}
+
 const browserClock: RecorderClock = { now: () => performance.now(), epoch: () => Date.now() };
 
 function isAbort(error: unknown): boolean {
@@ -62,12 +79,12 @@ function parseJson(text: string): JsonValue | undefined {
   }
 }
 
-export function createRecorder(sink: RecorderSink, clock: RecorderClock = browserClock): Recorder {
+export function createRecorder(sink: RecorderSink, clock: RecorderClock = browserClock): CaptureRecorder {
   let exchanges = 0;
   let findings = 0;
 
   return {
-    async record(request: RecordedRequest, send: () => Promise<Response>): Promise<Response> {
+    async record(request: RecordedRequest, send: () => Promise<Response>, capture: CaptureOptions = {}): Promise<Response> {
       const id = `exchange-${(exchanges += 1)}`;
       const dispatchedAt = clock.now();
       let captureFailed = false;
@@ -86,6 +103,14 @@ export function createRecorder(sink: RecorderSink, clock: RecorderClock = browse
         } catch (error) {
           if (!captureFailed) addFinding('capture', `Capture failed: ${describe(error)}`);
           captureFailed = true;
+        }
+      };
+      /** Capture is over, whichever way it ended. Each path below reaches this once; a failing listener changes nothing. */
+      const end = () => {
+        try {
+          capture.onEnd?.();
+        } catch {
+          // The caller's bookkeeping must not reach the recording or the client.
         }
       };
       const finish = (transport: TransportState, patch: ExchangePatch = {}) =>
@@ -118,6 +143,7 @@ export function createRecorder(sink: RecorderSink, clock: RecorderClock = browse
         response = await send();
       } catch (error) {
         fail(error);
+        end();
         throw error;
       }
 
@@ -130,28 +156,38 @@ export function createRecorder(sink: RecorderSink, clock: RecorderClock = browse
       } catch (error) {
         // The client still gets its response; the exchange keeps its last known state.
         addFinding('capture', `Response body could not be captured: ${describe(error)}`);
+        end();
         return response;
       }
 
       void (async () => {
         const reader = branch.body?.getReader();
-        if (!reader) return finish('completed');
+        if (!reader) {
+          finish('completed');
+          return end();
+        }
         const decoder = new TextDecoder();
         let body = '';
         let failure: { error: unknown } | undefined;
+        // The signal is what ends the connection. The recorder only stops reading and keeping: it does not
+        // cancel the clone, so a source that has not noticed the abort is left to its owner.
+        const { signal } = capture;
+        const aborted = signal && new Promise<undefined>((resolve) => (signal.aborted ? resolve(undefined) : signal.addEventListener('abort', () => resolve(undefined), { once: true })));
         try {
-          for (;;) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            if (!streaming) body += decoder.decode(value, { stream: true });
-            else if (!captureFailed) guard(() => sink.appendChunk(id, value, clock.now() - dispatchedAt));
+          while (!signal?.aborted) {
+            const next = await (aborted ? Promise.race([reader.read(), aborted]) : reader.read());
+            if (signal?.aborted || next === undefined || next.done) break;
+            if (!streaming) body += decoder.decode(next.value, { stream: true });
+            else if (!captureFailed) guard(() => sink.appendChunk(id, next.value, clock.now() - dispatchedAt));
           }
         } catch (error) {
           failure = { error };
         }
         const patch: ExchangePatch = streaming ? {} : { responseBody: body + decoder.decode() };
-        if (failure) fail(failure.error, patch);
+        if (signal?.aborted) finish('user-stopped', patch);
+        else if (failure) fail(failure.error, patch);
         else finish('completed', patch);
+        end();
       })();
 
       return response;

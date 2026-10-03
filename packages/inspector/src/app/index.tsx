@@ -44,6 +44,8 @@ export interface AppExtras {
   readonly capabilities?: CapabilitiesState;
   /** Why the composer is disabled while something is owed or an imported recording is open. */
   readonly notice?: string;
+  /** A response is still being recorded, so Stop stays available even when the run has ended. */
+  readonly capturing?: boolean;
   /** An imported recording is open: inspection only, nothing can be sent. */
   readonly recording?: boolean;
   readonly renderActivity?: (entry: ActivityEntry) => ReactNode;
@@ -98,7 +100,7 @@ function ThemeSwitch(): ReactElement {
  * The app shell: a fixed top bar above two panes that scroll on their own, conversation left and
  * inspection right. Under 960 px one pane shows and a segmented control switches between them.
  */
-export function App({ settings, connection, conversation, inspection, mode, allowedOrigins = [], allowVisitorTargets = false, capabilities, notice, recording, renderActivity, warnings = [] }: AppProps & AppExtras): ReactElement {
+export function App({ settings, connection, conversation, inspection, mode, allowedOrigins = [], allowVisitorTargets = false, capabilities, capturing, notice, recording, renderActivity, warnings = [] }: AppProps & AppExtras): ReactElement {
   const [pane, setPane] = useState<Pane>('conversation');
   const [tab, setTab] = useState<Tab>('inspection');
 
@@ -162,6 +164,7 @@ export function App({ settings, connection, conversation, inspection, mode, allo
                 onNewThread={connection.onNewThread}
                 {...(connection.error !== undefined && { error: connection.error })}
                 {...(notice !== undefined && { notice })}
+                {...(capturing !== undefined && { capturing })}
               />
             </section>
           </div>
@@ -290,6 +293,7 @@ function Root({ started, storage }: { started: Started; storage?: StorageLike })
     allowVisitorTargets: policy.allowVisitorTargets === true,
     recording,
     capabilities,
+    capturing: state.capturing,
     warnings: started.warnings,
     renderActivity: (entry) => a2uiActivity(entry, { renderEnabled: profile.renderA2ui, onAction }),
     ...(recording ? { notice: RECORDING_NOTICE } : state.notice !== undefined && { notice: state.notice }),

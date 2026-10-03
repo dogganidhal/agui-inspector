@@ -8,7 +8,7 @@ import type { Interrupt } from '@ag-ui/core';
 import { RunAgentInputSchema } from '@ag-ui/core/schemas';
 import type { JsonValue } from '../../src/contracts.ts';
 import { projectConversation, type MessageEntry } from '../../src/core/projection/index.ts';
-import { AGENT, bodyOf, embedded, eventStream, hosted, ok200, replyRoute, rig, sse, type Call, type Route } from './support.ts';
+import { AGENT, bodyOf, embedded, eventStream, hosted, ok200, openStream, replyRoute, rig, sse, type Call, type Route } from './support.ts';
 
 const TOKEN = 'synthetic-token-7f3a91';
 const support = { id: 'support', name: 'Support', url: AGENT, preset: { quickMessages: ['/help', 'Where is my order?'], forwardedProps: { tenant: 'acme' } } } as const;
@@ -613,4 +613,146 @@ test('draft values are kept while editing; an interrupt the run never reported c
   assert.deepEqual(runtime.getState().interrupts[0]?.draft, { ok: true });
   await runtime.answerInterrupt('nope', 'resolved');
   assert.match(runtime.getState().error ?? '', /no waiting interrupt nope/i);
+});
+
+// ---------------------------------------------------------------------------------------------
+// A recording stays cancellable until capture has ended, whatever became of the run or the request
+// ---------------------------------------------------------------------------------------------
+
+const pause = (ms = 25) => new Promise((resolve) => setTimeout(resolve, ms));
+const started = (runId = 'r') => sse([{ type: 'RUN_STARTED', threadId: 't', runId }]);
+const finished = (runId = 'r') => sse([{ type: 'RUN_FINISHED', threadId: 't', runId, outcome: { type: 'success' } }]);
+
+test('a raw request is still stoppable after its headers arrive on a response that never finishes', async () => {
+  const stream = openStream();
+  const { runtime, net, session, settle } = rig([(call) => (call.path === '/run' ? stream.response : undefined)]);
+  runtime.setTarget(AGENT);
+  stream.push(started());
+  await runtime.sendRaw('{}');
+  await pause();
+  const signal = net.on('/run')[0]?.signal as AbortSignal;
+  assert.equal(session().frames.length, 1, 'the frame that arrived with the headers is recorded');
+
+  runtime.stop();
+  assert.equal(signal.aborted, true, 'Stop reaches the request even though sendRaw has returned');
+  stream.push(finished());
+  const ended = await settle();
+
+  assert.equal(ended.exchanges[0]?.transport, 'user-stopped');
+  assert.equal(ended.exchanges[0]?.transportError, undefined, 'a stop is not a transport error');
+  assert.deepEqual(ended.frames.map((frame) => frame.eventType), ['RUN_STARTED'], 'what arrived after the stop is not accepted, and nothing was made up');
+  assert.deepEqual(ended.runs, []);
+  assert.equal(runtime.getState().error, undefined);
+  assert.equal(runtime.getState().capturing, false);
+});
+
+test('a conversation the protocol client rejected is still stoppable while its recording branch is open', async () => {
+  const stream = openStream();
+  const { runtime, net, session, settle } = rig([
+    (call) => {
+      if (call.path !== '/run') return undefined;
+      stream.push(sse([start(call), '{not json at all']));
+      return stream.response;
+    },
+  ]);
+  runtime.selectAgent(support);
+  await runtime.send('malformed');
+  await pause();
+  const signal = net.on('/run')[0]?.signal as AbortSignal;
+
+  assert.equal(runtime.getState().running, false, 'the client gave up on the stream');
+  assert.equal(signal.aborted, false, 'the recording is not stopped because the client rejected a frame');
+  assert.ok(session().findings.some((finding) => finding.kind === 'json' && finding.subject.type === 'run'));
+  stream.push(sse([{ type: 'STEP_STARTED', stepName: 'after the rejection' }]));
+  await pause();
+  assert.deepEqual(session().frames.map((frame) => frame.eventType), ['RUN_STARTED', undefined, 'STEP_STARTED'], 'capture carries on past the rejection');
+
+  const capturing = runtime.getState().capturing;
+  runtime.stop();
+  assert.equal(signal.aborted, true, 'Stop reaches the recording after the client promise settled');
+  assert.equal(capturing, true, 'Stop was available the whole time');
+  stream.push(finished());
+  const ended = await settle();
+
+  assert.equal(ended.exchanges[0]?.transport, 'user-stopped');
+  assert.deepEqual(ended.frames.map((frame) => frame.eventType), ['RUN_STARTED', undefined, 'STEP_STARTED'], 'partial evidence stays, later frames are refused');
+  assert.deepEqual(ended.runs[0]?.outcome, { kind: 'unknown' }, 'no terminal event was made up');
+  assert.equal(runtime.getState().error, undefined);
+  assert.equal(runtime.getState().capturing, false);
+});
+
+for (const [name, end] of [
+  ['Stop', (runtime: ReturnType<typeof rig>['runtime']) => runtime.stop()],
+  ['New thread', (runtime: ReturnType<typeof rig>['runtime']) => runtime.newThread()],
+  ['A target change', (runtime: ReturnType<typeof rig>['runtime']) => runtime.setTarget('https://agent.example/other')],
+] as const) {
+  test(`${name} ends every recording that is still open, a rejected conversation and a raw request alike`, async () => {
+    const streams = [openStream(), openStream()];
+    let served = 0;
+    const { runtime, net, settle } = rig([
+      (call) => {
+        if (call.path !== '/run') return undefined;
+        const stream = streams[served++] as ReturnType<typeof openStream>;
+        stream.push(served === 1 ? sse([start(call), '{not json at all']) : started());
+        return stream.response;
+      },
+    ]);
+    runtime.selectAgent(support);
+    await runtime.send('malformed');
+    await runtime.sendRaw('{}');
+    await pause();
+    const signals = net.on('/run').map((call) => call.signal as AbortSignal);
+    assert.deepEqual(signals.map((signal) => signal.aborted), [false, false]);
+    const capturing = runtime.getState().capturing;
+
+    end(runtime);
+    assert.deepEqual(signals.map((signal) => signal.aborted), [true, true]);
+    assert.equal(capturing, true);
+    for (const stream of streams) stream.push(finished());
+    const ended = await settle();
+
+    assert.deepEqual(ended.exchanges.map((exchange) => exchange.transport), ['user-stopped', 'user-stopped']);
+    assert.ok(ended.frames.every((frame) => frame.eventType !== 'RUN_FINISHED'), 'nothing arrived after the end was accepted');
+    assert.equal(runtime.getState().capturing, false);
+    assert.equal(runtime.getState().error, undefined);
+  });
+}
+
+test('capture is active while a run streams and over once the stream has ended, with nothing left to stop', async () => {
+  const { runtime, settle } = rig([replyRoute()]);
+  runtime.selectAgent(support);
+  const seen: boolean[] = [];
+  runtime.subscribe(() => seen.push(runtime.getState().capturing));
+  assert.equal(runtime.getState().capturing, false);
+  await runtime.send('hello');
+  await settle();
+  await pause();
+  assert.ok(seen.includes(true), 'the view could show Stop while the run was recorded');
+  assert.equal(runtime.getState().capturing, false);
+  assert.equal(runtime.getState().running, false);
+  runtime.stop();
+  assert.equal(runtime.getState().error, undefined, 'stopping when nothing is active changes nothing');
+
+  await runtime.sendRaw('{}');
+  await settle();
+  await pause();
+  assert.equal(runtime.getState().capturing, false, 'a raw request that finished leaves no controller behind');
+});
+
+test('a preparation whose answer is still being read stays stoppable after the run has been sent', async () => {
+  const stream = openStream();
+  const { runtime, net, settle } = rig([(call) => (call.path === '/prepare/slow' ? stream.response : undefined), replyRoute()]);
+  runtime.selectAgent({ ...support, preset: { prepare: [{ method: 'POST', path: '/prepare/slow' }] } });
+  await runtime.send('hello');
+  await pause();
+  const signal = net.on('/prepare/slow')[0]?.signal as AbortSignal;
+  assert.equal(runtime.getState().running, false);
+  const capturing = runtime.getState().capturing;
+
+  runtime.stop();
+  assert.equal(signal.aborted, true);
+  assert.equal(capturing, true, 'the preparation answer has not ended');
+  const ended = await settle();
+  assert.deepEqual(ended.exchanges.map((exchange) => [exchange.kind, exchange.transport]), [['preparation', 'user-stopped'], ['conversation', 'completed']]);
+  assert.equal(runtime.getState().capturing, false);
 });

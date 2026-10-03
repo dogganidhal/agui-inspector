@@ -393,6 +393,107 @@ test('aborting before a response arrives is a user stop and the abort reaches th
   assert.deepEqual(memory.findings, []);
 });
 
+/** A native stream the test feeds by hand. Its source never looks at the abort signal: only the recorder decides what is read. */
+function manualStream(status = 200) {
+  let source!: ReadableStreamDefaultController<Uint8Array>;
+  const response = new Response(new ReadableStream<Uint8Array>({ start: (controller) => void (source = controller) }), { status });
+  const encoder = new TextEncoder();
+  return { response, push: (text: string) => source.enqueue(encoder.encode(text)), close: () => source.close() };
+}
+const pause = (ms = 10) => new Promise((resolve) => setTimeout(resolve, ms));
+
+test('a stop signal ends capture even when the response body ignores it: partial evidence stays and later bytes are refused', async () => {
+  const stream = manualStream();
+  const stop = new AbortController();
+  let ends = 0;
+  const { memory, recorder } = setup();
+  stream.push('data: {"type":"RUN_STARTED"}\n\n');
+  const request = recorderScenarios.heldOpen.request;
+  await recorder.record(request, async () => stream.response, { signal: stop.signal, onEnd: () => void (ends += 1) });
+  await pause();
+  const id = memory.only().id;
+  assert.equal(memory.only().transport, 'streaming');
+  assert.equal(ends, 0, 'capture is still active while the stream is open');
+
+  stop.abort();
+  stream.push('data: {"type":"RUN_FINISHED"}\n\n');
+  const exchange = await memory.settled(id);
+  await pause();
+
+  assert.equal(exchange.transport, 'user-stopped');
+  assert.equal(exchange.transportError, undefined);
+  assert.equal(decoder.decode(memory.bytesOf(id)), 'data: {"type":"RUN_STARTED"}\n\n', 'only what arrived before the stop is kept');
+  assert.deepEqual(memory.findings, []);
+  assert.equal(ends, 1);
+});
+
+test('a signal that was already aborted when the response arrived keeps nothing and ends capture at once', async () => {
+  const stream = manualStream();
+  const stop = new AbortController();
+  stop.abort();
+  let ends = 0;
+  const { memory, recorder } = setup();
+  stream.push('data: {"type":"RUN_STARTED"}\n\n');
+  await recorder.record(recorderScenarios.heldOpen.request, async () => stream.response, { signal: stop.signal, onEnd: () => void (ends += 1) });
+  const exchange = await memory.settled(memory.only().id);
+  assert.equal(exchange.transport, 'user-stopped');
+  assert.equal(memory.chunksOf(exchange.id).length, 0);
+  assert.equal(ends, 1);
+});
+
+test('a stop keeps the part of a plain response that was read, and stops reading it', async () => {
+  const stream = manualStream(500);
+  const stop = new AbortController();
+  const { memory, recorder } = setup();
+  stream.push('{"error":"par');
+  await recorder.record({ kind: 'preparation', method: 'POST', path: '/prepare', responseKind: 'response' }, async () => stream.response, { signal: stop.signal });
+  await pause();
+  stop.abort();
+  stream.push('tial"}');
+  const exchange = await memory.settled(memory.only().id);
+  assert.equal(exchange.transport, 'user-stopped');
+  assert.equal(exchange.responseBody, '{"error":"par');
+});
+
+test('onEnd is called once, after the last update, for a finished stream, a failed request, a body-less answer and a clone that fails', async () => {
+  const { memory, recorder } = setup();
+  const seen: string[] = [];
+  const onEnd = (label: string) => () => void seen.push(`${label}:${memory.all().at(-1)?.transport}`);
+
+  const finished = manualStream();
+  finished.push('data: {}\n\n');
+  finished.close();
+  await recorder.record(recorderScenarios.heldOpen.request, async () => finished.response, { onEnd: onEnd('finished') });
+  await pause();
+
+  await assert.rejects(recorder.record(recorderScenarios.heldOpen.request, async () => Promise.reject(new TypeError('offline')), { onEnd: onEnd('failed') }), TypeError);
+  await recorder.record(recorderScenarios.heldOpen.request, async () => new Response(null, { status: 204 }), { onEnd: onEnd('bodyless') });
+  await pause();
+
+  const unclonable = manualStream();
+  unclonable.response.clone = () => {
+    throw new TypeError('body already used');
+  };
+  await recorder.record(recorderScenarios.heldOpen.request, async () => unclonable.response, { onEnd: onEnd('unclonable') });
+  await pause();
+
+  assert.deepEqual(seen, ['finished:completed', 'failed:transport-error', 'bodyless:completed', 'unclonable:streaming']);
+});
+
+test('a listener that throws does not reach the recording or the client', async () => {
+  const stream = manualStream();
+  stream.close();
+  const { memory, recorder } = setup();
+  const response = await recorder.record(recorderScenarios.heldOpen.request, async () => stream.response, {
+    onEnd() {
+      throw new Error('bookkeeping failed');
+    },
+  });
+  assert.equal(response.status, 200);
+  assert.equal((await memory.settled(memory.only().id)).transport, 'completed');
+  assert.deepEqual(memory.findings, []);
+});
+
 class TrappedResponse extends Response {
   readonly touched: string[] = [];
   override get headers(): Headers {

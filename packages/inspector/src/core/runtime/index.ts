@@ -38,7 +38,7 @@ import { describeError, fail, isJsonValue, type Result } from '../config/validat
 import { createFrameSink } from '../frames/index.ts';
 import { preparePreset } from '../presets/index.ts';
 import { composeRunInput } from '../profiles/index.ts';
-import { createRecorder, type RecorderClock } from '../recorder/index.ts';
+import { createRecorder, type CaptureRecorder, type RecorderClock } from '../recorder/index.ts';
 import { runPreparations } from './prepare.ts';
 import {
   NO_REPLIES,
@@ -82,7 +82,13 @@ export interface RuntimeOptions {
 export interface RuntimeState {
   /** The only value that can hold the token. Memory only: never put it in a profile, a session or a log. */
   readonly connection: VolatileConnectionState;
+  /** A conversation run is in progress: the client has not finished with it. It stops a new message from starting a run. */
   readonly running: boolean;
+  /**
+   * A request is still being sent or its response is still being recorded, so Stop has something to end.
+   * It outlives `running`: the client can give up on a stream that the recording keeps reading.
+   */
+  readonly capturing: boolean;
   readonly threadId: string;
   readonly quickMessages: readonly string[];
   /** A failure the user should see: a refused target, a failed preparation, a connection problem. */
@@ -108,7 +114,7 @@ export interface Runtime {
   setAuth(auth: VolatileAuth | undefined): void;
   /** An ordinary message, quick messages included. Resolves when the run has ended. */
   send(text: string): Promise<void>;
-  /** Ends the connection of the active run. Not a protocol answer. */
+  /** Ends the connection of every request that is still being sent or recorded. Not a protocol answer. */
   stop(): void;
   newThread(): void;
   draftInterrupt(interruptId: string, draft: JsonValue): void;
@@ -172,7 +178,7 @@ export function createRuntime(options: RuntimeOptions): Runtime {
   const randomUUID = options.randomUUID ?? (() => globalThis.crypto.randomUUID());
   const epoch = () => (options.clock ?? { epoch: () => Date.now() }).epoch();
   const transport = createGuardedTransport(policy, options.fetch ? { fetch: options.fetch } : {});
-  const recorder: Recorder = createRecorder(createFrameSink(store), options.clock);
+  const recorder: CaptureRecorder = createRecorder(createFrameSink(store), options.clock);
 
   let agent: AgentConfig | undefined;
   let targetUrl: string | undefined;
@@ -182,7 +188,10 @@ export function createRuntime(options: RuntimeOptions): Runtime {
   let running = false;
   let error: string | undefined;
   let activeController: AbortController | undefined;
-  const controllers = new Set<AbortController>();
+  // A controller stays here until nothing holds it any more: the request or run that made it, and every
+  // recording made under it. Stop therefore works for as long as a response is being captured, even after
+  // the call that sent the request has returned or the protocol client has rejected the stream.
+  const controllers = new Map<AbortController, number>();
   let runs = 0;
   let findings = 0;
 
@@ -198,6 +207,7 @@ export function createRuntime(options: RuntimeOptions): Runtime {
         ...(activeController !== undefined && { abortController: activeController }),
       },
       running,
+      capturing: controllers.size > 0,
       threadId: thread.id,
       quickMessages: agent?.preset?.quickMessages ?? [],
       ...(error !== undefined && { error }),
@@ -260,8 +270,32 @@ export function createRuntime(options: RuntimeOptions): Runtime {
     return cleared;
   }
 
+  const hold = (controller: AbortController): void => void controllers.set(controller, (controllers.get(controller) ?? 0) + 1);
+
+  function release(controller: AbortController): void {
+    const holds = (controllers.get(controller) ?? 1) - 1;
+    if (holds > 0) controllers.set(controller, holds);
+    else controllers.delete(controller);
+  }
+
+  /** Records under `controller`: it is held until each recording has ended, however that happens. */
+  function recorderFor(controller: AbortController): Recorder {
+    return {
+      record(request, send) {
+        hold(controller);
+        return recorder.record(request, send, {
+          signal: controller.signal,
+          onEnd() {
+            release(controller);
+            emit();
+          },
+        });
+      },
+    };
+  }
+
   function stop(): void {
-    for (const controller of controllers) controller.abort();
+    for (const controller of [...controllers.keys()]) controller.abort();
   }
 
   // -------------------------------------------------------------------------------------------
@@ -278,7 +312,7 @@ export function createRuntime(options: RuntimeOptions): Runtime {
     error = undefined;
     const controller = new AbortController();
     activeController = controller;
-    controllers.add(controller);
+    hold(controller);
     emit();
 
     try {
@@ -304,7 +338,7 @@ export function createRuntime(options: RuntimeOptions): Runtime {
       if (!input.ok) return problem(input.error);
 
       const preparations = await runPreparations(prepared.value.preparations, {
-        recorder,
+        recorder: recorderFor(controller),
         transport,
         baseUrl: target.value.href,
         signal: controller.signal,
@@ -317,7 +351,7 @@ export function createRuntime(options: RuntimeOptions): Runtime {
       await execute(current, target.value, input.value, turnMessages, controller, auth);
     } finally {
       running = false;
-      controllers.delete(controller);
+      release(controller);
       if (activeController === controller) activeController = undefined;
       emit();
     }
@@ -366,13 +400,14 @@ export function createRuntime(options: RuntimeOptions): Runtime {
     };
 
     const body = JSON.stringify(input);
+    const capture = recorderFor(controller);
     const client = new RunAgent({
       url: target.href,
       threadId: input.threadId,
       initialMessages: [...current.messages, ...turnMessages],
       initialState: current.state,
       fetch: (url, init) =>
-        recorder.record(
+        capture.record(
           { kind: 'conversation', method: init.method ?? 'POST', path: recordedPath(new URL(url)), body, responseKind: 'sse', runId: recordId },
           () => {
             startedAt = epoch();
@@ -515,10 +550,10 @@ export function createRuntime(options: RuntimeOptions): Runtime {
       if (!target.ok) return problem(target.error);
       error = undefined;
       const controller = new AbortController();
-      controllers.add(controller);
+      hold(controller);
       emit();
       try {
-        const response = await recorder.record(
+        const response = await recorderFor(controller).record(
           { kind: 'raw', method: 'POST', path: recordedPath(target.value), body: text, responseKind: 'sse' },
           () => transport.send({ url: target.value.href, method: 'POST', body: text, responseKind: 'sse' }, auth, controller.signal),
         );
@@ -526,7 +561,7 @@ export function createRuntime(options: RuntimeOptions): Runtime {
       } catch (failure) {
         if (!controller.signal.aborted) error = `The raw request failed: ${clip(describeError(failure))}`;
       } finally {
-        controllers.delete(controller);
+        release(controller);
         emit();
       }
     },
