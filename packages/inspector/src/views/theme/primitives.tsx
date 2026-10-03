@@ -36,7 +36,8 @@ export const icons = {
   brace: '<path d="M9 4H8a2 2 0 0 0-2 2v3.5c0 1.4-.9 2.5-2 2.5 1.1 0 2 1.1 2 2.5V18a2 2 0 0 0 2 2h1M15 4h1a2 2 0 0 1 2 2v3.5c0 1.4.9 2.5 2 2.5-1.1 0-2 1.1-2 2.5V18a2 2 0 0 1-2 2h-1"/>',
   tool: '<path d="M14.7 6.3a4 4 0 0 0-5.2 5.2L4 17v3h3l5.5-5.5a4 4 0 0 0 5.2-5.2l-2.4 2.4-2.6-.4-.4-2.6 2.4-2.4Z"/>',
   x: '<path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/>',
-  wire: '<path d="M3 12h3.5l2-5 3.5 10 2.5-6.5 1.5 1.5H21"/>',
+  // The brand mark: an agent (dot) joined to a UI (square). Same markup as branding/mark.svg; a test keeps them equal.
+  mark: '<circle cx="4.5" cy="12" r="3" fill="currentColor" stroke="none"/><path d="M7.5 12H14"/><rect x="14" y="8" width="8" height="8" rx="2"/>',
   hand: '<path d="M8 13V6.5a1.5 1.5 0 0 1 3 0V12m0-6.5V5a1.5 1.5 0 0 1 3 0v7m0-5.5a1.5 1.5 0 0 1 3 0V14a6 6 0 0 1-6 6h-.5a6 6 0 0 1-5-2.7L3.8 14.6a1.5 1.5 0 0 1 2.4-1.8L8 15"/>',
 } as const;
 

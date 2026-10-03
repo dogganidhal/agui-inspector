@@ -1,3 +1,5 @@
+<img src="branding/icon.svg" alt="" width="64" height="64">
+
 # agui-inspector
 
 A developer tool for [AG-UI](https://docs.ag-ui.com) servers: point it at an agent and see the wire. Every request it
