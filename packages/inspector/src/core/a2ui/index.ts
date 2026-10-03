@@ -108,7 +108,10 @@ export function createSurfaceSession<T extends ComponentApi>(options: SurfaceSes
         return;
       }
       try {
-        target.processMessages([operation as never]);
+        // The renderer keeps what it is given: the data model root is the `value` of an updateDataModel, so
+        // a typed character would otherwise rewrite the recorded operation. Each entry is copied once, as it
+        // is applied; an appended tail copies only itself.
+        target.processMessages([structuredClone(operation) as never]);
       } catch (error) {
         issues.push({ source: 'operation', message: reason(error), index, operation });
       }

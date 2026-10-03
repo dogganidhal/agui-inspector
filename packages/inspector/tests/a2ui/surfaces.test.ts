@@ -10,7 +10,7 @@ import { createElement, Fragment } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { basicCatalog } from '@a2ui/react/v0_9';
 import type { ReactComponentImplementation } from '@a2ui/react/v0_9';
-import { peekValue, type SurfaceModel } from '@a2ui/web_core/v0_9';
+import { ComponentContext, GenericBinder, peekValue, type SurfaceModel } from '@a2ui/web_core/v0_9';
 import type { A2uiAction, JsonValue } from '../../src/contracts.ts';
 import { createSurfaceSession } from '../../src/core/a2ui/index.ts';
 import { applyJsonPatch } from '../../src/core/projection/patch.ts';
@@ -71,6 +71,43 @@ test('appended updates change the surface in place; the user keeps what they typ
   assert.equal(after, before, 'the same surface model: nothing was rebuilt');
   assert.equal(data(after, '/count'), 7);
   assert.equal(data(after, '/note'), 'typed by the user');
+});
+
+test('changing a bound value never alters the operations the session was handed', () => {
+  const { host } = session();
+  const operations = json(formSurface) as JsonValue[];
+  const received = json(operations);
+  host.apply(operations);
+  const before = host.snapshot().surfaces[0]!;
+  before.dataModel.set('/note', 'typed by the user');
+  before.dataModel.set('/count', 99);
+  before.dataModel.set('/extra/deep', { added: true });
+  assert.deepEqual(operations, received, 'what the agent sent is still what the list holds');
+
+  // The same list again (the view re-applies on every render) is still a no-op, not a rebuild.
+  let notified = 0;
+  host.subscribe(() => void notified++);
+  host.apply(operations);
+  assert.equal(host.snapshot().surfaces[0], before);
+  assert.equal(notified, 0);
+
+  // An extended list keeps the typed value and still leaves every entry as received.
+  const appended = [...operations, { version: 'v0.9', updateDataModel: { surfaceId: 'form', path: '/other', value: 'later' } }];
+  host.apply(appended);
+  assert.equal(host.snapshot().surfaces[0], before, 'nothing was rebuilt');
+  assert.equal(data(before, '/note'), 'typed by the user');
+  assert.equal(data(before, '/other'), 'later');
+  assert.deepEqual(appended.slice(0, -1), received);
+  assert.deepEqual(appended.at(-1), { version: 'v0.9', updateDataModel: { surfaceId: 'form', path: '/other', value: 'later' } });
+});
+
+test('the issues keep the offending entry as received, not a copy the renderer touched', () => {
+  const { host } = session();
+  const operations = json([...formSurface, { version: 'v0.9', updateComponents: { surfaceId: 'ghost', components: [] } }]) as JsonValue[];
+  host.apply(operations);
+  const [issue] = host.snapshot().issues;
+  assert.equal(issue?.index, 3);
+  assert.equal(issue?.operation, operations[3], 'the very entry the session was handed');
 });
 
 test('applying the same operations again changes nothing and notifies nobody', () => {
@@ -176,6 +213,21 @@ test('an action carries exactly name, surface, component, context and the render
   assert.match(action.timestamp, /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/);
   assert.ok(Date.parse(action.timestamp) >= before - 1000 && Date.parse(action.timestamp) <= Date.now() + 1000);
   assert.deepEqual(action.context, { note: { path: '/note' }, count: { path: '/count' } }, 'the context is passed on as the renderer supplied it');
+});
+
+test('an action keeps the data it carried when the user clicked, whatever they type next', async () => {
+  const { host, actions } = session();
+  const operations = json(formSurface) as Array<{ updateComponents?: { components: Array<{ id: string; action?: { event: { context: unknown } } }> } }>;
+  operations[1]!.updateComponents!.components.find((component) => component.id === 'send')!.action!.event.context = { everything: { path: '/' } };
+  host.apply(operations as unknown as JsonValue);
+  const surface = host.snapshot().surfaces[0]!;
+  const binder = new GenericBinder(new ComponentContext(surface, 'send', '/'), basicCatalog.components.get('Button')!.schema);
+  (binder.snapshot as { action(): void }).action();
+  binder.dispose();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepEqual(actions[0]!.context, { everything: { note: 'first draft', count: 1 } });
+  surface.dataModel.set('/note', 'typed after the click');
+  assert.deepEqual(actions[0]!.context, { everything: { note: 'first draft', count: 1 } });
 });
 
 test('a surface that was rebuilt away no longer reports actions', async () => {

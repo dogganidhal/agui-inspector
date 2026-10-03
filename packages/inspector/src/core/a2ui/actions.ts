@@ -11,13 +11,17 @@ export interface BlockedResource {
 
 export type ReportBlocked = (blocked: BlockedResource) => void;
 
-/** The renderer's action, trimmed to the envelope forwardedProps.a2uiAction.userAction carries. */
+/**
+ * The renderer's action, trimmed to the envelope forwardedProps.a2uiAction.userAction carries. A context
+ * entry bound to an object path is the data model's own object, so the context is copied: the envelope
+ * is what the user sent when they clicked, whatever they type afterwards.
+ */
 export function toA2uiAction(payload: ActionPayload): A2uiAction {
   return {
     name: payload.name,
     surfaceId: payload.surfaceId,
     sourceComponentId: payload.sourceComponentId,
-    context: payload.context as JsonObject,
+    context: structuredClone(payload.context) as JsonObject,
     timestamp: payload.timestamp,
   };
 }

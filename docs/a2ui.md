@@ -169,7 +169,12 @@ The view hands the activity's current operation list to a session on every chang
 - Any other change, such as an `ACTIVITY_DELTA` that rewrites an earlier operation, rebuilds the surfaces from
   the list as it now stands. Typed values from before the rebuild are lost.
 
-The received list is never modified.
+The received list is never modified. The renderer keeps the objects it is given, and a surface's data model
+starts as the `value` of an `updateDataModel`, so the session passes it a copy of each operation as that
+operation is applied. Typing into a bound field changes the surface's data model and nothing else. The JSON
+view, the frames, the exported session and the projection still show what the agent sent. An action's `context`
+is copied the same way, so it stays what the user submitted when they clicked. Switching an activity card to
+JSON and back draws the surface again from the operations as received, so text typed before the switch is gone.
 
 ## Actions
 

@@ -149,7 +149,8 @@ The official A2UI renderer's component stylesheet does not resolve its class nam
 loaded. L05 maps the tokens onto the variables the renderer's components read inline, and draws the
 components that have no usable hook (Row, Divider, Icon, Button, TextField, ChoicePicker, Tabs, Modal)
 with the same tokens. Every surface component, like the activity card around it, follows the tokens in
-light and dark mode (render audit FX11).
+light and dark mode (render audit FX11). The renderer works on a copy of each received operation, so what
+a user types never reaches the operations the JSON view, the frames and the export show (FX14).
 
 ## Layout
 
