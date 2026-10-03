@@ -74,6 +74,15 @@ export const formOperations = [
   { version: V, updateDataModel: { surfaceId: 'form', path: '/', value: { note: 'first draft' } } },
 ];
 
+/** A reply in five deltas, then a subagent that starts and finishes: every place the conversation shows an offset and a frame reference. */
+const evidenceEvents = [
+  { type: 'TEXT_MESSAGE_START', messageId: 'msg-1', role: 'assistant' },
+  ...['Hello', ' there', ',', ' how can', ' I help?'].map((delta) => ({ type: 'TEXT_MESSAGE_CONTENT', messageId: 'msg-1', delta })),
+  { type: 'TEXT_MESSAGE_END', messageId: 'msg-1' },
+  { type: 'SUBAGENT_STARTED', subagentRunId: 'sub-1', name: 'synthetic-researcher', parentToolCallId: 'tc-1' },
+  { type: 'SUBAGENT_FINISHED', subagentRunId: 'sub-1', outcome: { type: 'success' } },
+];
+
 const sse = (events: readonly object[]) => events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join('');
 
 async function readBody(request: IncomingMessage): Promise<string> {
@@ -105,7 +114,9 @@ function answer(pathname: string, input: { threadId?: unknown; runId?: unknown }
   const activity =
     pathname === '/surface'
       ? [{ type: 'ACTIVITY_SNAPSHOT', messageId: 'activity-1', activityType: 'a2ui-surface', content: { a2ui_operations: formOperations }, replace: true }]
-      : [{ type: 'TEXT_MESSAGE_START', messageId: 'msg-1', role: 'assistant' }, { type: 'TEXT_MESSAGE_CONTENT', messageId: 'msg-1', delta: AGENT_REPLY }, { type: 'TEXT_MESSAGE_END', messageId: 'msg-1' }];
+      : pathname === '/evidence'
+        ? evidenceEvents
+        : [{ type: 'TEXT_MESSAGE_START', messageId: 'msg-1', role: 'assistant' }, { type: 'TEXT_MESSAGE_CONTENT', messageId: 'msg-1', delta: AGENT_REPLY }, { type: 'TEXT_MESSAGE_END', messageId: 'msg-1' }];
   response.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store' });
   response.end(sse([{ type: 'RUN_STARTED', threadId, runId }, ...activity, { type: 'RUN_FINISHED', threadId, runId, outcome: { type: 'success' } }]));
 }

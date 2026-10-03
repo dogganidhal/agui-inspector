@@ -52,7 +52,7 @@ function Deltas({ deltas, frames, label }: { deltas: readonly Delta[]; frames: F
       <ol className="agui-conv-deltalist" aria-label={label}>
         {deltas.map((delta, i) => (
           <li key={i}>
-            <span className="agui-conv-mono agui-conv-faint">{formatOffset(delta.offsetMs)}</span>
+            <span className="agui-conv-mono agui-conv-evidence">{formatOffset(delta.offsetMs)}</span>
             <FrameRef frameId={delta.frameId} frames={frames} />
             <span className="agui-conv-mono agui-conv-value">{delta.text}</span>
           </li>
@@ -267,7 +267,7 @@ function SubagentBlock({ entry, frames }: { entry: SubagentEntry; frames: Frames
         {entry.lines.map((line, i) => (
           <li key={i}>
             <Tag variant={PHASE[line.phase].variant}>{PHASE[line.phase].label}</Tag>
-            <span className="agui-conv-mono agui-conv-faint">{formatOffset(line.offsetMs)}</span>
+            <span className="agui-conv-mono agui-conv-evidence">{formatOffset(line.offsetMs)}</span>
             {line.outcome !== undefined && <Tag variant="line">{line.outcome}</Tag>}
             {line.code !== undefined && <Tag variant="line">{line.code}</Tag>}
             {line.detail !== undefined && <span className="agui-conv-value">{line.detail}</span>}
