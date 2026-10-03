@@ -209,7 +209,8 @@ export type ConversationEntry =
   | ActivityEntry
   | CustomEntry
   | RawEntry
-  | SnapshotEntry;
+  | SnapshotEntry
+  | IssueEntry;
 
 export interface PatchOperationView {
   readonly op: string;
@@ -245,12 +246,18 @@ export interface ProjectionIssue {
   readonly message: string;
 }
 
+/** A projection issue where its frame occurred, inside the run that produced it. */
+export interface IssueEntry extends EntryBase, ProjectionIssue {
+  readonly kind: 'issue';
+}
+
 export interface ConversationModel {
   readonly threadId?: string;
   readonly entries: ConversationEntry[];
   readonly state: StateModel;
   /** Client-expanded chunk events, each linked to the chunk frame that produced it. */
   readonly derived: DerivedEntry[];
+  /** Every issue in arrival order. The same ones sit in `entries`, each in its own run. */
   readonly issues: ProjectionIssue[];
 }
 
@@ -362,7 +369,7 @@ export function projectConversation(session: InspectionSession, current?: string
   };
   const base = (suffix: string, frames: FrameId[] = [frame.id]) => ({ id: `${frame.id}:${suffix}`, exchangeId: exchange.id, frames });
   const issue = (message: string, at: RawFrame | undefined = frame) =>
-    void issues.push({ exchangeId: exchange.id, ...(at && { frameId: at.id }), message });
+    void issues.push(add<IssueEntry>({ ...base(`issue-${issues.length}`, at ? [at.id] : []), kind: 'issue', ...(at && { frameId: at.id }), message }));
   const touch = (entry: { frames: FrameId[] }) => {
     if (entry.frames[entry.frames.length - 1] !== frame.id) entry.frames.push(frame.id);
   };
@@ -556,7 +563,15 @@ export function projectConversation(session: InspectionSession, current?: string
             return [];
         }
       });
-    const runs = entries.filter((entry) => entry.kind === 'run');
+    // Run headers and issues stay where they were: boundaries and notes on frames, not messages.
+    const boundaries: ConversationEntry[] = [];
+    const collect = (list: readonly ConversationEntry[]) => {
+      for (const entry of list) {
+        if (entry.kind === 'run' || entry.kind === 'issue') boundaries.push(entry);
+        else if (entry.kind === 'step') collect(entry.children);
+      }
+    };
+    collect(entries);
     const survivors = keep(entries.filter((entry) => entry.kind !== 'run'));
 
     const alive = new Set<ConversationEntry>();
@@ -581,11 +596,11 @@ export function projectConversation(session: InspectionSession, current?: string
     const added = incoming.filter((message) => !before.has(message.id as string));
     const marker: SnapshotEntry = { ...base('snapshot'), kind: 'snapshot', added: [], removed, count: incoming.length };
 
-    // Run headers stay: they are boundaries, not messages. The marker follows them, then the snapshot's
-    // messages (at the root, whatever step is open), then what is still arriving.
+    // The marker follows the boundaries, then the snapshot's messages (at the root, whatever step is
+    // open), then what is still arriving.
     const openSteps = stack.filter((step) => alive.has(step));
     stack = [];
-    entries = [...runs, marker];
+    entries = [...boundaries, marker];
     for (const message of incoming) {
       const id = message.id as string;
       if (messages.has(id) || reasonings.has(id) || activities.has(id)) continue; // still arriving: keep the live one

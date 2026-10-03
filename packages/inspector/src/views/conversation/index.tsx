@@ -14,6 +14,7 @@ import type {
   ConversationEntry,
   Delta,
   EncryptedEntry,
+  IssueEntry,
   MessageEntry,
   ReasoningEntry,
   RunEntry,
@@ -306,11 +307,33 @@ function ActivityBlock({ entry, extras }: { entry: ActivityEntry; extras: Conver
   );
 }
 
+/** The issues of one run that sit side by side, as one list a screen reader can find. */
+function IssueList({ issues, frames }: { issues: readonly IssueEntry[]; frames: Frames }): ReactElement {
+  return (
+    <ul className="agui-conv-issues" aria-label="Projection issues">
+      {issues.map((issue) => (
+        <li key={issue.id}>
+          <Finding variant="warn" kind="Not shown">
+            {issue.message} {issue.frameId !== undefined && <FrameRef frameId={issue.frameId} frames={frames} />}. The frame is still in the frames list.
+          </Finding>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function Entries({ list, frames, extras }: { list: readonly ConversationEntry[]; frames: Frames; extras: ConversationViewExtras }): ReactElement {
   return (
     <>
-      {list.map((entry) => {
+      {list.map((entry, at) => {
         switch (entry.kind) {
+          case 'issue': {
+            // The first of a group of adjacent issues draws the whole group.
+            if (list[at - 1]?.kind === 'issue') return null;
+            let end = at + 1;
+            while (list[end]?.kind === 'issue') end += 1;
+            return <IssueList key={entry.id} issues={list.slice(at, end) as IssueEntry[]} frames={frames} />;
+          }
           case 'run':
             return <RunHeader key={entry.id} run={entry} />;
           case 'message':
@@ -366,17 +389,6 @@ export function ConversationView({ store, threadId, renderActivity }: Conversati
         <p className="agui-conv-empty">No conversation yet. Runs and messages appear here as events arrive.</p>
       ) : (
         <Entries list={model.entries} frames={frames} extras={extras} />
-      )}
-      {model.issues.length > 0 && (
-        <ul className="agui-conv-issues" aria-label="Projection issues">
-          {model.issues.map((issue, i) => (
-            <li key={i}>
-              <Finding variant="warn" kind="Not shown">
-                {issue.message} {issue.frameId !== undefined && <FrameRef frameId={issue.frameId} frames={frames} />}. The frame is still in the frames list.
-              </Finding>
-            </li>
-          ))}
-        </ul>
       )}
     </section>
   );

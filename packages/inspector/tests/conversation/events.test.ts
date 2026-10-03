@@ -11,6 +11,7 @@ import {
   type ActivityEntry,
   type ConversationEntry,
   type ConversationModel,
+  type IssueEntry,
   type MessageEntry,
   type ReasoningEntry,
   type RunEntry,
@@ -18,7 +19,7 @@ import {
   type SubagentEntry,
   type ToolCallEntry,
 } from '../../src/core/projection/index.ts';
-import { RUN_FINISHED, RUN_STARTED, sessionOf } from './support.ts';
+import { harness, RUN_FINISHED, RUN_STARTED, sessionOf, type Harness } from './support.ts';
 
 type Type = keyof typeof EventType;
 const fixture = <T extends Type>(type: T) => eventFixtures[type];
@@ -368,8 +369,63 @@ test('frames that are not valid events never become conversation entries', () =>
 
 test('an event for an entity that was never started is reported, not invented', () => {
   const { model, session } = project([RUN_STARTED, { type: 'TEXT_MESSAGE_CONTENT', messageId: 'ghost', delta: 'x' }, { type: 'TOOL_CALL_ARGS', toolCallId: 'ghost', delta: '{}' }, RUN_FINISHED]);
-  assert.deepEqual(kinds(model.entries), ['run']);
+  assert.deepEqual(kinds(model.entries), ['run', 'issue', 'issue'], 'each issue sits in the run, after the frames before it');
   assert.deepEqual(model.issues.map((issue) => issue.frameId), [frameIdAt(session, 'TEXT_MESSAGE_CONTENT'), frameIdAt(session, 'TOOL_CALL_ARGS')]);
+  assert.deepEqual(model.entries.slice(1), model.issues, 'the list and the entries hold the same issues');
+});
+
+/** One run on thread `t1`, with `events` at 10 ms steps; a run that sends `messages` carries them as its input. */
+function play(h: Harness, id: string, events: ReadonlyArray<object | string>, input: object = {}, thread = 't1') {
+  h.open(id, { input: { threadId: thread, runId: id, ...input } });
+  events.forEach((event, i) => h.push(id, event, (i + 1) * 10));
+  h.close(id);
+}
+const began = (runId: string, threadId = 't1') => ({ type: 'RUN_STARTED', threadId, runId });
+const ended = (runId: string) => ({ type: 'RUN_FINISHED', threadId: 't1', runId, outcome: { type: 'success' } });
+const ghost = { type: 'TEXT_MESSAGE_CONTENT', messageId: 'never-started', delta: 'no start event' };
+const reply = (id: string) => [{ type: 'TEXT_MESSAGE_START', messageId: id, role: 'assistant' }, { type: 'TEXT_MESSAGE_CONTENT', messageId: id, delta: 'hi' }, { type: 'TEXT_MESSAGE_END', messageId: id }];
+const outline = (entries: readonly ConversationEntry[]) => entries.map((entry) => (entry.kind === 'run' ? `run:${entry.runId}` : entry.kind === 'issue' ? `issue:${(entry as IssueEntry).frameId}` : entry.kind));
+
+test('an issue stays in the run that produced it, at the place of its frame, however many runs follow', () => {
+  const h = harness();
+  play(h, 'r1', [began('r1'), ghost, 'not json at all', { type: 'STEP_STARTED', stepName: 'after the damage' }, { type: 'STEP_FINISHED', stepName: 'after the damage' }, ended('r1')]);
+  play(h, 'r2', [began('r2'), ...reply('m2'), ended('r2')], { messages: [{ id: 'u2', role: 'user', content: 'Hello there' }] });
+  const ghostFrame = frameIdAt(h.session(), 'TEXT_MESSAGE_CONTENT');
+  assert.deepEqual(outline(projectConversation(h.session()).entries), ['run:r1', `issue:${ghostFrame}`, 'step', 'run:r2', 'message', 'message']);
+
+  play(h, 'r3', [began('r3'), ended('r3')]);
+  assert.deepEqual(outline(projectConversation(h.session()).entries), ['run:r1', `issue:${ghostFrame}`, 'step', 'run:r2', 'message', 'message', 'run:r3'], 'a later run does not move it');
+});
+
+test('an issue on the last frame of a run falls at the end of that run, before the next run', () => {
+  const h = harness();
+  play(h, 'r1', [began('r1'), ...reply('m1'), ghost]);
+  play(h, 'r2', [began('r2'), ended('r2')]);
+  const ghostFrame = frameIdAt(h.session(), 'TEXT_MESSAGE_CONTENT', 1);
+  assert.deepEqual(outline(projectConversation(h.session()).entries), ['run:r1', 'message', `issue:${ghostFrame}`, 'run:r2']);
+});
+
+test('an issue inside an open step stays in that step', () => {
+  const { model } = project([RUN_STARTED, { type: 'STEP_STARTED', stepName: 'work' }, ghost, { type: 'STEP_FINISHED', stepName: 'work' }, RUN_FINISHED]);
+  assert.deepEqual(kinds(model.entries), ['run', 'step']);
+  assert.deepEqual(kinds(find(model.entries, 'step').children), ['issue']);
+  assert.equal(model.issues.length, 1);
+});
+
+test('issues stay with their runs through a messages snapshot, which replaces the messages and nothing else', () => {
+  const h = harness();
+  play(h, 'r1', [began('r1'), { type: 'STEP_STARTED', stepName: 'work' }, ghost, { type: 'STEP_FINISHED', stepName: 'work' }, ended('r1')]);
+  play(h, 'r2', [began('r2'), { type: 'MESSAGES_SNAPSHOT', messages: [{ id: 'u1', role: 'user', content: 'restated' }] }, ghost, ended('r2')]);
+  const [first, second] = h.session().frames.filter((frame) => frame.eventType === 'TEXT_MESSAGE_CONTENT');
+  assert.deepEqual(outline(projectConversation(h.session()).entries), ['run:r1', `issue:${first!.id}`, 'run:r2', 'snapshot', 'message', `issue:${second!.id}`]);
+});
+
+test('issues of a run on another thread are hidden with that run', () => {
+  const h = harness();
+  play(h, 'r1', [began('r1', 'old'), ghost, ended('r1')], {}, 'old');
+  assert.deepEqual(outline(projectConversation(h.session(), 'old').entries).map((item) => item.split(':')[0]), ['run', 'issue']);
+  const fresh = projectConversation(h.session(), 'fresh');
+  assert.deepEqual([fresh.entries, fresh.issues], [[], []]);
 });
 
 test('a step nests what happens inside it, including nested steps, and reports its duration', () => {

@@ -231,6 +231,7 @@ brands. They are not a product feature; do not build them.
 | Custom or raw | Inline marker: mono type, name or source, value | `CUSTOM`, `RAW` |
 | Interrupt | Accent card with the message, a payload editor prefilled from the response schema with a one-line schema hint, Resolve and Cancel interrupt, and an "n of m waiting" count. The footer states that the next run carries `resume` once every interrupt has an answer. Invalid JSON or a schema miss shows an inline error. Once answered it collapses to one line with the payload and the run that carried it | `RUN_FINISHED` interrupt outcome |
 | Messages snapshot | Not in the prototype. A full-width divider in the run header's style reading "Transcript replaced by MESSAGES_SNAPSHOT", with added and removed counts that expand to the lists (FR-019) | `MESSAGES_SNAPSHOT` |
+| Not shown | Not in the prototype. Warning finding "Not shown" naming a valid event the projection could not apply, such as `TEXT_MESSAGE_CONTENT` for a message that never started, with a link to its frame. It sits inside the run that produced it, where the frame occurred, and stays there as later runs arrive | Valid events that point at nothing started, or that do not apply |
 | Run error | Not in the prototype. Run header with the Error tag, then the error message as an error finding | `RUN_ERROR` |
 
 Outcome tags: Streaming (accent, pulsing dot), Finished (ok), Interrupted (accent), Cancelled
