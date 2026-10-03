@@ -140,13 +140,20 @@ const Row = ({ title, hint, children }: { title: ReactNode; hint?: ReactNode; ch
 // Agent picker and declared capabilities
 // ---------------------------------------------------------------------------------------------
 
-function AgentPicker({ agents, selected, onSelect }: { agents: readonly AgentConfig[]; selected?: AgentConfig; onSelect: (id: string) => void }): ReactElement {
+/**
+ * Lists the configured agents and reports the choice. The Settings view and the top bar each render
+ * one over the same agents and callback, so a choice behaves the same wherever it is made. With
+ * agents configured but none selected, the endpoint was typed by hand.
+ */
+export function AgentPicker({ agents, selectedId, onSelect, inBar }: { agents: readonly AgentConfig[]; selectedId?: string; onSelect: (id: string) => void; inBar?: boolean }): ReactElement {
   const id = useId();
+  const selected = agents.find((agent) => agent.id === selectedId);
   return (
-    <div className="agui-settings-picker">
+    <div className={inBar ? 'agui-settings-picker agui-settings-picker--bar' : 'agui-settings-picker'}>
       <Button popoverTarget={id} disabled={agents.length === 0}>
         <Icon name="branch" />
-        {selected ? (selected.name ?? selected.id) : 'No agents loaded'}
+        {inBar && <span className="agui-settings-picker-label">Agent</span>}
+        <span className="agui-settings-picker-name">{selected ? (selected.name ?? selected.id) : agents.length === 0 ? 'No agents loaded' : 'Custom URL'}</span>
         <Icon name="down" size={14} />
       </Button>
       <Popover id={id} aria-label="Agents">
@@ -572,7 +579,7 @@ export function SettingsView(props: SettingsViewProps & SettingsViewExtras): Rea
           <Finding variant="err">{props.error}</Finding>
         </div>
       )}
-      <AgentPicker agents={props.agents} selected={agent} onSelect={props.onSelectAgent} />
+      <AgentPicker agents={props.agents} selectedId={props.selectedAgentId} onSelect={props.onSelectAgent} />
       {agent && <AgentPanel agent={agent} capabilities={props.capabilities} />}
       <ProfilePanel props={props} agent={agent} />
     </section>

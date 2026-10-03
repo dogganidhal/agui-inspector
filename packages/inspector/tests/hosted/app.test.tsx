@@ -12,7 +12,7 @@ import { createSessionStore } from '../../src/core/store/index.ts';
 
 const SYNTHETIC_TOKEN = 'synthetic-token-7f3a91';
 
-function build(patch: Partial<AppExtras> = {}, exchanges = 0) {
+function build(patch: Partial<AppExtras> = {}, exchanges = 0, settings: Partial<AppProps['settings']> = {}) {
   const store = createSessionStore({ schedule: (callback) => callback() });
   for (let index = 0; index < exchanges; index += 1) {
     store.appendExchange({ id: `exchange-${index}`, kind: 'raw', method: 'POST', path: '/agent', startedAt: 1, transport: 'completed', frameIds: [] });
@@ -30,6 +30,7 @@ function build(patch: Partial<AppExtras> = {}, exchanges = 0) {
       onChangeVariable: spy('onChangeVariable'),
       onImportProfile: spy('onImportProfile'),
       onExportProfile: spy('onExportProfile'),
+      ...settings,
     },
     connection: {
       connection: { agentId: 'support', targetUrl: '/agents/support/stream', auth: { headerName: 'Authorization', token: SYNTHETIC_TOKEN } },
@@ -75,6 +76,28 @@ test('the layout is two panes under a top bar, with a pane switch and the inspec
   assert.match(markup, /role="group" aria-label="Inspection pane"/);
   for (const label of ['Conversation', 'Inspection', 'State', 'Settings']) assert.match(markup, new RegExp(`aria-pressed="(?:true|false)"[^>]*>${label}<`), label);
   assert.match(markup, /<footer class="agui-app-footer"[^>]*>(?:(?!<\/footer>).)*<\/footer>\s*<\/div><\/div><\/div>$/s, 'the footer closes the inspection pane');
+});
+
+// FX8: the top bar carries a second entry point onto the agent selection Settings already has.
+
+const several = [
+  { id: 'support', name: 'Support assistant', url: '/agents/support/stream' },
+  { id: 'billing', name: 'Billing assistant', url: '/agents/billing/stream' },
+];
+/** The top bar's markup: everything before the panes. */
+const bar = (markup: string) => markup.slice(markup.indexOf('<header'), markup.indexOf('</header>'));
+
+test('the top bar offers the configured agents beside the endpoint, naming the selected one', () => {
+  const header = bar(build({}, 0, { agents: several }).markup);
+  assert.match(header, /<span class="agui-settings-picker-label">Agent<\/span><span class="agui-settings-picker-name">Support assistant<\/span>/);
+  assert.ok(header.indexOf('agui-settings-picker--bar') < header.indexOf('agui-conn-endpoint'), 'the picker comes before the endpoint field');
+  for (const text of ['Billing assistant', '/agents/billing/stream']) assert.ok(header.includes(text), text);
+  assert.match(header, /aria-pressed="true"[^>]*>(?:(?!<\/button>).)*Support assistant/s);
+});
+
+test('the top bar says Custom URL when agents exist and none is selected, and has no picker without agents', () => {
+  assert.match(bar(build({}, 0, { agents: several, selectedAgentId: undefined }).markup), /agui-settings-picker-name">Custom URL</);
+  assert.doesNotMatch(bar(build({}, 0, { agents: [], selectedAgentId: undefined }).markup), /agui-settings-picker/);
 });
 
 test('the footer names the counts and the privacy facts of the mode', () => {

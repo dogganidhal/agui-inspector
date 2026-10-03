@@ -59,6 +59,13 @@ test('the agent picker names the selected agent and lists every configured one w
   assert.match(markup, /aria-pressed="true"[^>]*>(?:(?!<\/button>).)*Support assistant/s);
 });
 
+test('with agents but none selected the picker reads Custom URL and no agent panel is shown', () => {
+  const markup = render({ selectedAgentId: undefined });
+  assert.match(markup, /<span class="agui-settings-picker-name">Custom URL<\/span>/);
+  assert.doesNotMatch(markup, /aria-pressed="true"[^>]*>(?:(?!<\/button>).)*(?:Support assistant|\/bare)/s, 'no agent is marked as chosen');
+  assert.doesNotMatch(markup, /No agents loaded/);
+});
+
 test('without agents the view says so and still renders the profile', () => {
   const markup = render({ agents: [], selectedAgentId: undefined });
   assert.match(markup, /No agents loaded/);

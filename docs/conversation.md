@@ -178,7 +178,7 @@ const state = useSyncExternalStore(runtime.subscribe, runtime.getState);
 
 | Where | Call |
 | --- | --- |
-| Settings: select an agent | `runtime.selectAgent(agent)` |
+| Agent picker, top bar or Settings: select an agent | `runtime.selectAgent(agent)` |
 | Connection: endpoint typed by the user | `runtime.setTarget(url)` |
 | Connection: token | `runtime.setAuth({ headerName, token })`, or `undefined` to clear |
 | Composer: Send, chips, Stop, New thread | `runtime.send(text)`, `runtime.stop()`, `runtime.newThread()` |

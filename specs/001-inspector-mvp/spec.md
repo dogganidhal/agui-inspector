@@ -147,8 +147,9 @@ observed inputs against preset values and profile settings without interactive r
 
 **Acceptance Scenarios**:
 
-1. **Given** a configuration with several agents, **When** the developer selects one, **Then** its
-   endpoint, declared capabilities, and optional preset are used.
+1. **Given** a configuration with several agents, **When** the developer selects one from the top
+   bar or from Settings, **Then** its endpoint, declared capabilities, and optional preset are used,
+   and both pickers show it.
 2. **Given** text and JSON preset variables, **When** a run begins, **Then** substitutions preserve
    JSON types for whole-value replacements and produce the configured preparation requests and
    forwarded properties.
@@ -234,9 +235,12 @@ Its section 10 supplies the release baseline; the recorded clarifications resolv
 - **FR-002**: Embedded helpers MUST mount nothing unless explicitly enabled. The default page path
   MUST be `/agui-inspector`, with adjacent configuration. Enabling the inspector MUST produce a
   startup warning identifying its mount path. (Sources: 5, 6, 9.)
-- **FR-003**: Users MUST be able to select a configured agent or enter an endpoint URL. Embedded
-  endpoint URLs MAY be relative to the page's origin; hosted endpoint URLs MUST be absolute.
-  (Sources: 6, 8.1.)
+- **FR-003**: Users MUST be able to select a configured agent or enter an endpoint URL. When at
+  least one agent is configured, the top bar MUST offer them beside the endpoint field on every pane
+  and tab, and Settings MUST keep its own picker; both MUST change one shared selection, so a choice
+  has the same effect from either. An endpoint typed by hand matches no agent, and the selection
+  MUST then read "Custom URL". Embedded endpoint URLs MAY be relative to the page's origin; hosted
+  endpoint URLs MUST be absolute. (Sources: 6, 8.1.)
 - **FR-004**: Users MUST be able to supply an in-memory token under a header name they choose,
   defaulting to `Authorization`. Reloading or changing targets MUST clear it. Embedded requests
   MUST use the host's same-origin authentication; hosted target requests MUST send no cookies.

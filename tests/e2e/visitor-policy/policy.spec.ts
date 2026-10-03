@@ -350,8 +350,9 @@ test('every guarded caller meets the same boundary: capabilities, preparations, 
 
   // The same boundary for a declared capabilities URL: refused with the reason, never requested.
   await page.getByRole('group', { name: 'Inspection pane' }).getByRole('button', { name: 'Settings' }).click();
-  await page.getByRole('button', { name: /Secure/ }).click();
-  await page.getByRole('button', { name: /Bad/ }).click();
+  const picker = page.locator('[data-view="settings"]');
+  await picker.getByRole('button', { name: /Secure/ }).click();
+  await picker.getByRole('button', { name: /Bad/ }).click();
   await expect(page.getByText(/is not an allowed destination/).first()).toBeVisible();
   expect(world.plain.seen).toEqual([]);
 });

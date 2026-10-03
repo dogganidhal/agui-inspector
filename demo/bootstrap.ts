@@ -144,7 +144,7 @@ async function start(): Promise<void> {
   const outcome = await prepareExamples();
   show(
     outcome.ok
-      ? 'Browser-local examples are ready: choose an example agent in Settings, then send one of its quick messages.'
+      ? 'Browser-local examples are ready: choose an example agent in the Agent selector beside the endpoint, then send one of its quick messages.'
       : `Browser-local examples are unavailable: ${outcome.reason} You can still inspect your own server or open a recording. To try again, reload the page; export any recording you need first.`,
   );
   if (outcome.ok) {

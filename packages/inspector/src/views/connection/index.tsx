@@ -2,7 +2,7 @@
 // FR-004, FR-011, FR-023, FR-024).
 //
 // Three pieces, all driven by props and callbacks so the runtime owns every fact they show:
-//   TargetControls  the endpoint field and the authentication popover (the top bar's right half).
+//   TargetControls  the agent picker slot, the endpoint field and the authentication popover (the top bar's right half).
 //   Composer        the message box, quick messages, New thread and Stop.
 //   RepliesView     in-place answers for what a finished run is waiting on: interrupt payload editors
 //                   with Resolve and Cancel, and manual result editors for pending client tool calls.
@@ -26,6 +26,8 @@ export interface ConnectionViewExtras {
   readonly notice?: string;
   /** Names the deployment in the target bar; the assembly knows it from the startup policy. */
   readonly mode?: DeploymentMode;
+  /** The agent picker, drawn before the endpoint field. The assembly supplies it, since agents belong to settings. */
+  readonly agentPicker?: ReactNode;
 }
 
 const pretty = (value: JsonValue): string => JSON.stringify(value, null, 2) ?? '';
@@ -101,7 +103,7 @@ function Authentication({ auth, onChange }: { auth: ConnectionViewProps['connect
   );
 }
 
-export function TargetControls({ connection, mode, onChangeTarget, onChangeAuth }: Pick<ConnectionViewProps, 'connection' | 'onChangeTarget' | 'onChangeAuth'> & Pick<ConnectionViewExtras, 'mode'>): ReactElement {
+export function TargetControls({ connection, mode, agentPicker, onChangeTarget, onChangeAuth }: Pick<ConnectionViewProps, 'connection' | 'onChangeTarget' | 'onChangeAuth'> & Pick<ConnectionViewExtras, 'mode' | 'agentPicker'>): ReactElement {
   const fieldId = useId();
   const target = connection.targetUrl ?? '';
   // A typed endpoint is applied when the user says so; a half-typed URL must not clear the token or end the thread.
@@ -116,6 +118,7 @@ export function TargetControls({ connection, mode, onChangeTarget, onChangeAuth 
   };
   return (
     <div className="agui-conn-target" data-mode={mode}>
+      {agentPicker}
       <form
         className="agui-conn-endpoint"
         onSubmit={(event) => {

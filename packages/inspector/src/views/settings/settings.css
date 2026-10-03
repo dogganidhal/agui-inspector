@@ -52,7 +52,12 @@
 }
 
 /* Agent picker */
-.agui-settings-picker { display: flex; }
+.agui-settings-picker { display: flex; min-width: 0; }
+.agui-settings-picker > .agui-btn { min-width: 0; max-width: 100%; }
+.agui-settings-picker-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agui-settings-picker-label { color: var(--muted); }
+/* In the top bar the picker shares a row with the endpoint: a long name is cut, not allowed to crowd it out. */
+.agui-settings-picker--bar { max-width: calc(var(--u) * 64); }
 .agui-settings-agents {
   display: grid;
   gap: calc(var(--u) * 0.5);

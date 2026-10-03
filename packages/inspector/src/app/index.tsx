@@ -21,7 +21,7 @@ import { Composer, RepliesView, TargetControls } from '../views/connection/index
 import { ConversationView } from '../views/conversation/index';
 import { StateView } from '../views/conversation/state';
 import { InspectionView } from '../views/inspection/index';
-import { SettingsView, type CapabilitiesState } from '../views/settings/index';
+import { AgentPicker, SettingsView, type CapabilitiesState } from '../views/settings/index';
 import { Button, Finding, Icon, SegmentedControl, ToastRegion, applyTheme, useToasts } from '../views/theme/index';
 import '../views/a2ui/a2ui.css';
 import '../views/connection/connection.css';
@@ -112,7 +112,14 @@ export function App({ settings, connection, conversation, inspection, mode, allo
           <h1>agui-inspector</h1>
         </span>
         <div className="agui-app-target" role="group" aria-label="Connection target">
-          <TargetControls connection={connection.connection} onChangeTarget={connection.onChangeTarget} onChangeAuth={connection.onChangeAuth} {...(mode !== undefined && { mode })} />
+          {/* The same agents, selection and callback as Settings: choosing here is choosing there. */}
+          <TargetControls
+            connection={connection.connection}
+            onChangeTarget={connection.onChangeTarget}
+            onChangeAuth={connection.onChangeAuth}
+            {...(mode !== undefined && { mode })}
+            {...(settings.agents.length > 0 && { agentPicker: <AgentPicker inBar agents={settings.agents} selectedId={settings.selectedAgentId} onSelect={settings.onSelectAgent} /> })}
+          />
         </div>
         <ThemeSwitch />
       </header>

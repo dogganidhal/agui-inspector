@@ -194,11 +194,16 @@ holds the set; no icon library is added.
 
 ### Top bar
 
-Left to right: brand mark and product name, agent picker, mode tag, then authentication, Import,
-Export, the light and dark switch.
+Left to right: brand mark and product name, agent picker, endpoint field, mode tag, then
+authentication, Import, Export, the light and dark switch.
 
-The agent picker lists the agents from the configuration with their endpoints and has a field for
-any other endpoint. The mode tag reads `embedded` or `hosted`. The authentication button shows
+The agent picker sits directly before the endpoint field, so it shows on every pane and tab, and only
+when at least one agent is configured. It lists the agents from the configuration with their
+endpoints, marks the selected one, and reads "Custom URL" once an endpoint was typed by hand into the
+field beside it. Settings keeps a picker over the same selection. The bar wraps on narrow widths and
+a long agent name is cut with an ellipsis.
+
+The mode tag reads `embedded` or `hosted`. The authentication button shows
 "No token" or the header name with a masked value; its popover holds the header name, the token and
 a line saying the token stays in memory, is cleared on reload or target change, and is never copied
 from authentication state into recordings or exports. Target-supplied echoes remain unchanged

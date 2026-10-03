@@ -171,8 +171,9 @@ test('hosted: a capabilities URL is read through the allowlist, an allowed one a
   expect(site.agent.seen.map((request) => request.path)).toContain('/capabilities');
   expect(site.agent.seen.find((request) => request.path === '/capabilities')?.cookie, 'no cookie to a capabilities URL either').toBeUndefined();
 
-  await page.getByRole('button', { name: /Allowed/ }).click();
-  await page.getByRole('button', { name: /Refused/ }).click();
+  const picker = page.locator('[data-view="settings"]');
+  await picker.getByRole('button', { name: /Allowed/ }).click();
+  await picker.getByRole('button', { name: /Refused/ }).click();
   await expect(page.getByText(/is not an allowed destination/).first()).toBeVisible();
   expect(site.foreign.seen).toEqual([]);
 });
