@@ -6,6 +6,7 @@ import { A2UI_ACTIVITY_TYPE, createSurfaceSession, type SurfaceIssue, type Surfa
 import { readLifecycle, type Lifecycle } from '../../core/a2ui/lifecycle';
 import { CodeBlock, Finding, Tag } from '../theme/primitives';
 import { createBundledCatalogs } from './catalog';
+import { FieldMessagesProvider } from './components';
 
 export { A2UI_ACTIVITY_TYPE };
 
@@ -117,7 +118,9 @@ function Rendered({ activityId, operations, onAction }: Pick<A2uiViewProps, 'act
       {issues.length > 0 && <Issues issues={issues} />}
       {surfaces.map((surface) => (
         <div key={surface.id} className="agui-a2ui-surface" data-surface={surface.id}>
-          <A2uiSurface surface={surface} />
+          <FieldMessagesProvider>
+            <A2uiSurface surface={surface} />
+          </FieldMessagesProvider>
         </div>
       ))}
       {surfaces.length === 0 && issues.length === 0 && <p role="status" className="agui-a2ui-note">No surface has been created yet.</p>}

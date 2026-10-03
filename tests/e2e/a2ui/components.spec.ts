@@ -15,6 +15,70 @@ const shots = path.resolve(import.meta.dirname, '..', '..', '..', '.build', 'a2u
 const surface = (page: Page, id: string) => page.locator(`[data-surface="${id}"]`);
 const lifecycle = (page: Page, content: unknown) => page.evaluate((value) => window.__a2ui.activity(value), content);
 
+const V = 'v0.9';
+const CATALOG = 'https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json';
+
+/** A form whose field and buttons carry checks. Both buttons fail on the same message the Email field shows. */
+const FIELD_MESSAGE = 'Enter an email address';
+const TERMS_MESSAGE = 'Accept the terms first';
+const messagesSurface = [
+  { version: V, createSurface: { surfaceId: 'messages', catalogId: CATALOG } },
+  {
+    version: V,
+    updateComponents: {
+      surfaceId: 'messages',
+      components: [
+        { id: 'root', component: 'Column', children: ['email', 'terms', 'confirm', 'draft'] },
+        {
+          id: 'email',
+          component: 'TextField',
+          label: 'Email',
+          value: { path: '/email' },
+          checks: [{ condition: { call: 'required', args: { value: { path: '/email' } } }, message: FIELD_MESSAGE }],
+        },
+        { id: 'terms', component: 'CheckBox', label: 'I accept the terms', value: { path: '/terms' } },
+        { id: 'confirm-label', component: 'Text', text: 'Confirm' },
+        {
+          id: 'confirm',
+          component: 'Button',
+          child: 'confirm-label',
+          action: { event: { name: 'confirm' } },
+          checks: [
+            { condition: { call: 'required', args: { value: { path: '/email' } } }, message: FIELD_MESSAGE },
+            { condition: { path: '/terms' }, message: TERMS_MESSAGE },
+          ],
+        },
+        { id: 'draft-label', component: 'Text', text: 'Save draft' },
+        {
+          id: 'draft',
+          component: 'Button',
+          child: 'draft-label',
+          action: { event: { name: 'draft' } },
+          checks: [{ condition: { call: 'required', args: { value: { path: '/email' } } }, message: FIELD_MESSAGE }],
+        },
+      ],
+    },
+  },
+  { version: V, updateDataModel: { surfaceId: 'messages', path: '/', value: { email: '', terms: false } } },
+];
+
+/** A surface with a component type the catalog does not have, between two that it has. */
+const unknownSurface = [
+  { version: V, createSurface: { surfaceId: 'unknown', catalogId: CATALOG } },
+  {
+    version: V,
+    updateComponents: {
+      surfaceId: 'unknown',
+      components: [
+        { id: 'root', component: 'Column', children: ['before', 'hologram', 'after'] },
+        { id: 'before', component: 'Text', text: 'Before the unknown one' },
+        { id: 'hologram', component: 'Hologram', depth: 3, children: ['before'] },
+        { id: 'after', component: 'Text', text: 'After the unknown one' },
+      ],
+    },
+  },
+];
+
 async function gallery(page: Page, site: { origin: string }): Promise<void> {
   await open(page, site);
   await feed(page, galleryOperations);
@@ -369,6 +433,101 @@ test('the gallery follows the theme tokens in both themes: an accent override re
   }
 });
 
+test('a borderless Button reads as a link: underlined accent text, a fill on hover, a focus ring on the keyboard', async ({ page, site }) => {
+  await gallery(page, site);
+  await page.addStyleTag({ content: '*, ::before, ::after { transition: none !important; }' });
+  const inputs = surface(page, 'inputs');
+  const borderless = inputs.getByRole('button', { name: 'Borderless', exact: true });
+  const primary = inputs.getByRole('button', { name: 'Primary', exact: true });
+  const paint = () =>
+    borderless.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return { line: style.textDecorationLine, background: style.backgroundColor, color: style.color, outline: style.outlineStyle, outlineWidth: style.outlineWidth, border: style.borderTopColor };
+    });
+
+  const rest = await paint();
+  expect(rest.line).toBe('underline');
+  expect(rest.background).toBe('rgba(0, 0, 0, 0)');
+  expect(rest.outline).toBe('none');
+  expect(await primary.evaluate((element) => getComputedStyle(element).textDecorationLine), 'the other variants are not underlined').toBe('none');
+
+  await borderless.hover();
+  const hover = await paint();
+  expect(hover.background).not.toBe(rest.background);
+  expect(hover.line).toBe('underline');
+  await page.mouse.move(0, 0);
+
+  await primary.focus();
+  await page.keyboard.press('Tab');
+  await expect(borderless).toBeFocused();
+  const focus = await paint();
+  expect(focus.outline).toBe('solid');
+  expect(focus.outlineWidth).toBe('2px');
+
+  // The link colour is the accent, so a host override reaches it.
+  await page.mouse.move(0, 0);
+  await page.addStyleTag({ content: ':root { --agui-accent: oklch(0.55 0.2 262); }' });
+  expect((await paint()).color).not.toBe(rest.color);
+});
+
+test('a component type the catalog does not have is an error in place, with the entry as received, and the rest still draws', async ({ page, site }) => {
+  const problems: string[] = [];
+  page.on('pageerror', (error) => problems.push(error.message));
+  await open(page, site);
+  await feed(page, unknownSurface);
+  const unknown = surface(page, 'unknown');
+  await expect(unknown.getByText('Before the unknown one')).toBeVisible();
+  await expect(unknown.getByText('After the unknown one')).toBeVisible();
+
+  const alert = unknown.getByRole('alert');
+  await expect(alert).toHaveCount(1);
+  await expect(alert).toContainText('Unknown component type: Hologram');
+  await expect(alert).toContainText('Component hologram');
+  await expect(alert.locator('.agui-finding--err')).toBeVisible();
+  await expect(unknown.locator('[style*="color: red"]'), "the renderer's raw red line is gone").toHaveCount(0);
+  await expect(view(page).getByRole('alert'), 'one message, in place, not a second one above the surface').toHaveCount(1);
+
+  await alert.getByText('As received').click();
+  const entry = alert.getByRole('region', { name: 'Received component hologram' });
+  await expect(entry).toContainText('"component": "Hologram"');
+  await expect(entry).toContainText('"depth": 3');
+  expect(problems).toEqual([]);
+});
+
+test('a Button repeats no message a field of its surface already shows, and still gives the ones the fields do not', async ({ page, site }) => {
+  await open(page, site);
+  await feed(page, messagesSurface);
+  const form = surface(page, 'messages');
+  const confirm = form.getByRole('button', { name: 'Confirm' });
+  const draft = form.getByRole('button', { name: 'Save draft' });
+
+  // The field says why; the buttons are disabled. Confirm adds only what the field does not say.
+  await expect(confirm).toBeDisabled();
+  await expect(draft).toBeDisabled();
+  await expect(form.getByText(FIELD_MESSAGE)).toHaveCount(1);
+  await expect(form.getByText(TERMS_MESSAGE)).toHaveCount(1);
+  await expect(confirm).toHaveAccessibleDescription(TERMS_MESSAGE);
+  await expect(draft).not.toHaveAccessibleDescription(/./);
+
+  // The field is fixed: the message goes, the button's own one stays.
+  await form.getByRole('textbox', { name: 'Email' }).fill('ada@lovelace.dev');
+  await expect(form.getByText(FIELD_MESSAGE)).toHaveCount(0);
+  await expect(draft).toBeEnabled();
+  await expect(confirm).toBeDisabled();
+  await expect(form.getByText(TERMS_MESSAGE)).toHaveCount(1);
+
+  // Broken again: still said once. When the terms are accepted too, nothing is left to say.
+  await form.getByRole('textbox', { name: 'Email' }).fill('');
+  await expect(form.getByText(FIELD_MESSAGE)).toHaveCount(1);
+  await form.getByRole('checkbox', { name: 'I accept the terms' }).check();
+  await expect(form.getByText(TERMS_MESSAGE)).toHaveCount(0);
+  await expect(confirm).toBeDisabled();
+  await form.getByRole('textbox', { name: 'Email' }).fill('ada@lovelace.dev');
+  await expect(confirm).toBeEnabled();
+  await expect(form.getByText(FIELD_MESSAGE)).toHaveCount(0);
+  await expect(form.getByText(TERMS_MESSAGE)).toHaveCount(0);
+});
+
 test('the whole gallery session requests nothing outside the page and opens no popup', async ({ page, site }) => {
   const requests: string[] = [];
   const popups: string[] = [];
@@ -383,7 +542,7 @@ test('the whole gallery session requests nothing outside the page and opens no p
 });
 
 for (const scheme of ['light', 'dark'] as const) {
-  test(`screenshots of the gallery, the dialog and the lifecycle states (${scheme})`, async ({ page, site }) => {
+  test(`screenshots of the gallery, the dialog, the lifecycle states and the error lines (${scheme})`, async ({ page, site }) => {
     mkdirSync(shots, { recursive: true });
     await page.setViewportSize({ width: 760, height: 900 });
     await page.emulateMedia({ colorScheme: scheme });
@@ -407,5 +566,13 @@ for (const scheme of ['light', 'dark'] as const) {
       await expect(view(page)).toHaveAttribute('data-status', name);
       await view(page).screenshot({ path: path.join(shots, `lifecycle-${name}-${scheme}.png`) });
     }
+
+    await feed(page, unknownSurface);
+    await expect(page.getByRole('alert')).toContainText('Unknown component type: Hologram');
+    await view(page).screenshot({ path: path.join(shots, `unknown-component-${scheme}.png`) });
+
+    await feed(page, messagesSurface);
+    await expect(page.getByText(FIELD_MESSAGE)).toHaveCount(1);
+    await view(page).screenshot({ path: path.join(shots, `check-messages-${scheme}.png`) });
   });
 }

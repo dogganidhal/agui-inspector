@@ -2,7 +2,7 @@ import type { ReactElement } from 'react';
 import { Catalog } from '@a2ui/web_core/v0_9';
 import { basicCatalog, createComponentImplementation, type ReactComponentImplementation } from '@a2ui/react/v0_9';
 import { deniedOpenUrl, type BlockedResource, type ReportBlocked } from '../../core/a2ui/actions';
-import { COMPONENTS } from './components';
+import { COMPONENTS, unknownComponent } from './components';
 
 const MEDIA = new Set<string>(['Image', 'Video', 'AudioPlayer']);
 
@@ -17,6 +17,26 @@ function blocked(original: ReactComponentImplementation): ReactComponentImplemen
 }
 
 /**
+ * Answers for any component type: a listed one as itself, an unlisted one with a stand-in that shows the
+ * error in place (the renderer would draw a raw red line). Only a lookup of an unlisted name answers, so
+ * the components the catalog lists, and the schema it advertises, are unchanged.
+ */
+class Components extends Map<string, ReactComponentImplementation> {
+  private readonly standIns = new Map<string, ReactComponentImplementation>();
+
+  override get(type: string): ReactComponentImplementation {
+    const listed = super.get(type);
+    if (listed) return listed;
+    let standIn = this.standIns.get(type);
+    if (!standIn) this.standIns.set(type, (standIn = unknownComponent(type)));
+    return standIn;
+  }
+}
+
+const withStandIns = (catalog: Catalog<ReactComponentImplementation>): Catalog<ReactComponentImplementation> =>
+  Object.defineProperty(catalog, 'components', { value: new Components(catalog.components) });
+
+/**
  * The official v0.9 basic catalog, bundled with the page, minus what would reach outside it: media
  * components do not load their address and `openUrl` does not open one. A few components draw with the
  * inspector's own markup (see components.tsx) because the renderer's would be unstyled or unlabelled.
@@ -24,12 +44,14 @@ function blocked(original: ReactComponentImplementation): ReactComponentImplemen
  * catalog id is an error.
  */
 export function createBundledCatalog(report: ReportBlocked): Catalog<ReactComponentImplementation> {
-  return new Catalog(
-    basicCatalog.id,
-    basicCatalog.protocolVersion,
-    [...basicCatalog.components.values()].map((component) => (MEDIA.has(component.name) ? blocked(component) : (COMPONENTS[component.name] ?? component))),
-    [...basicCatalog.functions.values()].map((fn) => (fn.name === 'openUrl' ? deniedOpenUrl(report) : fn)),
-    basicCatalog.themeSchema,
+  return withStandIns(
+    new Catalog(
+      basicCatalog.id,
+      basicCatalog.protocolVersion,
+      [...basicCatalog.components.values()].map((component) => (MEDIA.has(component.name) ? blocked(component) : (COMPONENTS[component.name] ?? component))),
+      [...basicCatalog.functions.values()].map((fn) => (fn.name === 'openUrl' ? deniedOpenUrl(report) : fn)),
+      basicCatalog.themeSchema,
+    ),
   );
 }
 
@@ -47,6 +69,6 @@ export function createBundledCatalogs(report: ReportBlocked): Catalog<ReactCompo
   const bundled = createBundledCatalog(report);
   return [
     bundled,
-    new Catalog(MIDDLEWARE_CATALOG_ID, bundled.protocolVersion, [...bundled.components.values()], [...bundled.functions.values()], bundled.themeSchema),
+    withStandIns(new Catalog(MIDDLEWARE_CATALOG_ID, bundled.protocolVersion, [...bundled.components.values()], [...bundled.functions.values()], bundled.themeSchema)),
   ];
 }

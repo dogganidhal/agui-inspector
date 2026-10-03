@@ -308,8 +308,11 @@ Its section 10 supplies the release baseline; the recorded clarifications resolv
   activity that has no operations yet but declares a generation `status` (`building`, `retrying`,
   `failed`) MUST show that status, and a failed generation MUST be visibly distinct from a building one.
   Interacting with a rendered surface MUST NOT change the received operations: the renderer is given
-  copies, so the JSON view, frames, session export and projection keep what the agent sent.
-  (Sources: 4, 8.3, 8.5, 10; clarification 2026-10-02; render audit FX11; FX14.)
+  copies, so the JSON view, frames, session export and projection keep what the agent sent. A component
+  type the catalog does not have MUST show as an error in place that names the type and keeps the entry as
+  received; borderless buttons MUST read as controls; and a Button MUST NOT repeat a failing-check message
+  that a text field of the same surface already shows.
+  (Sources: 4, 8.3, 8.5, 10; clarification 2026-10-02; render audit FX11; FX14, FX15.)
 - **FR-021**: Subagent starts, finishes, and errors MUST appear as nested markers under the parent
   run, linked through parent and subagent run identifiers. Dedicated lanes are outside the MVP.
   (Sources: 8.3, 10.)
