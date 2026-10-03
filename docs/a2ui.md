@@ -20,7 +20,7 @@ surfaces with `@a2ui/web_core/v0_9` and draws them with `@a2ui/react/v0_9`. Both
 | Any other snapshot with no `a2ui_operations` | "No A2UI operations yet." |
 | An operation the renderer cannot apply | An error naming its position, with the entry as received; the other operations still apply |
 | `a2ui_operations` is not a list | One error showing the value that arrived |
-| A component type the catalog does not have | The renderer's own "Unknown component type" line |
+| A component type the catalog does not have | An error in place of that component that names the type, with its definition under "As received". The rest of the surface still draws |
 
 The activity card around the view belongs to the conversation view. It already offers the Rendered and JSON
 switch, so the received content is always one click away.
@@ -43,7 +43,7 @@ bindings, so a surface written for the basic catalog applies unchanged.
 | `Divider` | A separator with an orientation. A vertical one takes the height of its row |
 | `Tabs` | The WAI-ARIA tabs pattern: `tablist`, `tab` and `tabpanel`. Only the selected tab is in the tab order; Left, Right, Home and End move between tabs and select them |
 | `Modal` | The trigger opens a native dialog. The page behind is inert, Escape and the Close button shut it, a click on the backdrop shuts it, and focus returns to the trigger |
-| `Button` | `default`, `primary` and `borderless`. A button whose checks fail is disabled and the first failing message appears under it |
+| `Button` | `default`, `primary` and `borderless`. A `borderless` button is drawn as a link: accent text, underlined, tinted on hover, with the usual focus ring. A button whose checks fail is disabled; see "Where a failing message appears" |
 | `TextField` | Label above the control. `shortText`, `longText`, `number` and `obscured`. A failing check's message appears under the field and is the field's description |
 | `CheckBox` | The renderer's own, with a visible error line when a check fails |
 | `ChoicePicker` | A group named by its label. `mutuallyExclusive` is radios, `multipleSelection` is checkboxes, and `displayStyle: "chips"` gives toggle buttons that report `aria-pressed`. `filterable` adds a filter field |
@@ -123,6 +123,18 @@ entry is a `CheckRule`, an object with exactly two keys, both required:
 - Checks are live. They are evaluated again whenever the data they read changes, so a button enables itself
   when the form becomes valid. A `Button` with any failing check is disabled and `TextField` and `CheckBox` show
   the first failing message. `ChoicePicker`, `Slider` and `DateTimeInput` accept `checks` but show no message.
+
+### Where a failing message appears
+
+A `TextField` shows its first failing message under the control. A `Button` shows the first failing message that
+no text field of the same surface is already showing, under the button and as its accessible description. A
+button that fails only on messages its fields already show stays disabled and adds no line, so one problem is
+not reported twice. When a field is fixed its message goes, and the button's next message, if it has one, takes
+its place.
+
+Only `TextField` counts. The renderer's own `CheckBox` draws its message itself and the button does not see it,
+so a button that repeats a `CheckBox` message says it twice. Give the button a message about the form as a whole,
+such as "Accept the terms and fix the fields above", and leave the field-level wording to the fields.
 
 ## Generation lifecycle
 

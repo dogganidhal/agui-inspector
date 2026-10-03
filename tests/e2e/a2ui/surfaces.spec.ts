@@ -147,13 +147,13 @@ test('malformed operations are reported with their position and the valid ones s
   await expect(page.getByRole('region', { name: 'Received operation 2' })).toContainText('not an object');
 });
 
-test('an unknown component is shown by the renderer and a non-list is a visible error', async ({ page, site }) => {
+test('an unknown component is an error in place and a non-list is a visible error', async ({ page, site }) => {
   await open(page, site);
   await feed(page, [
     { version: 'v0.9', createSurface: { surfaceId: 's', catalogId: BASIC_CATALOG_ID } },
     { version: 'v0.9', updateComponents: { surfaceId: 's', components: [{ id: 'root', component: 'Hologram' }] } },
   ]);
-  await expect(page.getByText('Unknown component type: Hologram')).toBeVisible();
+  await expect(page.getByRole('alert')).toContainText('Unknown component type: Hologram');
 
   await feed(page, { a2ui_operations: [] });
   await expect(page.getByRole('alert')).toContainText('not a list');

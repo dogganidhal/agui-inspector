@@ -6,6 +6,9 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { basicCatalog } from '@a2ui/react/v0_9';
 import type { ReactComponentImplementation } from '@a2ui/react/v0_9';
+import { ComponentContext } from '@a2ui/web_core/v0_9';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import type { A2uiAction, JsonValue } from '../../src/contracts.ts';
 import { createSurfaceSession } from '../../src/core/a2ui/index.ts';
 import { createBundledCatalog, createBundledCatalogs } from '../../src/views/a2ui/catalog.tsx';
@@ -113,4 +116,33 @@ test('both ids can address surfaces in the same activity', () => {
   host.apply(json([...first, ...second]));
   assert.deepEqual(host.snapshot().issues, []);
   assert.deepEqual(host.snapshot().surfaces.map((surface) => surface.id), ['form', 'form-2']);
+});
+
+test('an unlisted component type resolves to an error stand-in with the entry as received, and the catalog still lists only its own', () => {
+  for (const catalog of createBundledCatalogs(() => undefined)) {
+    const listed = [...catalog.components.keys()];
+    assert.equal(catalog.components.has('Hologram'), false, 'the stand-in is an answer, not an entry');
+    const standIn = catalog.components.get('Hologram')!;
+    assert.equal(standIn.name, 'Hologram');
+    assert.equal(catalog.components.get('Hologram'), standIn, 'the same stand-in each time');
+    assert.deepEqual([...catalog.components.keys()], listed, 'asking for it adds nothing to the catalog');
+    assert.equal(catalog.components.get('Text'), createBundledCatalog(() => undefined).components.get('Text'), 'a listed type is still itself');
+  }
+
+  const { host } = session();
+  host.apply(json([
+    { version: 'v0.9', createSurface: { surfaceId: 's', catalogId: BASIC_CATALOG_ID } },
+    { version: 'v0.9', updateComponents: { surfaceId: 's', components: [{ id: 'root', component: 'Hologram', depth: 3, children: ['x'] }] } },
+  ]));
+  const surface = host.snapshot().surfaces[0]!;
+  assert.deepEqual(host.snapshot().issues, [], 'the surface raises no second report; the stand-in is the message');
+  const standIn = surface.defaultCatalog.components.get('Hologram')!;
+  const markup = renderToStaticMarkup(createElement(standIn.render, { context: new ComponentContext(surface, 'root', '/'), buildChild: () => null }));
+  assert.match(markup, /role="alert"/);
+  assert.match(markup, /Unknown component type: Hologram/);
+  assert.match(markup, /agui-finding--err/);
+  assert.match(markup, /As received/);
+  assert.match(markup, /Received component root/);
+  assert.match(markup, /depth/);
+  assert.doesNotMatch(markup, /color:\s*red/);
 });

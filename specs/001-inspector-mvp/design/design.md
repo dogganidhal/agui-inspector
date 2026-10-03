@@ -150,7 +150,10 @@ loaded. L05 maps the tokens onto the variables the renderer's components read in
 components that have no usable hook (Row, Divider, Icon, Button, TextField, ChoicePicker, Tabs, Modal)
 with the same tokens. Every surface component, like the activity card around it, follows the tokens in
 light and dark mode (render audit FX11). The renderer works on a copy of each received operation, so what
-a user types never reaches the operations the JSON view, the frames and the export show (FX14).
+a user types never reaches the operations the JSON view, the frames and the export show (FX14). A
+borderless Button is drawn as a link (accent text, underline, tint on hover). An unknown component type
+is the inspector's error line in place, with the entry under "As received". A Button's failing-check
+message appears under it only when no text field of the surface shows the same text (FX15).
 
 ## Layout
 

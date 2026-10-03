@@ -1,5 +1,5 @@
-import { Fragment, useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactElement, type ReactNode } from 'react';
-import { createComponentImplementation, type ReactComponentImplementation } from '@a2ui/react/v0_9';
+import { Fragment, createContext, useContext, useEffect, useId, useRef, useState, useSyncExternalStore, type CSSProperties, type KeyboardEvent, type ReactElement, type ReactNode } from 'react';
+import { createBinderlessComponentImplementation, createComponentImplementation, type ReactComponentImplementation } from '@a2ui/react/v0_9';
 import {
   ButtonApi,
   ChoicePickerApi,
@@ -10,6 +10,9 @@ import {
   TabsApi,
   TextFieldApi,
 } from '@a2ui/web_core/v0_9/basic_catalog';
+import { z } from 'zod';
+import type { JsonValue } from '../../contracts';
+import { CodeBlock, Finding } from '../theme/primitives';
 
 // The components the official renderer draws without a usable hook. @a2ui/react 0.12.0 styles them with
 // CSS-module class names that are never resolved, and Tabs, Modal, ChoicePicker and Divider carry no
@@ -90,13 +93,64 @@ const Icon = createComponentImplementation(IconApi, ({ props }) => {
 });
 
 /**
- * Button: three variants, disabled while a check fails, with the failing message shown beside it and
- * tied to it for assistive technology.
+ * The messages a surface's text fields are showing right now. A Button reads them so it never says again
+ * what a field above it already says; a message the fields do not show is still its to give.
+ */
+interface FieldMessages {
+  add(message: string): () => void;
+  subscribe(listener: () => void): () => void;
+  snapshot(): ReadonlySet<string>;
+}
+
+function createFieldMessages(): FieldMessages {
+  const counts = new Map<string, number>();
+  const listeners = new Set<() => void>();
+  let shown: ReadonlySet<string> = new Set();
+  const publish = () => {
+    shown = new Set(counts.keys());
+    for (const listener of [...listeners]) listener();
+  };
+  return {
+    add(message) {
+      counts.set(message, (counts.get(message) ?? 0) + 1);
+      publish();
+      return () => {
+        const left = (counts.get(message) ?? 1) - 1;
+        if (left > 0) counts.set(message, left);
+        else counts.delete(message);
+        publish();
+      };
+    },
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => void listeners.delete(listener);
+    },
+    snapshot: () => shown,
+  };
+}
+
+const FieldMessagesContext = createContext<FieldMessages | undefined>(undefined);
+const noMessages: ReadonlySet<string> = new Set();
+const subscribeNone = () => () => undefined;
+
+/** One per surface: its text fields report their failing messages to the buttons around them. */
+export function FieldMessagesProvider({ children }: { children: ReactNode }): ReactElement {
+  const [messages] = useState(createFieldMessages);
+  return <FieldMessagesContext.Provider value={messages}>{children}</FieldMessagesContext.Provider>;
+}
+
+/**
+ * Button: three variants, disabled while a check fails. Its first failing message that no text field of the
+ * surface already shows appears under it, tied to it for assistive technology. When the fields say it all,
+ * the button is disabled and adds nothing.
  */
 const Button = createComponentImplementation(ButtonApi, ({ props, buildChild }) => {
   const hintId = useId();
+  const messages = useContext(FieldMessagesContext);
+  const read = messages?.snapshot ?? (() => noMessages);
+  const fieldShows = useSyncExternalStore(messages?.subscribe ?? subscribeNone, read, read);
   const invalid = props.isValid === false;
-  const hint = invalid ? props.validationErrors?.[0] : undefined;
+  const hint = invalid ? props.validationErrors?.find((message) => !fieldShows.has(message)) : undefined;
   return (
     <span className="agui-a2ui-action" style={weighted(props.weight)}>
       <button
@@ -124,6 +178,8 @@ const TextField = createComponentImplementation(TextFieldApi, ({ props }) => {
   const id = useId();
   const errorId = `${id}-error`;
   const error = props.validationErrors?.[0];
+  const messages = useContext(FieldMessagesContext);
+  useEffect(() => (error && messages ? messages.add(error) : undefined), [error, messages]);
   const shared = {
     id,
     className: 'agui-a2ui-input',
@@ -272,5 +328,26 @@ const Modal = createComponentImplementation(ModalApi, ({ props, buildChild }) =>
     </>
   );
 });
+
+/**
+ * What stands in for a component whose type the catalog does not list, in place of the renderer's raw red
+ * line: an error that names the type, with the definition as it was received. Nothing is drawn for the
+ * component, and it is not repaired or dropped from the list.
+ */
+export const unknownComponent = (type: string): ReactComponentImplementation =>
+  createBinderlessComponentImplementation({ name: type, schema: z.object({}).passthrough() }, ({ context }) => {
+    const { id, properties } = context.componentModel;
+    return (
+      <div role="alert" className="agui-a2ui-unknown">
+        <Finding variant="err" kind={`Component ${id}`}>
+          Unknown component type: {type}. The catalog has no such component, so nothing is drawn for it.
+        </Finding>
+        <details className="agui-a2ui-received">
+          <summary>As received</summary>
+          <CodeBlock text={JSON.stringify({ id, component: type, ...properties } satisfies Record<string, JsonValue | undefined>, null, 2)} aria-label={`Received component ${id}`} />
+        </details>
+      </div>
+    );
+  });
 
 export const COMPONENTS: Readonly<Record<string, ReactComponentImplementation>> = { Row, Divider, Icon, Button, TextField, ChoicePicker, Tabs, Modal };
