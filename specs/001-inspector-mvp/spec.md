@@ -295,7 +295,12 @@ Its section 10 supplies the release baseline; the recorded clarifications resolv
   JSON. The built-in middleware 0.0.11 default catalog id
   `https://a2ui.org/specification/v0_9/basic_catalog.json` MUST resolve to the bundled renderer basic
   catalog `https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json` without a fetch.
-  General catalog aliases remain deferred to 1.0.0. (Sources: 4, 8.3, 8.5, 10; clarification 2026-10-02.)
+  General catalog aliases remain deferred to 1.0.0. Every basic-catalog component the inspector renders
+  MUST be drawn with the theme tokens, in light and dark mode, with a role and an accessible name and with
+  keyboard operation (Tabs, Modal, pickers); media components stay blocked (FR-037). An `a2ui-surface`
+  activity that has no operations yet but declares a generation `status` (`building`, `retrying`,
+  `failed`) MUST show that status, and a failed generation MUST be visibly distinct from a building one.
+  (Sources: 4, 8.3, 8.5, 10; clarification 2026-10-02; render audit FX11.)
 - **FR-021**: Subagent starts, finishes, and errors MUST appear as nested markers under the parent
   run, linked through parent and subagent run identifiers. Dedicated lanes are outside the MVP.
   (Sources: 8.3, 10.)

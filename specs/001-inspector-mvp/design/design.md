@@ -145,9 +145,11 @@ case-insensitive `url(`/`image-set(` (including whitespace before `(`), `@`, `;`
 backslash escapes. No CSP relaxation is permitted. Test each rejected form, both maps, theme
 switching and hostile host generic properties. General in-app isolation remains G-06/1.0.0 scope.
 
-The A2UI renderer styles surface content itself. L05 maps the tokens onto whatever theming the
-official renderer exposes; content the renderer still styles on its own may keep its defaults, while
-the activity card around it uses the tokens.
+The official A2UI renderer's component stylesheet does not resolve its class names, so it is not
+loaded. L05 maps the tokens onto the variables the renderer's components read inline, and draws the
+components that have no usable hook (Row, Divider, Icon, Button, TextField, ChoicePicker, Tabs, Modal)
+with the same tokens. Every surface component, like the activity card around it, follows the tokens in
+light and dark mode (render audit FX11).
 
 ## Layout
 
@@ -220,7 +222,7 @@ brands. They are not a product feature; do not build them.
 | Tool call | Card with name, `server tool` or `client tool` tag, call id and status. Arguments show raw fragments while they stream and parsed JSON once complete; the result follows. A pending client call shows a result editor in the interrupt card's pattern; once answered it shows "Result · entered by you" and a footer naming the run that carried it | `TOOL_CALL_*` |
 | Subagent | Dashed box with started, finished or error lines and the subagent run id | `SUBAGENT_*` |
 | Encrypted reasoning | Inline marker: lock icon, subtype, entity and size tags, "not decoded", link to the raw frame | `REASONING_ENCRYPTED_VALUE` |
-| Activity | Card with the activity type and id and a Rendered or JSON switch. A2UI surfaces render; other types and disabled rendering show JSON. The footer records the action the user sent and the run that carried it | `ACTIVITY_*` |
+| Activity | Card with the activity type and id and a Rendered or JSON switch. A2UI surfaces render; other types and disabled rendering show JSON. An A2UI activity that has a generation `status` and no operations yet shows it instead: a pulsing "Building" tag, a warning for "Retrying" with the attempt count, an error for "Failed" with the message, and the validation errors behind a disclosure. The footer records the action the user sent and the run that carried it | `ACTIVITY_*` |
 | Custom or raw | Inline marker: mono type, name or source, value | `CUSTOM`, `RAW` |
 | Interrupt | Accent card with the message, a payload editor prefilled from the response schema with a one-line schema hint, Resolve and Cancel interrupt, and an "n of m waiting" count. The footer states that the next run carries `resume` once every interrupt has an answer. Invalid JSON or a schema miss shows an inline error. Once answered it collapses to one line with the payload and the run that carried it | `RUN_FINISHED` interrupt outcome |
 | Messages snapshot | Not in the prototype. A full-width divider in the run header's style reading "Transcript replaced by MESSAGES_SNAPSHOT", with added and removed counts that expand to the lists (FR-019) | `MESSAGES_SNAPSHOT` |

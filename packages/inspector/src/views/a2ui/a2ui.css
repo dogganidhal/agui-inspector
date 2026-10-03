@@ -1,8 +1,9 @@
 /* A2UI surfaces (design.md: Conversation, activity). The activity card around a surface is drawn with the
    theme tokens. The renderer's own variables are mapped onto the same tokens, so a host that overrides
    --agui-* restyles surfaces too. The official @a2ui/react 0.12.0 ships its component stylesheet with
-   unresolved CSS-module class names, so it is not loaded; elements are styled by tag inside .agui-a2ui.
-   Classes use the agui-a2ui prefix. */
+   unresolved CSS-module class names, so it is not loaded. Components that style through inline
+   variables (Card, Column, List, CheckBox, Slider, DateTimeInput) are themed by the --a2ui-* block below;
+   the rest are drawn by components.tsx with the agui-a2ui-* classes in this file. */
 
 .agui-a2ui {
   --a2ui-color-background: var(--bg);
@@ -34,6 +35,21 @@
   --a2ui-font-size-2xl: 24px;
   --a2ui-font-family-title: var(--agui-font-sans);
   --a2ui-font-family-monospace: var(--agui-font-mono);
+  --a2ui-card-border: 1px solid var(--line);
+  --a2ui-card-border-radius: var(--r);
+  --a2ui-card-padding: calc(var(--u) * 3);
+  --a2ui-card-box-shadow: none;
+  --a2ui-card-margin: 0;
+  --a2ui-card-background: var(--bg);
+  --a2ui-column-gap: calc(var(--u) * 2.5);
+  --a2ui-list-gap: calc(var(--u) * 2);
+  --a2ui-checkbox-margin: 0;
+  --a2ui-checkbox-gap: calc(var(--u) * 2);
+  --a2ui-slider-margin: 0;
+  --a2ui-slider-thumb-color: var(--acc);
+  --a2ui-label-font-size: 12px;
+  --a2ui-label-font-weight: 500;
+  --a2ui-datetimeinput-padding: calc(var(--u) * 1.5) calc(var(--u) * 2.5);
   display: grid;
   gap: calc(var(--u) * 3);
   color: var(--fg);
@@ -68,23 +84,168 @@
   outline: 2px solid color-mix(in oklab, var(--acc) 55%, transparent);
   outline-offset: 1px;
 }
-.agui-a2ui-surface button {
-  padding: calc(var(--u) * 1.5) calc(var(--u) * 3);
+.agui-a2ui-surface :is(input[type="checkbox"], input[type="radio"], input[type="range"]) { accent-color: var(--acc); }
+
+/* Text. The renderer draws the variants as real heading elements and the caption as <em>. */
+.agui-a2ui-surface :is(h1, h2, h3, h4, h5) {
+  margin: 0;
+  font-family: inherit;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+.agui-a2ui-surface h1 { font-size: 20px; }
+.agui-a2ui-surface h2 { font-size: 17px; }
+.agui-a2ui-surface h3 { font-size: 15px; }
+.agui-a2ui-surface h4 { font-size: 13.5px; }
+.agui-a2ui-surface h5 { color: var(--muted); font-size: 12px; }
+.agui-a2ui-surface em { color: var(--muted); font-size: 12px; font-style: normal; }
+
+/* Row and Divider. A row wraps instead of overflowing; a vertical divider takes the height of its row. */
+.agui-a2ui-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--u) * 2) calc(var(--u) * 3);
+  min-width: 0;
+}
+.agui-a2ui-divider { flex: none; background: var(--line-2); }
+.agui-a2ui-divider[data-axis="horizontal"] { width: 100%; height: 1px; }
+.agui-a2ui-divider[data-axis="vertical"] { align-self: stretch; width: 1px; min-height: calc(var(--u) * 5); }
+
+/* Icon. A named icon is its name in a tag; the inspector loads no icon font. */
+.agui-a2ui-icon { flex: none; width: 20px; height: 20px; }
+.agui-a2ui-icon-name {
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  height: 19px;
+  padding: 0 calc(var(--u) * 1.5);
+  border-radius: var(--r-xs);
+  background: var(--sunk);
+  color: var(--muted);
+  font: 500 11px/1 var(--agui-font-mono);
+  white-space: nowrap;
+}
+
+/* Button. The failing check's message sits under it. */
+.agui-a2ui-action {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--u);
+  min-width: 0;
+}
+.agui-a2ui-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: calc(var(--u) * 7.5);
+  padding: calc(var(--u) * 1) calc(var(--u) * 3);
   border: 1px solid var(--line-2);
   border-radius: var(--r-sm);
-  background: var(--sunk);
+  background: var(--bg);
   color: var(--fg);
   font: 500 12.5px/1.2 var(--agui-font-sans);
   cursor: pointer;
+  transition: background 0.15s var(--ease), border-color 0.15s var(--ease);
 }
-.agui-a2ui-surface button:hover { background: var(--hover); }
-.agui-a2ui-surface button:disabled { opacity: 0.42; cursor: not-allowed; }
-.agui-a2ui-surface :is(input:not([type="checkbox"], [type="radio"], [type="range"]), select, textarea) {
+.agui-a2ui-btn:hover { background: var(--hover); }
+.agui-a2ui-btn[data-variant="primary"] { border-color: transparent; background: var(--acc); color: var(--acc-fg); }
+.agui-a2ui-btn[data-variant="primary"]:hover { background: color-mix(in oklab, var(--acc) 86%, var(--bg)); }
+.agui-a2ui-btn[data-variant="borderless"] { padding-inline: calc(var(--u) * 1.5); border-color: transparent; background: none; color: var(--acc-ink); }
+.agui-a2ui-btn[data-variant="borderless"]:hover { background: var(--hover); }
+.agui-a2ui-btn:disabled { opacity: 0.42; cursor: not-allowed; }
+.agui-a2ui-hint { color: var(--muted); font-size: 12px; }
+
+/* DateTimeInput keeps the renderer's markup and inline variables; it gets the font and a sane width. */
+.agui-a2ui-surface .a2ui-date-time-input { max-width: 16rem; font: 13px/1.4 var(--agui-font-sans); }
+
+/* TextField */
+.agui-a2ui-field { display: grid; gap: calc(var(--u) * 1.5); min-width: 0; }
+.agui-a2ui-label { padding: 0; color: var(--fg); font: 500 12px/1.3 var(--agui-font-sans); }
+.agui-a2ui-input {
+  width: 100%;
   min-width: 0;
   padding: calc(var(--u) * 1.5) calc(var(--u) * 2.5);
   border: 1px solid var(--line-2);
   border-radius: var(--r-sm);
   background: var(--bg);
   color: var(--fg);
-  font: 13px var(--agui-font-sans);
+  font: 13px/1.4 var(--agui-font-sans);
 }
+textarea.agui-a2ui-input { resize: vertical; }
+.agui-a2ui-input[aria-invalid="true"] { border-color: var(--err); }
+.agui-a2ui-error { color: var(--err); font-size: 12px; }
+
+/* ChoicePicker. Radios and checkboxes in a wrapping row, or toggle chips. */
+.agui-a2ui-choices { display: grid; gap: calc(var(--u) * 2); min-width: 0; margin: 0; padding: 0; border: 0; }
+.agui-a2ui-options { display: flex; flex-wrap: wrap; gap: calc(var(--u) * 2) calc(var(--u) * 4); }
+.agui-a2ui-option { display: inline-flex; align-items: center; gap: calc(var(--u) * 2); cursor: pointer; }
+.agui-a2ui-chips { display: flex; flex-wrap: wrap; gap: calc(var(--u) * 1.5); }
+.agui-a2ui-chip {
+  height: calc(var(--u) * 6.5);
+  padding: 0 calc(var(--u) * 2.5);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--bg);
+  color: var(--muted);
+  font: 400 12px/1 var(--agui-font-sans);
+  cursor: pointer;
+}
+.agui-a2ui-chip:hover { color: var(--fg); border-color: var(--line-2); }
+.agui-a2ui-chip[aria-pressed="true"] { border-color: var(--acc-line); background: var(--acc-soft); color: var(--acc-ink); font-weight: 500; }
+
+/* Tabs */
+.agui-a2ui-tabs { min-width: 0; }
+.agui-a2ui-tablist { display: flex; gap: calc(var(--u) * 0.5); overflow-x: auto; border-bottom: 1px solid var(--line); }
+.agui-a2ui-tab {
+  margin-bottom: -1px;
+  padding: calc(var(--u) * 2) calc(var(--u) * 3);
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--muted);
+  font: 500 12.5px/1.2 var(--agui-font-sans);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.agui-a2ui-tab:hover { color: var(--fg); }
+.agui-a2ui-tab[aria-selected="true"] { border-bottom-color: var(--acc); color: var(--fg); }
+.agui-a2ui-tabpanel { padding-top: calc(var(--u) * 3); }
+
+/* Modal. A native dialog: the browser draws the backdrop, traps focus and handles Escape. */
+.agui-a2ui-modal-trigger { display: inline-block; max-width: 100%; }
+.agui-a2ui-modal {
+  width: min(32rem, calc(100vw - var(--u) * 8));
+  max-height: calc(100vh - var(--u) * 8);
+  padding: 0;
+  border: 0;
+  border-radius: var(--r);
+  background: var(--bg);
+  color: var(--fg);
+  box-shadow: var(--pop);
+  font: 400 13px/1.5 var(--agui-font-sans);
+  overflow: auto;
+}
+.agui-a2ui-modal::backdrop { background: color-mix(in oklab, var(--fg) 38%, transparent); }
+.agui-a2ui-modal-body { display: grid; gap: calc(var(--u) * 3); padding: calc(var(--u) * 5) calc(var(--u) * 12) calc(var(--u) * 5) calc(var(--u) * 5); }
+.agui-a2ui-modal-close {
+  position: absolute;
+  top: calc(var(--u) * 2);
+  right: calc(var(--u) * 2);
+  width: calc(var(--u) * 7);
+  height: calc(var(--u) * 7);
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--muted);
+  font: 400 20px/1 var(--agui-font-sans);
+  cursor: pointer;
+}
+.agui-a2ui-modal-close:hover { background: var(--hover); color: var(--fg); }
+
+/* Generation lifecycle: what an activity shows before it has operations. */
+.agui-a2ui-lifecycle { display: grid; gap: calc(var(--u) * 2); }
+.agui-a2ui-pending { display: flex; flex-wrap: wrap; align-items: center; gap: calc(var(--u) * 2); margin: 0; color: var(--muted); }
+.agui-a2ui-errors { margin: calc(var(--u) * 2) 0 0; padding-left: calc(var(--u) * 4); color: var(--muted); font: 12px/1.5 var(--agui-font-mono); }
