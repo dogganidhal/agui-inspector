@@ -8,7 +8,9 @@ Run from the repository root (after `npm run package:python`):
 
 The inspector is mounted only when EXAMPLE_DEBUG=1. The credentials come from the environment and
 are checked by the middleware below, which guards the inspector, its config and the agent route
-alike: the inspector adds no authentication of its own and never sees the credentials.
+alike: the inspector adds no authentication of its own and never sees the credentials. Middleware is
+one option. `FastAPI(dependencies=[Depends(...)])` on this app would guard the same routes, because
+the helper registers them as API routes on a FastAPI app.
 """
 
 import argparse
