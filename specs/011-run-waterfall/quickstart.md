@@ -18,7 +18,7 @@ How to see the feature work, by hand and by test. Run from the repository root w
 ## By test
 
 ```sh
-npm run test:unit -- packages/inspector/tests/inspection/waterfall      # builder, keys, markup, workload, docs, styles
+npm run test:unit -- packages/inspector/tests/inspection                # builder, keys, markup, workload, docs, styles
 npm run test:e2e -- tests/e2e/inspection/waterfall.spec.ts --workers=2  # keyboard, live growth, workload
 npm run test:e2e -- tests/e2e/hosted/waterfall.spec.ts --workers=2      # real app, export, import, no requests
 npm run check:ci                                                        # the whole gate, including the bundle budget

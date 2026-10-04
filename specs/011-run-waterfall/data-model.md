@@ -17,7 +17,7 @@ export interface WaterfallRow {
   /** Stable across store updates and across an export and import: derived from frame and exchange ids. */
   readonly id: string;
   readonly kind: RowKind;
-  /** Run id, step name, message role, tool name or subagent name. */
+  /** Run id, step name, message role, reasoning message id, tool name or subagent name. */
   readonly label: string;
   /** The id the details show: runId, messageId, toolCallId, subagentRunId or the step name. */
   readonly subject: string;
@@ -45,7 +45,7 @@ export interface WaterfallRun {
   readonly row: WaterfallRow;
   /** The run's own status, as the conversation names it. */
   readonly status: RunStatus;
-  /** True while the exchange streams: an open row is then "running", else "no end seen". */
+  /** The exchange still streams: an open row is then "running", else "no end seen". */
   readonly live: boolean;
   /** Offset of the latest frame of the exchange, valid or not. */
   readonly latestMs: number;
@@ -102,7 +102,7 @@ A tool call's bar has two spans: arguments from start to `argsEndMs`, and the wa
 | Row | Tag | Variant | When |
 | --- | --- | --- | --- |
 | run | Streaming, Finished, Interrupted, Cancelled, Error, Stopped by you, No terminal event | as the conversation's run header | always one |
-| message, reasoning | the role | line | messages only |
+| run | connection error | warn | the exchange has a transport error (its text is the `Connection` fact) |
 | tool | waiting for result | warn | the run ended and the call has no result and is pending |
 | tool | no result | warn | the run ended and the call has no result and is not pending |
 | tool | answered by the client | line | the result was entered in a later run |
@@ -133,6 +133,7 @@ export interface VisibleRow {
   readonly depth: number;
   readonly parentIndex?: number;
   readonly expandable: boolean;
+  /** Open. A run row can be open with nothing under it, so its axis shows. Any other leaf is not expanded. */
   readonly expanded: boolean;
   readonly posInSet: number;
   readonly setSize: number;
@@ -148,6 +149,8 @@ export type TreeMove =
 export function treeKey(rows: readonly VisibleRow[], index: number, key: TreeKey): TreeMove;
 export function axisTicks(axisMs: number): { readonly ms: number; readonly label: string }[];
 export function rowLabel(visible: VisibleRow): string;
+export function segmentsOf(visible: Pick<VisibleRow, 'row' | 'run'>): Segment[];   // the bars of a row on its run's axis
+export function indexRows(waterfall: Waterfall): ReadonlyMap<string, Known>;        // every row by id, with its parent
 ```
 
 A run row is expanded unless `openRuns` says false for it. The newest run is expanded when `openRuns` has no entry for

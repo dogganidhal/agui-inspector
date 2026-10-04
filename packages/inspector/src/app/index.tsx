@@ -204,7 +204,7 @@ export function App({ settings, connection, conversation, inspection, mode, allo
               recomputes from the store, so it is mounted only while it is the one on screen. */}
           <div className="agui-app-body" hidden={tab !== 'inspection'}>
             <PaneBoundary pane="inspection" resetKey={inspection.store} onCatch={onPaneError}>
-              <InspectionView {...inspection} reveal={reveal} />
+              <InspectionView {...inspection} reveal={reveal} {...(conversation.threadId !== undefined && { threadId: conversation.threadId })} />
             </PaneBoundary>
           </div>
           {tab === 'state' && (
