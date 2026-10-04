@@ -5,11 +5,12 @@ file) and the session file (the `runs` list). Nothing else is saved. The runtime
 
 ## ClientProfileSettings (extended)
 
-Two optional fields join the seven in `contracts.ts`. The other seven are unchanged.
+Three optional fields join the seven in `contracts.ts`. The other seven are unchanged.
 
 | Field | Type | Default | Rule |
 | --- | --- | --- | --- |
 | `interruptReply` | `"resolve"` or `"cancel"` | absent (by hand) | Any other value is an error that names the field. The key is left out of the parsed value when absent. |
+| `interruptPayloads` | object, interrupt reason to JSON value | absent (the starting answer) | Every key is a nonempty string, the `reason` of an interrupt. Every value is any JSON value, including `null`. Order is kept. An empty object parses to absent. Used only when `interruptReply` is `"resolve"`, and kept when it is not. |
 | `toolResults` | object, tool name to text | absent (by hand) | Every key is the `name` of a tool in the same profile. Every value is a nonempty string. Order is kept. An empty object parses to absent. |
 
 Notes:
@@ -20,9 +21,14 @@ Notes:
 - A script that equals what the developer would have typed produces the same tool message `content`, byte for byte. It is
   not trimmed, parsed or templated.
 - The injected `render_a2ui` tool is not in `tools`, so it cannot have a script.
-- The lookup at run time uses `Object.hasOwn`. See [research R3](research.md).
+- `interruptPayloads` keys cannot be checked against a list: `Interrupt.reason` is a required open string in
+  `@ag-ui/core`, so any nonempty text is a valid key. A payload for a reason no interrupt has is unused.
+- A payload is not checked against any response schema, and it is sent as the JSON value in the file, parsed once, with
+  the key order of the file. It is the value the manual editor would hold if the developer typed the same JSON.
+- Both lookups at run time use `Object.hasOwn`, because the tool name and the reason come from the agent's stream. See
+  [research R3](research.md).
 
-Export writes the envelope `{ "version": 0, "profile": { ... } }` with the two fields only when they are set. Import and
+Export writes the envelope `{ "version": 0, "profile": { ... } }` with the three fields only when they are set. Import and
 load use the same `parseProfileSettings`. See [contracts/automation.md](contracts/automation.md#profile-file).
 
 ## InterruptAnswer and ToolResultDraft (extended)
@@ -32,9 +38,10 @@ load use the same `parseProfileSettings`. See [contracts/automation.md](contract
 | `InterruptAnswer` | `automatic?: true` | The inspector gave this answer. Absent when the developer did. |
 | `ToolResultDraft` | `automatic?: true` | The inspector gave this result from the profile. Absent when the developer did. |
 
-Both live in the runtime's pending replies, which are memory only. The value of an automatic answer is the draft the
-reply already had: an interrupt keeps the starting answer from its response schema, and a tool draft takes the script as
-its `resultDraft`. The status changes the way a manual change does (`resolved` or `cancelled`, `answered`).
+Both live in the runtime's pending replies, which are memory only. The value of an automatic answer is
+the draft the reply already had, or the profile's payload for the interrupt's reason: an interrupt keeps the starting
+answer from its response schema unless the profile has a payload for its reason, which replaces the draft, and a tool
+draft takes the script as its `resultDraft`. The status changes the way a manual change does (`resolved` or `cancelled`, `answered`).
 
 ## Run (extended)
 

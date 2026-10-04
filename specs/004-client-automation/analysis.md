@@ -14,15 +14,16 @@ before implementation. Findings that were fixed in the same change are marked Fi
 | I2 | Inconsistency | MEDIUM | quickstart.md | It sent the reader to a Settings panel in the runtime e2e page, which has none. | Fixed. It names the public demo and the hosted example. |
 | D1 | Documentation | MEDIUM | tasks.md T027, T028 | A 0.1.0 inspector rejects the new keys. The pull request template asks for compatibility notes. | Fixed. The docs say so in one sentence. |
 | D2 | Documentation | LOW | tasks.md T027 | The public demo is the natural place to try the feature and said nothing. | Fixed. One sentence in `demo.mdx`. |
-| A1 | Ambiguity | LOW | spec.md Assumptions | Resolve sends the schema's starting answer, which is `approved: false` for an approval schema. A developer who wants `true` has no way to script it. | Not changed. The issue asks for resolve or cancel only. Recorded as an open question for the maintainer in the pull request. |
+| A1 | Ambiguity | LOW | spec.md Assumptions | Resolve sends the schema's starting answer, which is `approved: false` for an approval schema. A developer who wants `true` has no way to script it. | Fixed by the maintainer's decision of 2026-10-04: an optional `interruptPayloads` map from interrupt reason to a JSON payload, sent as written. Spec, plan, research, data model, contract, quickstart and tasks are updated. |
 
-No finding is CRITICAL. No constitution conflict.
+No finding is CRITICAL. No constitution conflict. The payload addition was checked after the maintainer's approval: it adds one optional profile field, no dependency and no request type, so the constitution check in the plan still passes.
 
 ## Coverage
 
 | Requirement | Tasks |
 | --- | --- |
 | FR-001, FR-002, FR-018, FR-019, FR-020 | T002, T003, T004, T020 |
+| FR-005 payload | T005, T006, T007, T009, T021 |
 | FR-003 | T007, T010, T023 |
 | FR-004 | T018, T019, T020 |
 | FR-005, FR-007, FR-008 | T005, T006, T007, T008, T009 |
@@ -45,5 +46,5 @@ the developer not to put a secret in one (principle IV).
 
 ## Metrics
 
-Requirements 22, success criteria 7, tasks 32. Every requirement has at least one task. No task is unmapped. Critical 0,
-high 0 open, ambiguity 1 open (A1, by decision).
+Requirements 22, success criteria 8, tasks 32. Every requirement has at least one task. No task is unmapped. Critical 0,
+high 0 open, ambiguity 0 open.

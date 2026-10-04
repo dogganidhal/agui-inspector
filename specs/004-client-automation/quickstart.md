@@ -31,6 +31,9 @@ npm run check:ci
 2. Select the reference agent and press the `interrupt` quick message.
 3. Expect: no reply card stays open, a second run appears at once, and the agent's text reads
    `Resumed with i-approve=resolved:{"approved":false,"note":""}, i-contact=resolved:{}`.
+   Add the payload `{"approved": true, "note": "auto"}` for the reason `approval` in Interrupt payloads and repeat.
+   Expect `i-approve=resolved:{"approved":true,"note":"auto"}, i-contact=resolved:{}`. Give `approval` the payload
+   `{"approved": "yes"}`, which misses the schema, and expect it to be sent as written.
 4. Set Interrupt replies to Cancel and repeat. Expect `i-approve=cancelled, i-contact=cancelled`.
 5. Add the tools `pick_color` and `pick_size`, give each a scripted result, and press the `tools` quick message. Expect
    `Tool results: c-color=<text>, c-size=<text>` with the text exactly as written.
@@ -50,10 +53,10 @@ generated identifiers.
 
 ### US4: the profile
 
-1. Set a mode and two scripts, press Export profile, reload the page, press Import profile with that file.
+1. Set a mode, one interrupt payload and two scripts, press Export profile, reload the page, press Import profile with that file.
 2. Expect the same settings in the panel and in `localStorage` under `agui-inspector.profile`, and `"version": 0` in the file.
 3. Import a 0.1.0 profile file. Expect it to load and every reply to stay by hand.
-4. Import a file with `"interruptReply": "manual"`, then one with `"toolResults": { "nope": "x" }`. Expect a visible error that
+4. Import a file with `"interruptReply": "manual"`, then one with `"toolResults": { "nope": "x" }`, then one with `"interruptPayloads": { "": 1 }`. Expect a visible error that
    names the field, and the profile in use unchanged.
 
 ### US5: the limit
@@ -70,7 +73,7 @@ generated identifiers.
 | Requirement | Where it is checked |
 | --- | --- |
 | FR-001 to FR-004 | `settings.test.ts` (validation, export, import, load), `settings-view.test.tsx` (controls), `settings.spec.ts` (e2e panel) |
-| FR-005 to FR-008 | `replies.test.ts` (`automate`), `runtime.test.ts` (chains, equality, settings at run end), `automation.spec.ts` |
+| FR-005 to FR-008 | `replies.test.ts` (`automate`, payloads), `runtime.test.ts` (chains, equality, settings at run end), `automation.spec.ts` |
 | FR-009, FR-010 | `runtime.test.ts` (mixed run, failed preparation, retry), `automation.spec.ts` (mixed run) |
 | FR-011 | `runtime.test.ts` (surface action untouched) |
 | FR-012 to FR-015 | `runtime.test.ts` (limit, reset, pause notice, Stop), `automation.spec.ts` (`interrupt forever`) |
@@ -79,3 +82,4 @@ generated identifiers.
 | FR-021 | the docs test for `runs.mdx` and a read of the pages |
 | FR-022 | the files above plus `npm run check:ci` |
 | SC-007 | the network allowlist assertion every runtime e2e test already makes |
+| SC-008 | `replies.test.ts`, `runtime.test.ts` (payload equality), `automation.spec.ts` (payload, including one that misses the schema) |

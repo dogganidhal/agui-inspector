@@ -7,7 +7,8 @@
 
 ## Summary
 
-The client profile gets two optional settings: how interrupts are answered (`resolve` or `cancel`, absent means by hand)
+The client profile gets three optional settings: how interrupts are answered (`resolve` or `cancel`, absent means by
+hand), a scripted payload per interrupt reason (a map from `Interrupt.reason` to a JSON value, used when Resolve is on),
 and a scripted result per client tool (a map from tool name to text). When a run ends owing replies, the runtime asks a new
 pure function, `automate`, which of them the profile answers. It answers those through the same state changes a manual
 reply makes, and sends the continuation through the same builder and the same `dispatch` as `continueRun`. The run input
@@ -28,7 +29,7 @@ Node 24 or newer, Python 3.10 or newer for the wheel (no Python source change).
 **Primary Dependencies**: Existing exact-pinned `@ag-ui/core` 1.0.1 and `@ag-ui/client` 1.0.1 (`buildResumeArray` through the
 existing `resumeEntries`), `@a2ui/*` untouched. No new dependency, no row for `dependencies.mdx`.
 
-**Storage**: The existing profile (browser storage key `agui-inspector.profile`, exported file) gains two optional keys.
+**Storage**: The existing profile (browser storage key `agui-inspector.profile`, exported file) gains three optional keys.
 The existing session file gains one optional key on `runs[]`. Both stay at version 0. The reply count and the pause flag
 are memory only.
 
@@ -58,7 +59,7 @@ Constitution 1.2.0. Pre-research and post-design assessments agree.
 | I. The wire comes first | Pass. No frame, no recorded byte, no order and no timing changes. The recorder and the protocol client's stream are untouched. The run input of an automatic continuation is built by the functions that build a manual one, and the mark never enters the request ([research R5](research.md)). |
 | II. The protocol, not a framework | Pass. Resume entries still come from `buildResumeArray` through `resumeEntries`. The automation code is in `core/runtime` and `core/profiles`, with no React. The views only read `automatic` flags. |
 | III. Generic core, application presets | Pass. Nothing is keyed to an agent, route or message convention. Scripts match the tool names the developer declared. The loop scenario lives in the reference agent. |
-| IV. Local-only and credential privacy | Pass. No request type, origin or header is added. The new profile fields hold a mode and developer text, never a token or header. A scripted result is saved with the profile like `context` and `forwardedProps`; the docs say not to put a secret in one. Exports still contain no headers. |
+| IV. Local-only and credential privacy | Pass. No request type, origin or header is added. The new profile fields hold a mode and developer text, never a token or header. A scripted result or payload is saved with the profile like `context` and `forwardedProps`; the docs say not to put a secret in one. Exports still contain no headers. |
 | V. Small and auditable | Pass. No dependency. One pure function, one constant, one loop in `dispatch`, optional fields. No new abstraction, no configurable limit, no rules engine. |
 | VI. Every event type has a view | Pass. No protocol support changes. |
 | Distribution | Pass. One bundle. Both packages ship it, so both get a minor changeset. |
@@ -73,11 +74,12 @@ does not touch it.
 
 ## Design in one page
 
-1. `contracts.ts`: `ClientProfileSettings.interruptReply?`, `.toolResults?`; `InterruptAnswer.automatic?`,
+1. `contracts.ts`: `ClientProfileSettings.interruptReply?`, `.interruptPayloads?`, `.toolResults?`; `InterruptAnswer.automatic?`,
    `ToolResultDraft.automatic?`; `AutomaticReplies`; `Run.automaticReplies?`.
-2. `core/profiles/index.ts`: validate and copy the two fields in `parseProfileSettings`, carry them in `envelope`, update
+2. `core/profiles/index.ts`: validate and copy the three fields in `parseProfileSettings`, carry them in `envelope`, update
    the comments that count seven settings.
-3. `core/runtime/replies.ts`: `AUTOMATIC_REPLY_LIMIT`, `automate`, `automaticReplies`.
+3. `core/runtime/replies.ts`: `AUTOMATIC_REPLY_LIMIT`, `automate` (which also picks the payload for an interrupt's
+   reason), `automaticReplies`.
 4. `core/runtime/index.ts`: `dispatch` loop, `dispatchRun`, `automaticTurn`, a shared `continuation()` for `continueRun` and
    the chain, `streak` and `paused`, the notice text, `Run.automaticReplies` on write.
 5. `core/session-files/index.ts`: `runOut` and `checkRun` accept `automaticReplies`.
@@ -121,7 +123,7 @@ packages/inspector/src/core/runtime/replies.ts            # automate, automaticR
 packages/inspector/src/core/runtime/index.ts              # dispatch loop, streak, paused, notice, Run mark
 packages/inspector/src/core/session-files/index.ts        # the optional run key
 packages/inspector/src/core/projection/index.ts           # Carried item, ToolResult.automatic
-packages/inspector/src/views/settings/index.tsx           # interrupt control, scripted result field
+packages/inspector/src/views/settings/index.tsx           # interrupt control, payload group, scripted result field
 packages/inspector/src/views/connection/index.tsx         # Automatic tags, tool card footer
 packages/inspector/src/views/conversation/index.tsx       # Result label
 examples/reference-agent/scenarios.ts                     # INTERRUPT_FOREVER
@@ -147,16 +149,16 @@ only new files are the e2e spec, the changesets and this directory.
 
 | Layer | Cases |
 | --- | --- |
-| `replies.test.ts` (pure) | `automate`: resolve, cancel, none; script match by name; no match for empty name or `constructor`, `toString`, `__proto__`; mixed batch; answered replies untouched; same object when nothing changes. `automaticReplies`: ids, undefined when empty. |
+| `replies.test.ts` (pure) | `automate`: resolve, cancel, none; the payload for a reason replaces the starting answer, is cloned, is not checked against the schema, is ignored by cancel, and a reason without a payload keeps the starting answer; reasons `constructor`, `toString`, `__proto__` match no payload; script match by name; no match for empty name or `constructor`, `toString`, `__proto__`; mixed batch; answered replies untouched; same object when nothing changes. `automaticReplies`: ids, undefined when empty. |
 | `runtime.test.ts` | Equality: automatic continuation body equals the manual one under a fixed identifier source, for interrupts (resolve, cancel) and tools, in full and turn message modes. Chain stops at 10 and sets the notice. The count resets on a message, a manual answer, a manual continuation, a surface action, a new thread and a target change. Pause clears. Stop ends the chain and a stopped run is not answered. Failed preparation leaves marked answers, sends nothing more, and the manual `continueRun` works. A profile change while waiting answers nothing. The profile in force at run end decides. `send` resolves after the chain. Default profile: nothing answered (the existing test stays). `Run.automaticReplies` written, absent for manual. A2UI action not automated. |
-| `settings.test.ts` | Parse accepts 0.1.0 profiles, both fields, `{}`; rejects bad mode, non-object, unknown tool, empty or non-text script, extra keys, credential-looking keys. Export contains the fields only when set. Export then import equals. Save and load through storage. |
-| `settings-view.test.tsx` | The segmented control, the script field, clearing, removing a tool removes its script, labels. |
+| `settings.test.ts` | Parse accepts 0.1.0 profiles, all three fields, `{}`; rejects bad mode, non-object, an empty reason, unknown tool, empty or non-text script, extra keys, credential-looking keys; a payload map is kept when the mode is cancel or absent; `null`, a list and an empty object are valid payloads. Export contains the fields only when set. Export then import equals. Save and load through storage. |
+| `settings-view.test.tsx` | The segmented control, the payload group (add, edit, remove, invalid JSON not applied), the script field, clearing, removing a tool removes its script, labels. |
 | `contracts.test.ts` | The envelope still has no volatile field. |
 | Projection tests | `Carried` item, `ToolResult.automatic`, no mark without the field, ids that match nothing ignored. |
 | `session.test.ts` | Export and import keep `automaticReplies`. A file without it imports. A malformed value is refused. |
 | `connection-view.test.tsx` | `Automatic` tag on answered cards, the new footer. |
 | `tests/demo/scenarios.test.ts` | `interrupt forever` interrupts on the first run and on a resume. `SCENARIOS` and the seven quick messages are unchanged. |
-| `automation.spec.ts` (e2e, runtime harness) | Resolve and cancel: the recorded second request matches the manual one after identifiers are replaced. Scripted results for both tools. A mixed run. `interrupt forever`: 11 runs, the notice, a manual answer continues. Stop in a chain. Marks in the conversation. Network allowlist. |
+| `automation.spec.ts` (e2e, runtime harness) | Resolve and cancel: the recorded second request matches the manual one after identifiers are replaced. A payload for `approval` reaches the agent exactly, including one that misses the schema. Scripted results for both tools. A mixed run. `interrupt forever`: 11 runs, the notice, a manual answer continues. Stop in a chain. Marks in the conversation. Network allowlist. |
 | `settings.spec.ts` (e2e) | Choose Resolve and write a script in the panel, export, reload, import, same settings. A 0.1.0 file loads. A bad file shows the error and keeps the profile. |
 | `app.spec.ts` (e2e, real app) | The panel's Resolve reaches the next run through the app's wiring. |
 

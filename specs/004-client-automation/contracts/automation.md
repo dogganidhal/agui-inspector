@@ -6,7 +6,7 @@ spelling without changing behavior.
 
 ## Profile file
 
-The envelope is unchanged: `{ "version": 0, "profile": { ... } }`. The profile gains two optional keys.
+The envelope is unchanged: `{ "version": 0, "profile": { ... } }`. The profile gains three optional keys.
 
 ```json
 {
@@ -22,6 +22,7 @@ The envelope is unchanged: `{ "version": 0, "profile": { ... } }`. The profile g
     "injectA2uiTool": false,
     "forwardedProps": {},
     "interruptReply": "resolve",
+    "interruptPayloads": { "approval": { "approved": true, "note": "auto" } },
     "toolResults": { "pick_color": "teal", "pick_size": "{\"size\":2}" }
   }
 }
@@ -34,6 +35,11 @@ Rules, checked by `parseProfileSettings` for import, load and the settings panel
 | No `interruptReply`, no `toolResults` (every 0.1.0 profile) | Accepted. Every reply is by hand. |
 | `interruptReply` is `"resolve"` or `"cancel"` | Accepted. |
 | `interruptReply` is anything else, including `"manual"`, `null` and `""` | Error: `profile.interruptReply must be "resolve" or "cancel"`. |
+| `interruptPayloads` is not an object (a list, text, `null`) | Error: `profile.interruptPayloads must be an object from interrupt reason to JSON`. |
+| An `interruptPayloads` key that is empty | Error: `profile.interruptPayloads: an interrupt reason cannot be empty`. |
+| An `interruptPayloads` value that is not JSON (possible from code, not from a file) | Error: `profile.interruptPayloads.<reason> must be JSON`. |
+| `interruptPayloads` is `{}` | Accepted and read as absent. |
+| `interruptPayloads` set while `interruptReply` is absent or `"cancel"` | Accepted and kept. It is not used. |
 | `toolResults` is not an object (a list, text, `null`) | Error: `profile.toolResults must be an object from tool name to text`. |
 | A `toolResults` key that is not the name of a tool in `tools` | Error: `profile.toolResults: no tool named "<name>"`. |
 | A `toolResults` value that is not text or is empty | Error: `profile.toolResults.<name> must be nonempty text`. |
@@ -69,7 +75,7 @@ two string lists fails with `runs[n]: automaticReplies ...`, as every bad run fi
 ```ts
 export const AUTOMATIC_REPLY_LIMIT = 10;
 
-export type Automation = Pick<ClientProfileSettings, 'interruptReply' | 'toolResults'>;
+export type Automation = Pick<ClientProfileSettings, 'interruptReply' | 'interruptPayloads' | 'toolResults'>;
 
 /** What the profile answers for these replies. Returns `replies` itself when it answers nothing. */
 export function automate(replies: PendingReplies, automation: Automation): PendingReplies;
@@ -80,8 +86,10 @@ export function automaticReplies(replies: PendingReplies): AutomaticReplies | un
 
 `automate`:
 
-- An interrupt still `unanswered` becomes `resolved` (draft kept) or `cancelled` per `interruptReply`, with
-  `automatic: true`. With no `interruptReply` it is left alone.
+- An interrupt still `unanswered` becomes `resolved` or `cancelled` per `interruptReply`, with `automatic: true`. With
+  no `interruptReply` it is left alone. When it resolves, its draft becomes a clone of `interruptPayloads[reason]` if
+  `reason` (read from the interrupt of the same id in `replies.source`) is an own key of `interruptPayloads`, and
+  stays the starting answer otherwise. A payload is never checked against `responseSchema`. Cancel ignores payloads.
 - A tool draft still `pending` whose `toolName` is an own key of `toolResults` takes that text as `resultDraft` and becomes
   `answered`, with `automatic: true`. A draft with an empty `toolName` or no script is left alone.
 - It never touches an answered reply, a `source` entry or an id. It returns the same object when nothing changed, which
@@ -132,6 +140,7 @@ The composer is already disabled while a notice exists, and it is, because the r
 | Where | Change |
 | --- | --- |
 | Settings, "Client profile" group | A segmented control `Interrupt replies`: By hand, Resolve, Cancel. |
+| Settings, "Interrupt payloads" group | One row for each reason in `interruptPayloads`: the reason, a JSON editor labelled `Payload for <reason>` and a button `Remove payload for <reason>`. A form with `Interrupt reason` and `Payload` (JSON) fields and an `Add payload` button. A note says payloads are used when Interrupt replies is Resolve and are sent as written. |
 | Settings, "Client tools" | Each tool row shows `answered by hand` or `answered with a scripted result`, and a text area `Scripted result for <name>`. Clearing it removes the script. Removing the tool removes the script. |
 | Connection, answered interrupt card | A tag `Automatic` when `automatic` is set. |
 | Connection, answered tool card | A tag `Automatic` when `automatic` is set. |

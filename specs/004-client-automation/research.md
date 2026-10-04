@@ -24,9 +24,11 @@ Alternatives rejected:
 
 ## R2. Shape of the settings in the profile
 
-Decision: two optional top-level fields on the profile, next to the existing seven.
+Decision: three optional top-level fields on the profile, next to the existing seven.
 
 - `interruptReply`: `"resolve"` or `"cancel"`. Absent means by hand.
+- `interruptPayloads`: an object from interrupt reason to any JSON value. Absent means Resolve sends the starting
+  answer. It is used only when `interruptReply` is `"resolve"`.
 - `toolResults`: an object from tool name to nonempty text. Absent means by hand.
 
 Why: the profile is flat today (`protocolVersion`, `tools`, `context`, `renderA2ui`, `injectA2uiTool`, `messageMode`,
@@ -42,15 +44,42 @@ Alternatives rejected:
 
 - `interruptReply: "manual"` as a third file value. Two spellings for the default, and a hand-edited file could set both
   `"manual"` and an absent key. `messageMode` does not do this either.
-- One nested `automation` object. It adds a level for two fields and a new key list to validate.
-- Rules by interrupt id, reason or tool arguments. Not in the issue (spec, out of scope).
+- One nested `automation` object. It adds a level for three fields and a new key list to validate.
+- Rules by interrupt id, message, response schema or tool arguments. Not in the issue and not needed: the maintainer's
+  addition is by reason only.
+- Putting the payload inside `interruptReply` (`{ "resolve": { ... } }`). It would make the mode a union type and the
+  by-hand and cancel cases carry data they never use. Three flat fields stay simple to validate and to export.
 
-## R3. How the scripts are looked up
+## R2a. Interrupt payloads: by reason, sent as written
 
-Decision: by `Object.hasOwn(toolResults, call.toolName)`, never by `toolResults[name]`.
+Decision (the maintainer's answer of 2026-10-04 to the open question): an optional `interruptPayloads` map from
+`Interrupt.reason` to a JSON value. Resolve sends the payload for the interrupt's reason when the profile has one, and
+the starting answer from the response schema otherwise. Cancel ignores the map.
 
-Why: the tool name comes from the agent's stream. A name such as `constructor`, `toString` or `__proto__` would find a
-function or the prototype on a plain object and the "script" would be a non-string. Validation already makes the keys
+Why by reason: `reason` is the one required, agent-independent label on an interrupt (`@ag-ui/core`: "an open string
+rather than an enumeration"). Interrupt ids are generated per run and cannot be written in a profile. The reference agent
+shows the need: `approval` wants `{ "approved": true }`, `input` has no schema.
+
+Why not checked against the schema: the manual editor warns when an answer misses the schema and never blocks it, because
+a wrong answer is a fair test of the server. A payload in the profile is the same kind of answer. Nobody is typing it,
+so there is nothing to warn. It is sent as the parsed JSON value, once, so what the agent receives equals what a developer
+who typed the same text into the editor sends.
+
+Why the map is kept when the mode is not resolve: switching between Resolve and Cancel while testing must not lose the
+payloads. The unused map is inert.
+
+Why keys cannot be validated against a list: the profile does not know which reasons an agent uses. A reason that no
+interrupt has is unused, like a scripted tool result for a tool the agent never calls. The strictness of `toolResults`
+(keys must be profile tools) does not carry over, because tools are declared in the profile and reasons are not.
+
+## R3. How the scripts and payloads are looked up
+
+Decision: by `Object.hasOwn(toolResults, call.toolName)` and `Object.hasOwn(interruptPayloads, interrupt.reason)`, never by
+`map[name]`.
+
+Why: the tool name and the reason come from the agent's stream. A name such as `constructor`, `toString` or `__proto__`
+would find a function or the prototype on a plain object and the "script" would be a non-string. A payload is copied with
+`structuredClone`, and the maps are built with `Object.fromEntries`, so a `__proto__` key stays an own property. Validation already makes the keys
 tool names of the profile, and `Object.hasOwn` makes the lookup match only those. A call with an empty name (the client
 never saw it start) matches nothing, because validation rejects empty keys.
 
@@ -59,6 +88,9 @@ never saw it start) matches nothing, because validation rejects empty keys.
 Decision, in `parseProfileSettings`, so the settings panel, import, load and the saved profile all share one check:
 
 - `interruptReply` is absent, `"resolve"` or `"cancel"`. Anything else fails with `profile.interruptReply must be "resolve" or "cancel"`.
+- `interruptPayloads` is absent or a JSON object. Each key must be nonempty. Each value must be JSON (`isJsonValue`).
+  Errors name the field, as `profile.interruptPayloads: an interrupt reason cannot be empty`. An empty object is accepted
+  and dropped.
 - `toolResults` is absent or a JSON object. Each key must be the name of a tool in the same profile. Each value must be a
   nonempty string. Errors name the field, as `profile.toolResults.pick_color must be nonempty text`.
 - An empty `toolResults` object is accepted and dropped from the parsed value. The panel removes the key when the last
@@ -153,6 +185,10 @@ Decision, in `views/settings/index.tsx`, with the existing primitives and no new
 
 - A segmented control "Interrupt replies" with "By hand" (default), "Resolve" and "Cancel", like "Messages". The change
   goes through the existing `commit`, which validates the whole profile first.
+- A group "Interrupt payloads" after "Client tools". Each reason in the map is a row with the reason, a `JsonSetting`
+  editor labelled `Payload for <reason>` (it already keeps a draft and says why invalid JSON is not applied) and a remove
+  button. An add form with a reason field and a JSON editor, like the existing `AddContext` form. Without payloads the
+  group says Resolve sends the starting answer from the response schema.
 - In "Client tools", each tool row replaces its fixed hint `answered by hand` with the real state and gets a text area
   labelled `Scripted result for <tool>`. It uses the draft pattern of `TextSetting` and `JsonSetting`. Typing sets the
   script, clearing removes it. The remove-tool button also removes the tool's script, in the same `commit`.

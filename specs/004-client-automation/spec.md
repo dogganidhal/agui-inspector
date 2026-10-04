@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-04
 
-**Status**: Draft for review
+**Status**: Approved by the maintainer on 2026-10-04 with one change: scripted interrupt payloads are in scope
 
 **Input**: Issue [#74](https://github.com/dogganidhal/agui-inspector/issues/74), "Answer interrupts and client
 tool calls automatically from the client profile". Item 2 of 9 in the 0.2.0 roadmap. Every interrupt and every client
@@ -19,10 +19,15 @@ tool. The inspector then continues the run the same way a manual reply does.
 Nobody answers questions interactively in this workflow. The answers below were taken from the issue, the 0.2.0
 roadmap, the constitution and the code, each one as the recommended option.
 
-- Q: What does an automatic Resolve send as the answer? → A: The answer the manual editor holds before the developer
-  edits it, so the same as pressing Resolve unedited: the starting answer from the interrupt's response schema, or an
-  empty object when there is no schema. A scripted payload per interrupt would be another optional profile field later.
-  It is not in the issue, so it is out of scope here.
+- Q: What does an automatic Resolve send as the answer? → A: The payload that the profile maps to the interrupt's
+  reason, when it has one. Otherwise the answer the manual editor holds before the developer edits it, so the same as
+  pressing Resolve unedited: the starting answer from the interrupt's response schema, or an empty object when there is
+  no schema. The maintainer answered the open question on 2026-10-04: an automatic Resolve that can only send the
+  starting answer, such as `approved: false`, is not useful, so the optional payload setting is part of 0.2.0.
+- Q: How is a scripted payload matched and checked? → A: By the interrupt's `reason`, which is a required open string
+  in the protocol, mirroring how a scripted tool result is matched by tool name. The payload is any JSON value and is
+  sent exactly as written. It is not checked against the response schema. The manual editor's schema check only warns
+  and never blocks, and the same holds here, with nothing to warn because nobody types the answer.
 - Q: Is the automatic reply limit a profile setting? → A: No. It is fixed at 10 automatic continuations in a row. A
   configurable limit adds a field, a control and a validation rule for a safety net that a developer can pass by
   answering once by hand.
@@ -48,7 +53,8 @@ steps, because a continuation can only start once every interrupt has an answer.
 
 **Independent Test**: Against the reference agent, select the interrupt scenario, set the profile to resolve, send the
 quick message, and compare the second request with the one a manual Resolve on every interrupt produces. Repeat with
-cancel.
+cancel. Then give the `approval` reason a payload in the profile and check that the approval interrupt is answered with
+exactly that payload.
 
 **Acceptance Scenarios**:
 
@@ -61,6 +67,12 @@ cancel.
    compared, **Then** they match field for field, in the same order, apart from the identifiers every new run gets.
 4. **Given** a profile that does not set an interrupt reply, or sets it to by hand, **When** a run ends with
    interrupts, **Then** nothing is answered and the run waits for the developer, as in 0.1.0.
+5. **Given** a profile whose interrupt reply is resolve and that maps the reason `approval` to the payload
+   `{"approved": true}`, **When** a run ends with an interrupt of reason `approval` and another of reason `input`,
+   **Then** the first is resolved with exactly `{"approved": true}` and the second with its starting answer.
+6. **Given** a payload that does not match the interrupt's response schema, **When** the interrupt is resolved
+   automatically, **Then** the payload is sent as written, as the manual editor sends a wrong answer, and the run
+   continues.
 
 ---
 
@@ -125,8 +137,8 @@ profile, and a teammate can import the file and get the same behavior.
 **Why this priority**: The settings are only useful if they survive the session. The format work is small because the
 settings are optional fields of the existing profile.
 
-**Independent Test**: Set a reply mode and two scripted results, reload the page, export the profile, import it into a
-fresh page, and compare the settings. Import a 0.1.0 profile file.
+**Independent Test**: Set a reply mode, one interrupt payload and two scripted results, reload the page, export the
+profile, import it into a fresh page, and compare the settings. Import a 0.1.0 profile file.
 
 **Acceptance Scenarios**:
 
@@ -135,11 +147,12 @@ fresh page, and compare the settings. Import a 0.1.0 profile file.
    imported profile has the same settings, and the file's format version is still 0.
 3. **Given** a profile file or a saved profile from 0.1.0, **When** it is loaded or imported, **Then** it is accepted
    and every reply stays by hand.
-4. **Given** a profile file with an unknown reply mode, a scripted result that is not text, or a scripted result for a
-   tool the profile does not have, **When** it is imported or loaded, **Then** a visible error says what is wrong and
-   the profile in use does not change.
-5. **Given** the profile panel, **When** the developer changes the reply mode, sets or clears a result, or removes a
-   tool, **Then** the next run ending uses the new settings, and removing a tool removes its scripted result.
+4. **Given** a profile file with an unknown reply mode, a scripted result that is not text, a scripted result for a
+   tool the profile does not have, or an interrupt payload with an empty reason, **When** it is imported or loaded,
+   **Then** a visible error says what is wrong and the profile in use does not change.
+5. **Given** the profile panel, **When** the developer changes the reply mode, adds, changes or removes an interrupt
+   payload, sets or clears a result, or removes a tool, **Then** the next run ending uses the new settings, and
+   removing a tool removes its scripted result.
 
 ---
 
@@ -181,6 +194,11 @@ send its quick message. Count the runs.
 - The developer changes the profile while a run streams: the settings in force when the run ends apply.
 - A run that leaves interrupts, and a profile with a scripted result for some tool: interrupts follow the interrupt
   reply mode only. A run ends with interrupts or with pending tool calls, not both.
+- A payload for a reason that no interrupt of the run has: it is not used. A payload while the interrupt reply is
+  cancel or by hand: it is kept and not used, so switching the mode loses nothing. Cancel never sends a payload.
+- A payload that is `null`, an empty object or a list: it is sent as that JSON value, as typing it in the editor
+  would send it.
+- Two interrupts with the same reason: both get that reason's payload.
 - A pending tool call whose name the client never saw start has no name, so no script matches it and it waits by hand.
 - A pending tool call whose arguments are not valid JSON still gets its scripted result. The script does not depend on
   the arguments.
@@ -208,11 +226,12 @@ send its quick message. Count the runs.
 - **FR-001**: The client profile MUST have an optional interrupt reply setting with three values: by hand, resolve,
   cancel. A profile that does not set it means by hand.
 - **FR-002**: The client profile MUST have an optional scripted result for each of its client tools, identified by the
-  tool's name. A scripted result is nonempty text. A tool without one is answered by hand.
+  tool's name. A scripted result is nonempty text. A tool without one is answered by hand. It MUST also have an optional
+  scripted payload for each interrupt reason, identified by the reason text. A payload is any JSON value.
 - **FR-003**: Replying by hand MUST stay the default. A new profile, a default profile and a profile without the new
   settings MUST behave as in 0.1.0: the inspector answers nothing for the developer.
-- **FR-004**: The profile panel MUST let the developer choose the interrupt reply setting, and set, change or clear the
-  scripted result of each client tool. A tool without a scripted result MUST still show that it is answered by hand.
+- **FR-004**: The profile panel MUST let the developer choose the interrupt reply setting, add, change or remove the
+  scripted payload of an interrupt reason, and set, change or clear the scripted result of each client tool. A tool without a scripted result MUST still show that it is answered by hand.
   Removing a tool MUST remove its scripted result. The controls MUST have labels and work from the keyboard, like the
   other profile controls.
 
@@ -220,8 +239,10 @@ send its quick message. Count the runs.
 
 - **FR-005**: When a run ends with interrupts and the interrupt reply setting is resolve or cancel, the inspector MUST
   answer every interrupt of that run and send the continuation without any action from the developer. Resolve MUST
-  answer each interrupt with the answer its manual editor holds before editing (the starting answer taken from the
-  interrupt's response schema). Cancel MUST send a cancellation with no payload.
+  answer each interrupt with the payload that the profile maps to the interrupt's reason when it has one, sent exactly
+  as written and never checked against the response schema. Otherwise Resolve MUST answer with the answer its manual
+  editor holds before editing (the starting answer taken from the interrupt's response schema). Cancel MUST send a
+  cancellation with no payload and ignore the payloads.
 - **FR-006**: When a run ends with pending client tool calls, the inspector MUST give each call that has a scripted
   result that text, matched by tool name. If every pending call is answered this way, it MUST send the continuation
   without any action from the developer. A call without a scripted result MUST wait for a manual result, and the
@@ -267,10 +288,11 @@ send its quick message. Count the runs.
 
 - **FR-018**: Saving a profile in the browser, exporting it and importing it MUST keep the new settings. The files
   MUST stay at format version 0, and the new fields MUST be optional, so every existing profile file keeps working.
-- **FR-019**: A profile with an unknown reply mode, a scripted result that is not text or is empty, or a scripted
-  result for a tool the profile does not have MUST fail with a visible error that names the field. The profile in use
+- **FR-019**: A profile with an unknown reply mode, a scripted result that is not text or is empty, a scripted
+  result for a tool the profile does not have, or a payload map that is not an object, has an empty reason or holds a
+  value that is not JSON MUST fail with a visible error that names the field. The profile in use
   MUST NOT change. This is the existing rule for a bad profile file.
-- **FR-020**: The new settings MUST hold only the reply mode and the scripted texts. The profile still has no field for
+- **FR-020**: The new settings MUST hold only the reply mode, the scripted payloads and the scripted texts. The profile still has no field for
   an authentication header or token. Credentials stay in memory only.
 
 #### Documentation and tests
@@ -288,6 +310,8 @@ send its quick message. Count the runs.
 - **Interrupt reply setting**: One of by hand, resolve or cancel, for the whole profile. Absent means by hand.
 - **Scripted tool result**: The text a client tool's calls are answered with. It belongs to one tool of the profile,
   identified by the tool's name.
+- **Scripted interrupt payload**: The JSON value that an automatic Resolve sends for interrupts of one reason. It is
+  identified by the reason text and belongs to the profile.
 - **Automatic reply mark**: A note on a recorded run that says which of its interrupt answers or tool results the
   inspector gave. It is inspector-side data, not part of the wire.
 - **Automatic reply count**: The number of automatic continuations sent in a row. It lives in memory, belongs to the
@@ -312,18 +336,23 @@ send its quick message. Count the runs.
   existing manual reply tests pass unchanged.
 - **SC-007**: The network allowlist test still passes. An automatic reply sends only the continuation and its
   preparations.
+- **SC-008**: With a payload mapped to a reason, the automatic Resolve continuation carries that payload, equal to the
+  profile's JSON value by deep comparison, including when it does not match the response schema. Interrupts of other
+  reasons carry their starting answer.
 
 ## Assumptions
 
 - The inspector's 0.1.0 specification said that automatic and scripted answers were outside the MVP. The accepted 0.2.0
   roadmap puts them in scope. This specification replaces those sentences from 0.2.0 on, and the 0.1.0 specification
   stays as it was.
-- Resolve uses the answer the manual editor holds before the developer edits it: the schema's `default`, `const` or
-  first `enum` value, otherwise the empty value of each declared type, or an empty object when there is no schema. A
-  scripted payload for resolve is not part of the issue and is out of scope.
-- The reply setting applies to every interrupt of every run. There are no rules by interrupt id or reason.
+- Without a payload for its reason, Resolve uses the answer the manual editor holds before the developer edits it: the
+  schema's `default`, `const` or first `enum` value, otherwise the empty value of each declared type, or an empty
+  object when there is no schema.
+- The reply setting applies to every interrupt of every run. Payloads are chosen by reason only. There are no rules by
+  interrupt id, message or response schema.
 - A scripted result is plain text sent exactly as written. It is not a template and does not read the call's arguments.
-- A result for a tool is by tool name, because a profile already has at most one tool of a name.
+- A result for a tool is by tool name, because a profile already has at most one tool of a name. A payload is by
+  reason text, which the protocol defines as an open string, so the profile cannot check a reason against a list.
 - The settings in force when a run ends decide, because that is when the replies exist.
 - 10 automatic continuations in a row is the limit. It is low enough to stop a runaway agent quickly and high enough
   for a tool sequence of a normal test. The developer can always answer by hand and carry on.
