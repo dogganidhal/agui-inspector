@@ -97,9 +97,9 @@ The protocol client checks the stream while the recorder keeps every byte.
 
 | The client reports | You see |
 | --- | --- |
-| A sequence violation (for example `TEXT_MESSAGE_CONTENT` before `TEXT_MESSAGE_START`) | A `sequence` finding on the run. |
-| A frame it cannot parse as JSON | A `json` finding on the run, beside the frame's own finding. |
-| A frame that fails the event schema | A `schema` finding on the run, beside the frame's own finding. |
+| A sequence violation (for example `TEXT_MESSAGE_CONTENT` before `TEXT_MESSAGE_START`) | A `sequence` finding on the run, with a [rule id](./rules.mdx#sequence) such as `sequence.text-message-not-open`. |
+| A frame it cannot parse as JSON | A `json` finding (`json.invalid`) on the run, beside the frame's own finding. |
+| A frame that fails the event schema | A `schema` finding (`schema.invalid-event`) on the run, beside the frame's own finding. |
 | A connection or HTTP error | The exchange's status or transport error, and a message beside the composer. |
 
 When the client rejects a stream, it stops processing and the run is over, so you can send a new message. The recorder continues to the end of the response, so the exchange stays live and Stop stays available until the response ends or you press it.

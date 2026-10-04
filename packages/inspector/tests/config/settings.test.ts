@@ -7,7 +7,7 @@ import { RENDER_A2UI_TOOL } from '@ag-ui/a2ui-middleware';
 import { RunAgentInputSchema } from '@ag-ui/core/schemas';
 import type { Message, ResumeEntry, Tool } from '@ag-ui/core';
 import { CAPABILITY_GROUPS, type A2uiAction, type ClientProfileSettings, type JsonValue, type Preset } from '../../src/contracts.ts';
-import { describeCapabilities, loadCapabilities, loadConfig, parseConfig, type Result } from '../../src/core/config/index.ts';
+import { declaredOf, describeCapabilities, loadCapabilities, loadConfig, parseConfig, type Result } from '../../src/core/config/index.ts';
 import { parsePreset, preparePreset, selectMessages } from '../../src/core/presets/index.ts';
 import {
   PROFILE_STORAGE_KEY,
@@ -125,6 +125,7 @@ test('inline capabilities need no request; a url is fetched once through the cal
   let requests = 0;
   const loadedInline = value(await loadCapabilities(inline, async () => (requests += 1, '{}')));
   assert.equal(loadedInline.source, 'inline');
+  assert.deepEqual(loadedInline.declared, { reasoning: { supported: true } });
   assert.equal(requests, 0);
 
   const remote = value(parseConfig(config({ id: 'a', url: '/a', capabilities: '/a/capabilities' }))).agents[0]!;
@@ -133,16 +134,35 @@ test('inline capabilities need no request; a url is fetched once through the cal
   assert.deepEqual(requested, ['/a/capabilities'], 'no discovery beyond the configured source');
   assert.equal(loaded.source, 'url');
   assert.deepEqual(loaded.groups[4]?.entries, [{ key: 'snapshots', value: true }]);
+  assert.deepEqual(loaded.declared, { state: { snapshots: true } }, 'the object the groups were made from');
 });
 
 test('an agent without capabilities reports none, and a bad declaration is a visible error', async () => {
   const bare = value(parseConfig(config({ id: 'a', url: '/a' }))).agents[0]!;
-  assert.equal(value(await loadCapabilities(bare, async () => assert.fail('nothing to fetch'))).source, 'none');
+  const none = value(await loadCapabilities(bare, async () => assert.fail('nothing to fetch')));
+  assert.equal(none.source, 'none');
+  assert.deepEqual(none.declared, {});
   assert.match(failure(parseConfig(config({ id: 'a', url: '/a', capabilities: { tools: { supported: 'yes' } } }))), /capabilities/i);
   const remote = value(parseConfig(config({ id: 'a', url: '/a', capabilities: '/caps' }))).agents[0]!;
   assert.match(failure(await loadCapabilities(remote, async () => '{ nope')), /\/caps.*JSON/);
   assert.match(failure(await loadCapabilities(remote, async () => JSON.stringify({ tools: { supported: 'yes' } }))), /capabilities/i);
   assert.match(failure(await loadCapabilities(remote, async () => Promise.reject(new TypeError('offline')))), /\/caps.*offline/);
+});
+
+test('declaredOf is what the frame reader judges against: an inline object, a loaded URL, and nothing otherwise', async () => {
+  const [inline, remote, bare] = [
+    value(parseConfig(config({ id: 'a', url: '/a', capabilities: { state: { deltas: false } } }))).agents[0]!,
+    value(parseConfig(config({ id: 'a', url: '/a', capabilities: '/a/capabilities' }))).agents[0]!,
+    value(parseConfig(config({ id: 'a', url: '/a' }))).agents[0]!,
+  ];
+  const loaded = value(await loadCapabilities(remote, async () => JSON.stringify({ reasoning: { supported: false } })));
+  assert.deepEqual(declaredOf(inline, undefined), { state: { deltas: false } }, 'inline needs no load');
+  assert.deepEqual(declaredOf(remote, loaded), { reasoning: { supported: false } }, 'a URL once it has loaded');
+  assert.equal(declaredOf(remote, undefined), undefined, 'a URL still loading or failed');
+  const other = value(parseConfig(config({ id: 'b', url: '/b', capabilities: '/b/capabilities' }))).agents[0]!;
+  assert.equal(declaredOf(other, loaded), undefined, 'a result loaded for another URL is not this agent\'s declaration');
+  assert.equal(declaredOf(bare, undefined), undefined, 'nothing declared');
+  assert.equal(declaredOf(undefined, loaded), undefined, 'no agent: a typed endpoint has no declaration');
 });
 
 // ---------------------------------------------------------------------------------------------

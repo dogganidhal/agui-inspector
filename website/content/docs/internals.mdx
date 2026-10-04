@@ -29,7 +29,7 @@ The connection, conversation, A2UI and settings views import no stylesheet of th
 
 ## The recorder
 
-The evidence on [Read frames and findings](./inspection.mdx) comes from three parts under [`packages/inspector/src/core`](https://github.com/dogganidhal/agui-inspector/tree/main/packages/inspector/src/core): the recorder (`recorder`), the frame reader (`frames`) and the session store (`store`).
+The evidence on [Read frames and findings](./inspection.mdx) comes from three parts under [`packages/inspector/src/core`](https://github.com/dogganidhal/agui-inspector/tree/main/packages/inspector/src/core): the recorder (`recorder`), the frame reader (`frames`) and the session store (`store`). The rules that name each finding, listed in the [rule catalogue](./rules.mdx), are in `rules`.
 
 Each preparation request, conversation run request and raw submission becomes one exchange. The recorder fills in:
 
@@ -55,12 +55,13 @@ authentication data can enter an exchange through it. It ignores `Content-Type`:
 an event stream, so a wrong type from the server changes nothing. Apart from the body, the recorder uses only the
 status. It keeps a non-2xx response to a run request as a text error body and never reads it as events.
 
-The recorder adds two kinds of finding to an exchange:
+The recorder adds these findings to an exchange. Each names its rule:
 
-- `transport`: the request failed before a response, or the connection failed during the stream. Its message is only
-  the error's name and message.
-- `capture`: the recorder's own output failed, for example because the sink threw. The recorder reports it once, the
-  client still gets its response, and recording of stream chunks stops there.
+- `transport.failed`: the request failed before a response, or the connection failed during the stream. Its message is
+  only the error's name and message.
+- `capture.failed`: the recorder's own output failed, for example because the sink threw. The recorder reports it once,
+  the client still gets its response, and recording of stream chunks stops there.
+- `capture.response-not-captured`: the response could not be copied for recording.
 
 A user stop gets no finding. The recorder never creates a terminal, cancellation or error event for a stopped, failed
 or cut-off stream. Missing-terminal findings and observed run outcomes come from the frame reader and the store,
@@ -130,21 +131,42 @@ the reader never turns them into events.
 ### Verdicts
 
 For each `data` frame, the reader runs `JSON.parse`, then checks the value against the upstream `EventSchemas`. The
-frame gets two verdicts, `jsonVerdict` and `schemaVerdict`, and one finding when something is wrong:
+frame gets two verdicts, `jsonVerdict` and `schemaVerdict`. They describe the data as it arrived. The reader adds a
+finding when something is wrong:
 
 | Case | `jsonVerdict` | `schemaVerdict` | Finding |
 | --- | --- | --- | --- |
 | Valid event | `valid` | `valid` | None |
-| Not JSON, including empty data | `invalid` | `not-applicable` | `json` |
-| Object whose `type` is not one of the 31 baseline types | `valid` | `unknown-type` | `schema` |
-| Known type with a wrong or missing field, or JSON that is not an object | `valid` | `invalid` | `schema` |
+| Not JSON, including empty data | `invalid` | `not-applicable` | `json.invalid` |
+| Object whose `type` is not one of the 31 baseline types | `valid` | `unknown-type` | `schema.unknown-event-type` |
+| Known type with a wrong or missing field, or JSON that is not an object | `valid` | `invalid` | `schema.invalid-event` |
+| The schema check itself threw | `valid` | `invalid` | `schema.check-failed` |
+
+Then the reader runs the rules of `core/rules` on a parsed JSON object. None of them changes the frame or its parsed
+value:
+
+- `upgradeFrame` makes a copy of the event with the changes that the pinned protocol client makes to older shapes
+  before it handles an event: retired `THINKING_*` types, `null` in optional fields and `binary` content parts. It
+  mirrors the client's `CompatibilityBoundary`, which cannot be called for one event. A test sends every shape through
+  the real `HttpAgent` and fails on any difference, so a client bump that changes the upgrade shows up there. When the
+  copy applies, the schema finding is built from the copy and not from the received data, a `compat` finding says what
+  was upgraded, and a `RUN_FINISHED` that the client accepts counts as the terminal event.
+- `capabilityRules` compares the event with what the selected agent declares. The runtime hands the reader that
+  declaration, which it reads once when the stream starts. A rule fires only on a flag declared `false`.
+- A rule step that throws costs no frame. The reader adds `capture.rule-check-failed` and goes on.
+
+A frame can have several findings. The first has the id `<frame id>:finding`, the next ones `<frame id>:finding-2` and
+so on.
 
 The reader does not check event order. In a sequence violation each event is valid on its own, so its frame has no
 finding. The protocol client reports the violation, and the conversation layer adds it to the run as a `sequence`
-finding. Sequence violations never stop the reader or the recorder.
+finding. Sequence violations never stop the reader or the recorder. The client reports a violation as free text, so
+`sequenceRuleOf` in `core/rules/sequence.ts` maps the text to one of the `sequence` rules with a list of patterns. A
+message that no pattern knows is `sequence.unclassified`, and a test pins every pattern to the message the real client
+raises.
 
 When the stream ends, the reader looks for a schema-valid `RUN_FINISHED` or `RUN_ERROR` frame. If there is none, it
-adds one `terminal` finding. It writes no run outcome, so the outcome stays `unknown` until something observes one.
+adds one `terminal.missing` finding. It writes no run outcome, so the outcome stays `unknown` until something observes one.
 
 ## The session store
 
@@ -159,7 +181,7 @@ store keeps and updates an exchange's transport state and a run's observed outco
 
 The store refuses a call, and changes nothing, when the call would break a rule that a later export or import depends
 on: a duplicate id, a frame index that is not the next one in its exchange, an offset that goes backwards, or a
-reference to something that does not exist. The recorder reports the refusal as a `capture` finding. That exchange's
+reference to something that does not exist, or a `rule` that is not a well-formed id of the finding's own family. The recorder reports the refusal as a `capture.failed` finding. That exchange's
 reader then stops, so it does not add a misleading terminal finding as well.
 
 `createFrameSink(store)` connects the recorder to the store. Exchange updates and findings go directly into the store.

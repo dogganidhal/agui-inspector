@@ -46,8 +46,9 @@ export interface FramesPanelProps {
   onCopy(text: string, what: string): void;
 }
 
-const SEQUENCE_KINDS = new Set(['sequence', 'projection']);
-const findingVariant = (finding: FindingRecord) => (SEQUENCE_KINDS.has(finding.kind) ? 'warn' : 'err');
+// The data behind these is valid or accepted, and a rule says it should not be there: a warning, not an error.
+const WARNING_KINDS = new Set(['sequence', 'projection', 'compat', 'capability']);
+const findingVariant = (finding: FindingRecord) => (WARNING_KINDS.has(finding.kind) ? 'warn' : 'err');
 const findingLabel = (finding: FindingRecord) => (finding.kind === 'json' ? 'Not JSON' : finding.kind === 'schema' ? 'Schema' : finding.kind);
 const isLive = (exchange: Exchange) => exchange.transport === 'sending' || exchange.transport === 'streaming' || exchange.transport === 'reading';
 const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? '' : 's'}`;
@@ -295,7 +296,7 @@ function ExchangeBody({
     <div className="agui-fr-body">
       <RequestDisclosure exchange={exchange} />
       {entry.findings.map((finding) => (
-        <Finding key={finding.id} variant={findingVariant(finding)} kind={findingLabel(finding)}>
+        <Finding key={finding.id} variant={findingVariant(finding)} kind={findingLabel(finding)} {...(finding.rule !== undefined && { rule: finding.rule })}>
           {finding.message}
         </Finding>
       ))}
@@ -393,7 +394,7 @@ const FrameItem = memo(
           <span className="agui-fr-sum">{summarizeFrame(frame)}</span>
           <span className="agui-fr-ver">
             {issue ? (
-              <Tag variant="err">{issue.kind}</Tag>
+              <Tag variant={findingVariant(issue)}>{issue.kind}</Tag>
             ) : frame.classification === 'data' ? (
               <span role="img" aria-label="Valid" title="Valid">
                 <Icon name="check" size={14} />
@@ -416,7 +417,7 @@ function FrameDetail({ frame, findings, onCopy }: { frame: RawFrame; findings: r
   return (
     <div className="agui-fr-detail" data-frame-detail={frame.id}>
       {findings.map((finding) => (
-        <Finding key={finding.id} variant={findingVariant(finding)} kind={findingLabel(finding)}>
+        <Finding key={finding.id} variant={findingVariant(finding)} kind={findingLabel(finding)} {...(finding.rule !== undefined && { rule: finding.rule })}>
           {finding.message} Capture continued.
         </Finding>
       ))}

@@ -14,9 +14,9 @@ Start in Inspection, on the Frames tab. The list has one row for each exchange, 
 
 - An exchange is one HTTP request and its response: a run request, a preparation request or a raw submission. Its row shows the method and path, a tag (the run, `prepare` or `raw`), the status, the elapsed time, the frame count and the number of issues, if any. A request that got no response shows `failed` instead of the status, or `stopped` if you stopped it first. A `live` tag marks an exchange still being recorded.
 - Open an exchange to see the request body as sent, any finding on the exchange or its run, a non-stream response body, a timeline of arrivals, and its frames.
-- A frame is one block from the event stream, in arrival order, with its offset in seconds since the request was sent. A check mark means the frame is a valid AG-UI event. A red tag names the frame's finding (`json`, `schema`). A `control` or `partial` tag marks a block that is not an event, such as a keep-alive comment or an unfinished block left when the stream ended.
+- A frame is one block from the event stream, in arrival order, with its offset in seconds since the request was sent. A check mark means the frame is a valid AG-UI event. A tag names the kind of the frame's finding (`json`, `schema`, `compat`, `capability`). Open the frame to see every finding with its rule id. A `control` or `partial` tag marks a block that is not an event, such as a keep-alive comment or an unfinished block left when the stream ended.
 - Open a frame to see it as received, formatted if it is valid JSON. Its Copy button copies the exact text. The copy button on an exchange row copies all its frames as JSON.
-- A finding explains a problem with a frame, a run or its connection. It sits beside the evidence and never replaces or changes it.
+- A finding explains a problem with a frame, a run or its connection. It sits beside the evidence and never replaces or changes it. Each finding shows the id of its rule, such as `sequence.text-message-not-open`. The [rule catalogue](./rules.mdx) lists every rule and what to check.
 
 The conversation is built only from valid events. If something appears in Frames but not in the conversation, check the frame's finding and any "Not shown" note in the conversation. The [event reference](./event-views.mdx) says where each event type appears. [Words you will see](./demo.mdx#words-you-will-see) defines the other terms.
 
@@ -28,7 +28,7 @@ The text filter matches a frame's type or content. The family chips (Run, Text, 
 
 ## Missing terminal events
 
-A completed HTTP response does not prove that the run finished. If the stream ends without a valid `RUN_FINISHED` or `RUN_ERROR` event, the outcome is unknown. The run gets one `terminal` finding: "The stream ended without a valid RUN_FINISHED or RUN_ERROR event".
+A completed HTTP response does not prove that the run finished. If the stream ends without a valid `RUN_FINISHED` or `RUN_ERROR` event, the outcome is unknown. The run gets one `terminal.missing` finding: "The stream ended without a valid RUN_FINISHED or RUN_ERROR event".
 
 If you pressed Stop, this finding is expected. Stopping the connection does not add a terminal event, and the run shows "Stopped by you". Otherwise, check these in the exchange's frames:
 
@@ -48,7 +48,11 @@ The finding goes on the exchange's run if the session already has that run, othe
 | `sequence` | Run | Each event is valid alone, but the order is wrong, for example a text message that never started. The protocol client reports it. |
 | `terminal` | Run, or the exchange | The stream ended without a valid terminal event. |
 | `transport` | Exchange | The request failed before a response, or the connection failed during the stream. The message holds only the error's name and message. |
-| `capture` | Exchange | The inspector's own recording failed. It is reported once. The client still gets its response, and that exchange's frames stop there. |
+| `capture` | Exchange, or frame | The inspector's own recording failed. It is reported once. The client still gets its response, and that exchange's frames stop there. A rule check that failed on one frame is also a `capture` finding. The frame is kept. |
+| `compat` | Frame | The server sends an older shape that the protocol client still accepts and upgrades: a retired `THINKING_*` event, `null` in an optional field, a `binary` content part, or a protocol version that is newer or unreadable. The frame gets no `schema` finding for it. |
+| `capability` | Frame | The frame contradicts the agent's declared capabilities. It breaks a flag that the agent declares as `false`, for example a state delta from an agent that declares `state.deltas` as `false`. |
+
+Every kind has one or more rules, and a finding names its rule. The ids are stable. See the [rule catalogue](./rules.mdx) for the id, the meaning and what to check for each. A frame can have several findings. A recording made by 0.1.0 has findings without a rule id.
 
 Findings only add information. A frame's text and parsed value are never changed, repaired or dropped, and the parsed value keeps fields the schema does not know. Messages name the failing field and the kind of problem, never the received values. If the validator itself throws, the frame is kept and marked invalid, with a finding that validation failed. No finding stops recording: after a bad frame, the rest of the stream is still captured.
 

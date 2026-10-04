@@ -302,6 +302,7 @@ test('a sequence violation becomes a finding on the run while every later frame 
   const sequence = session.findings.filter((finding) => finding.kind === 'sequence');
   assert.equal(sequence.length, 1);
   assert.deepEqual(sequence[0]?.subject, { type: 'run', id: 'run-1' });
+  assert.equal(sequence[0]?.rule, 'sequence.text-message-not-open');
   assert.match(sequence[0]?.message ?? '', /No active text message found/);
   assert.equal(session.findings.some((finding) => finding.kind === 'terminal'), false, 'the stream did end with a valid RUN_FINISHED');
   assert.equal(runtime.getState().error, undefined, 'stream problems are findings, not a connection banner');
@@ -316,8 +317,8 @@ test('a frame that is not JSON ends the client run but not the recording; later 
   const session = await settle();
   assert.deepEqual(session.frames.map((frame) => [frame.eventType, frame.jsonVerdict]), [['RUN_STARTED', 'valid'], [undefined, 'invalid'], ['TEXT_MESSAGE_START', 'valid'], ['RUN_FINISHED', 'valid']]);
   assert.equal(session.frames[1]?.data, '{not json at all', 'the received text is untouched');
-  assert.ok(session.findings.some((finding) => finding.kind === 'json' && finding.subject.type === 'frame'));
-  assert.ok(session.findings.some((finding) => finding.kind === 'json' && finding.subject.type === 'run'), 'the client rejection is on the run too');
+  assert.ok(session.findings.some((finding) => finding.rule === 'json.invalid' && finding.subject.type === 'frame'));
+  assert.ok(session.findings.some((finding) => finding.rule === 'json.invalid' && finding.subject.type === 'run'), 'the client rejection is on the run too');
   assert.equal(session.exchanges[0]?.transport, 'completed');
 });
 
@@ -327,7 +328,8 @@ test('a schema-invalid or unknown-type frame stays inspectable and capture reach
   await runtime.send('invalid');
   const session = await settle();
   assert.deepEqual(session.frames.map((frame) => [frame.eventType, frame.schemaVerdict]), [['RUN_STARTED', 'valid'], ['TEXT_MESSAGE_START', 'invalid'], ['NOT_A_REAL_EVENT', 'unknown-type'], ['RUN_FINISHED', 'valid']]);
-  assert.ok(session.findings.some((finding) => finding.kind === 'schema' && finding.subject.type === 'run'));
+  assert.ok(session.findings.some((finding) => finding.rule === 'schema.invalid-event' && finding.subject.type === 'run'));
+  assert.ok(session.findings.some((finding) => finding.rule === 'schema.unknown-event-type' && finding.subject.type === 'frame'));
 });
 
 test('a stream that ends without a terminal event gets a terminal finding on the run, and the outcome is unknown, not made up', async () => {
@@ -338,6 +340,7 @@ test('a stream that ends without a terminal event gets a terminal finding on the
   assert.deepEqual(session.runs[0]?.outcome, { kind: 'unknown' });
   const terminal = session.findings.filter((finding) => finding.kind === 'terminal');
   assert.deepEqual(terminal.map((finding) => finding.subject), [{ type: 'run', id: 'run-1' }]);
+  assert.equal(terminal[0]?.rule, 'terminal.missing');
   assert.equal(session.frames.length, 2);
 });
 
@@ -755,4 +758,65 @@ test('a preparation whose answer is still being read stays stoppable after the r
   const ended = await settle();
   assert.deepEqual(ended.exchanges.map((exchange) => [exchange.kind, exchange.transport]), [['preparation', 'user-stopped'], ['conversation', 'completed']]);
   assert.equal(runtime.getState().capturing, false);
+});
+
+// ---------------------------------------------------------------------------------------------
+// Declared capabilities (specs/007): the frame reader judges each stream against what the agent declares
+// ---------------------------------------------------------------------------------------------
+
+const deltaRoute = route((call) => [start(call), { type: 'STATE_DELTA', delta: [{ op: 'add', path: '/n', value: 1 }] }, finish(call)]);
+const capabilityFindings = (session: { findings: ReadonlyArray<{ rule?: string; subject: { type: string; id: string } }> }) =>
+  session.findings.filter((finding) => finding.rule?.startsWith('capability.')).map((finding) => [finding.rule, finding.subject.type]);
+
+test('a run is judged against the declaration the app set, and only against it', async () => {
+  const { runtime, settle } = rig([deltaRoute]);
+  runtime.selectAgent(support);
+  await runtime.send('no declaration yet');
+  assert.deepEqual(capabilityFindings(await settle()), []);
+
+  runtime.setDeclaredCapabilities({ state: { deltas: true } });
+  await runtime.send('declared true');
+  assert.deepEqual(capabilityFindings(await settle()), []);
+
+  runtime.setDeclaredCapabilities({ state: { deltas: false } });
+  await runtime.send('declared false');
+  const session = await settle();
+  assert.deepEqual(capabilityFindings(session), [['capability.state-delta-unsupported', 'frame']]);
+  const delta = session.frames.filter((frame) => frame.eventType === 'STATE_DELTA').at(-1)!;
+  assert.deepEqual(session.findings.find((finding) => finding.rule === 'capability.state-delta-unsupported')?.subject, { type: 'frame', id: delta.id }, 'the finding sits on the contradicting frame');
+  assert.equal(runtime.getState().error, undefined, 'a finding is not a banner');
+});
+
+test('a raw submission is judged like a run', async () => {
+  const { runtime, settle } = rig([deltaRoute]);
+  runtime.selectAgent(support);
+  runtime.setDeclaredCapabilities({ state: { deltas: false } });
+  await runtime.sendRaw(JSON.stringify({ threadId: 't', runId: 'r', messages: [], state: {}, tools: [], context: [], forwardedProps: {} }));
+  const session = await settle();
+  assert.deepEqual(session.exchanges.map((exchange) => exchange.kind), ['raw']);
+  assert.deepEqual(capabilityFindings(session), [['capability.state-delta-unsupported', 'frame']]);
+});
+
+test('another agent or a typed endpoint does not inherit the declaration of the one before it', async () => {
+  const { runtime, settle } = rig([deltaRoute]);
+  runtime.selectAgent(support);
+  runtime.setDeclaredCapabilities({ state: { deltas: false } });
+  runtime.selectAgent({ id: 'other', name: 'Other', url: AGENT });
+  await runtime.send('another agent');
+  assert.deepEqual(capabilityFindings(await settle()), []);
+
+  runtime.setDeclaredCapabilities({ state: { deltas: false } });
+  runtime.setTarget(AGENT);
+  await runtime.send('a typed endpoint');
+  assert.deepEqual(capabilityFindings(await settle()), []);
+});
+
+test('the declaration is memory only: it is in no recorded exchange, frame, run or finding', async () => {
+  const { runtime, settle } = rig([deltaRoute]);
+  runtime.selectAgent(support);
+  runtime.setDeclaredCapabilities({ identity: { name: 'unique-declared-name-7f3a91' }, state: { deltas: false } });
+  await runtime.send('hello');
+  const session = await settle();
+  assert.ok(!JSON.stringify([session.exchanges, session.runs, session.frames]).includes('unique-declared-name-7f3a91'));
+  assert.ok(!JSON.stringify(session.findings).includes('unique-declared-name-7f3a91'));
 });

@@ -22,12 +22,12 @@ import type {
   ExchangeId,
   ExchangePatch,
   Finding,
-  FindingKind,
   JsonValue,
   RecordedRequest,
   Recorder,
   TransportState,
 } from '../../contracts.ts';
+import { kindOf, type CatalogueRuleId } from '../rules/catalogue.ts';
 
 export interface RecorderSink {
   appendExchange(exchange: Exchange): void;
@@ -89,9 +89,9 @@ export function createRecorder(sink: RecorderSink, clock: RecorderClock = browse
       const dispatchedAt = clock.now();
       let captureFailed = false;
 
-      const addFinding = (kind: FindingKind, message: string) => {
+      const addFinding = (rule: CatalogueRuleId, message: string) => {
         try {
-          sink.addFinding({ id: `finding-${(findings += 1)}`, kind, message, subject: { type: 'exchange', id } });
+          sink.addFinding({ id: `finding-${(findings += 1)}`, kind: kindOf(rule), rule, message, subject: { type: 'exchange', id } });
         } catch {
           // The sink is what failed; there is nowhere left to report to.
         }
@@ -101,7 +101,7 @@ export function createRecorder(sink: RecorderSink, clock: RecorderClock = browse
         try {
           step();
         } catch (error) {
-          if (!captureFailed) addFinding('capture', `Capture failed: ${describe(error)}`);
+          if (!captureFailed) addFinding('capture.failed', `Capture failed: ${describe(error)}`);
           captureFailed = true;
         }
       };
@@ -118,7 +118,7 @@ export function createRecorder(sink: RecorderSink, clock: RecorderClock = browse
       const fail = (error: unknown, patch: ExchangePatch = {}) => {
         if (isAbort(error)) return finish('user-stopped', patch);
         const message = describe(error);
-        addFinding('transport', message);
+        addFinding('transport.failed', message);
         finish('transport-error', { ...patch, transportError: message });
       };
 
@@ -155,7 +155,7 @@ export function createRecorder(sink: RecorderSink, clock: RecorderClock = browse
         branch = response.clone();
       } catch (error) {
         // The client still gets its response; the exchange keeps its last known state.
-        addFinding('capture', `Response body could not be captured: ${describe(error)}`);
+        addFinding('capture.response-not-captured', `Response body could not be captured: ${describe(error)}`);
         end();
         return response;
       }

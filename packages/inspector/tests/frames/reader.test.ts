@@ -2,7 +2,7 @@
 // not only the parsed events: the reader may add findings, never change what crossed the wire.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { EventType } from '@ag-ui/core';
+import { EventType, type AgentCapabilities } from '@ag-ui/core';
 import {
   baselineRunTypes,
   eventFixtures,
@@ -23,14 +23,14 @@ type Check = NonNullable<Parameters<typeof createFrameReader>[2]>['check'];
 /** Pushes chunks (text is encoded; bytes pass through) with offsets 10, 20, 30 ... unless given. */
 function read(
   chunks: ReadonlyArray<string | Uint8Array>,
-  options: { offsets?: readonly number[]; end?: FindingSubject | false; check?: Check } = {},
+  options: { offsets?: readonly number[]; end?: FindingSubject | false; check?: Check; declared?: () => AgentCapabilities | undefined } = {},
 ) {
   const frames: RawFrame[] = [];
   const findings: Finding[] = [];
   const reader = createFrameReader(
     { appendFrame: (frame) => void frames.push(frame), addFinding: (finding) => void findings.push(finding) },
     EXCHANGE,
-    options.check ? { check: options.check } : {},
+    { ...(options.check && { check: options.check }), ...(options.declared && { declared: options.declared }) },
   );
   chunks.forEach((chunk, i) => reader.push(typeof chunk === 'string' ? encoder.encode(chunk) : chunk, options.offsets?.[i] ?? (i + 1) * 10));
   if (options.end !== false) reader.end(options.end);
@@ -100,6 +100,8 @@ for (const [name, expected] of Object.entries(invalidCases)) {
 
     assert.equal(findings.length, 1);
     assert.equal(findings[0]!.kind, expected.jsonVerdict === 'invalid' ? 'json' : 'schema');
+    assert.equal(findings[0]!.rule, expected.jsonVerdict === 'invalid' ? 'json.invalid' : expected.schemaVerdict === 'unknown-type' ? 'schema.unknown-event-type' : 'schema.invalid-event');
+    assert.equal(findings[0]!.id, `${frame.id}:finding`, 'the first finding of a frame keeps its 0.1.0 id');
     assert.deepEqual(findings[0]!.subject, { type: 'frame', id: frame.id });
     assert.ok(findings[0]!.message.length > 0);
   });
@@ -131,7 +133,7 @@ test('a validator that throws leaves the frame retained and marked, and the next
   assert.deepEqual(frames[0]!.parsed, eventFixtures.RUN_STARTED, 'the parsed companion survives the validator failure');
   assert.equal(frames[0]!.schemaVerdict, 'invalid');
   assert.equal(frames[1]!.schemaVerdict, 'valid');
-  assert.deepEqual(findings.map((finding) => finding.kind), ['schema']);
+  assert.deepEqual(findings.map((finding) => [finding.kind, finding.rule]), [['schema', 'schema.check-failed']]);
   assert.match(findings[0]!.message, /validation failed/i);
 });
 
@@ -396,8 +398,14 @@ test('invalid frames amid a valid run are all kept and flagged; the valid ending
     ['valid', 'not-applicable', 'unknown-type', 'invalid', 'valid', 'not-applicable', 'invalid', 'valid'],
   );
   assert.deepEqual(
-    findings.map((finding) => [finding.kind, (finding.subject as { id: string }).id]),
-    [['json', 'exchange-1:frame-1'], ['schema', 'exchange-1:frame-2'], ['schema', 'exchange-1:frame-3'], ['json', 'exchange-1:frame-5'], ['schema', 'exchange-1:frame-6']],
+    findings.map((finding) => [finding.kind, finding.rule, (finding.subject as { id: string }).id]),
+    [
+      ['json', 'json.invalid', 'exchange-1:frame-1'],
+      ['schema', 'schema.unknown-event-type', 'exchange-1:frame-2'],
+      ['schema', 'schema.invalid-event', 'exchange-1:frame-3'],
+      ['json', 'json.invalid', 'exchange-1:frame-5'],
+      ['schema', 'schema.invalid-event', 'exchange-1:frame-6'],
+    ],
   );
 });
 
@@ -408,6 +416,7 @@ for (const [name, scenario] of missing) {
     const terminals = findings.filter((finding) => finding.kind === 'terminal');
     assert.equal(terminals.length, 1);
     assert.deepEqual(terminals[0]!.subject, { type: 'exchange', id: EXCHANGE });
+    assert.equal(terminals[0]!.rule, 'terminal.missing');
     assert.match(terminals[0]!.message, /RUN_FINISHED|RUN_ERROR/);
     assert.ok(
       !frames.some((frame) => frame.eventType === 'RUN_FINISHED' && frame.schemaVerdict === 'valid'),
@@ -421,7 +430,7 @@ for (const [name, scenario] of missing) {
 test('the terminal finding attaches to the subject the caller names, once', () => {
   const run: FindingSubject = { type: 'run', id: 'run-1' };
   const { reader, findings } = read(scenarioChunks(missingTerminalScenarios.closedAfterContent), { end: run });
-  assert.deepEqual(findings.map((finding) => [finding.kind, finding.subject]), [['terminal', run]]);
+  assert.deepEqual(findings.map((finding) => [finding.kind, finding.rule, finding.subject]), [['terminal', 'terminal.missing', run]]);
   reader.end(run);
   assert.equal(findings.length, 1);
 });
@@ -439,4 +448,162 @@ test('finding ids are unique within an exchange and distinct from the recorderâ€
     assert.equal(new Set(ids).size, ids.length, scenario.name);
     assert.ok(ids.every((id) => !/^finding-\d+$/.test(id)));
   }
+});
+
+// ---- capability findings (specs/007, US2) -------------------------------------------------------
+
+const wire = (...events: readonly object[]) => events.map((event) => `data: ${JSON.stringify(event)}\n\n`);
+const RUN = { type: 'RUN_STARTED', threadId: 't', runId: 'r' };
+const DONE = { type: 'RUN_FINISHED', threadId: 't', runId: 'r', outcome: { type: 'success' } };
+
+test('a frame that contradicts a declared false gets a finding on that frame, and the stream is read as it would be without one', () => {
+  const declared = () => ({ state: { deltas: false } });
+  const chunks = wire(RUN, eventFixtures.STATE_DELTA, eventFixtures.STATE_SNAPSHOT, DONE);
+  const { frames, findings } = read(chunks, { declared });
+  const plain = read(chunks);
+
+  assert.deepEqual(findings.map((finding) => [finding.id, finding.kind, finding.rule, finding.subject]), [
+    ['exchange-1:frame-1:finding', 'capability', 'capability.state-delta-unsupported', { type: 'frame', id: 'exchange-1:frame-1' }],
+  ]);
+  assert.match(findings[0]!.message, /STATE_DELTA came from an agent that declares state\.deltas: false/);
+  assert.deepEqual(frames, plain.frames, 'frames, envelopes, offsets and verdicts do not depend on the declaration');
+  assert.equal(frames.map((frame) => frame.envelope).join(''), chunks.join(''));
+  assert.deepEqual(plain.findings, []);
+});
+
+test('a second finding on a frame takes the next id, and an invalid frame of the right type still counts', () => {
+  const { findings } = read(wire(RUN, { type: 'STATE_DELTA' }, DONE), { declared: () => ({ state: { deltas: false } }) });
+  assert.deepEqual(findings.map((finding) => [finding.id, finding.rule]), [
+    ['exchange-1:frame-1:finding', 'schema.invalid-event'],
+    ['exchange-1:frame-1:finding-2', 'capability.state-delta-unsupported'],
+  ]);
+});
+
+test('no provider, a provider that returns nothing and a declaration without the flag give no finding', () => {
+  const chunks = wire(RUN, eventFixtures.STATE_DELTA, DONE);
+  assert.deepEqual(read(chunks).findings, []);
+  assert.deepEqual(read(chunks, { declared: () => undefined }).findings, []);
+  assert.deepEqual(read(chunks, { declared: () => ({ state: { deltas: true } }) }).findings, []);
+  assert.deepEqual(read(chunks, { declared: () => ({}) }).findings, []);
+});
+
+test('the declaration is read once, when the stream starts: a later change does not change a running stream', () => {
+  let declaration: AgentCapabilities | undefined;
+  let asked = 0;
+  const { findings, reader } = read(wire(RUN), { declared: () => (asked += 1, declaration), end: false });
+  declaration = { state: { deltas: false } };
+  reader.push(encoder.encode(wire(eventFixtures.STATE_DELTA, eventFixtures.STATE_DELTA).join('')), 99);
+  assert.equal(asked, 1, 'one read for the stream, not one for each frame');
+  assert.deepEqual(findings, [], 'a stream that started with nothing declared is not judged against what is declared later');
+
+  declaration = undefined;
+  const second = read(wire(RUN, eventFixtures.STATE_DELTA), { declared: () => (declaration = { state: { deltas: false } }), end: false });
+  declaration = undefined;
+  second.reader.push(encoder.encode(wire(eventFixtures.STATE_DELTA).join('')), 99);
+  assert.equal(second.findings.length, 2, 'and one that started with a declaration keeps it');
+});
+
+test('every contradicting frame gets its own finding: 200 deltas from an agent that declares none give 200 findings', () => {
+  const chunks = wire(RUN, ...Array.from({ length: 200 }, () => eventFixtures.STATE_DELTA), DONE);
+  const { findings, frames } = read(chunks, { declared: () => ({ state: { deltas: false } }) });
+  assert.equal(findings.length, 200);
+  assert.equal(new Set(findings.map((finding) => finding.id)).size, 200);
+  assert.equal(frames.length, 202);
+});
+
+test('a provider that throws, or a declaration that throws when read, costs no frame and is reported once on a frame', () => {
+  const chunks = wire(RUN, eventFixtures.STATE_DELTA, DONE);
+  const provider = read(chunks, {
+    declared: () => {
+      throw new RangeError('provider exploded');
+    },
+  });
+  assert.equal(provider.frames.length, 3);
+  assert.deepEqual(provider.findings.map((finding) => [finding.rule, finding.subject]), [['capture.rule-check-failed', { type: 'frame', id: 'exchange-1:frame-0' }]]);
+  assert.match(provider.findings[0]!.message, /RangeError/);
+  assert.ok(!provider.findings[0]!.message.includes('provider exploded'), 'the error message stays out of the finding');
+
+  const hostile = read(chunks, {
+    declared: () =>
+      ({
+        get state(): never {
+          throw new Error('getter exploded');
+        },
+      }) as AgentCapabilities,
+  });
+  assert.equal(hostile.frames.length, 3, 'every frame is kept');
+  assert.deepEqual(hostile.frames.map((frame) => frame.schemaVerdict), ['valid', 'valid', 'valid']);
+  assert.deepEqual(hostile.findings.map((finding) => finding.rule), ['capture.rule-check-failed', 'capture.rule-check-failed', 'capture.rule-check-failed'], 'the next frames are still read, and each says so');
+});
+
+// ---- the older event versions the client accepts (specs/007, US3) -----------------------------------
+
+const rulesOf = (findings: readonly Finding[]) => findings.map((finding) => finding.rule);
+
+test('a retired THINKING event is a compat finding and no schema finding, and its frame is kept as received', () => {
+  const event = { type: 'THINKING_START', title: 'planning' };
+  const { frames, findings } = read(wire(RUN, event, DONE));
+  assert.deepEqual(rulesOf(findings), ['compat.retired-event-type']);
+  assert.equal(findings[0]!.kind, 'compat');
+  assert.match(findings[0]!.message, /^THINKING_START is a retired event type\. The protocol client reads it as REASONING_START\.$/);
+  assert.equal(frames[1]!.eventType, 'THINKING_START');
+  assert.equal(frames[1]!.schemaVerdict, 'unknown-type', 'the verdict is that of the data as received');
+  assert.deepEqual(frames[1]!.parsed, event, 'the parsed value keeps the retired shape');
+  assert.equal(frames[1]!.data, JSON.stringify(event));
+});
+
+test('a RUN_FINISHED that the client accepts after its upgrade ends the terminal check', () => {
+  const { frames, findings } = read(wire(RUN, { ...DONE, result: null }));
+  assert.deepEqual(rulesOf(findings), ['compat.null-optional-field'], 'no schema finding and no terminal.missing');
+  assert.match(findings[0]!.message, /^RUN_FINISHED\.result is null\. The protocol client reads it as absent\.$/);
+  assert.equal(frames[1]!.schemaVerdict, 'invalid', 'the received shape is not valid');
+  assert.equal((frames[1]!.parsed as { result: unknown }).result, null, 'and the parsed value still holds the null');
+
+  const lookalike = read(wire(RUN, { type: 'RUN_FINISHED', threadId: 't', outcome: null }));
+  assert.ok(rulesOf(lookalike.findings).includes('terminal.missing'), 'a finish that is still invalid after the upgrade does not count');
+});
+
+test('a frame that is still invalid after the upgrade gets a schema finding about the upgraded copy only', () => {
+  const { findings } = read(wire(RUN, { type: 'TOOL_CALL_START', toolCallId: 'c1', parentMessageId: null }, DONE));
+  assert.deepEqual(rulesOf(findings), ['schema.invalid-event', 'compat.null-optional-field']);
+  assert.match(findings[0]!.message, /toolCallName/);
+  assert.doesNotMatch(findings[0]!.message, /parentMessageId/, 'the null that the client accepts is not named twice');
+  assert.deepEqual(findings.map((finding) => finding.id), ['exchange-1:frame-1:finding', 'exchange-1:frame-1:finding-2']);
+});
+
+test('a retired event from an agent that declares no reasoning breaks two rules, and one rule counts once however many fields it covers', () => {
+  const retired = read(wire(RUN, { type: 'THINKING_TEXT_MESSAGE_CONTENT', delta: 'hm' }, DONE), { declared: () => ({ reasoning: { supported: false } }) });
+  assert.deepEqual(rulesOf(retired.findings), ['compat.retired-event-type', 'capability.reasoning-unsupported']);
+
+  const input = { threadId: 't', runId: 'r', state: {}, messages: [], tools: [{ name: 'a', description: 'd', parameters: null }, { name: 'b', description: 'd', parameters: null }], context: [], forwardedProps: null };
+  const nulls = read(wire({ ...RUN, rawEvent: null, input }, DONE));
+  assert.deepEqual(rulesOf(nulls.findings), ['compat.null-optional-field']);
+  assert.match(nulls.findings[0]!.message, /RUN_STARTED\.rawEvent.*forwardedProps.*tools\[0\]\.parameters.*tools\[1\]\.parameters are null/);
+});
+
+test('a legacy binary content part and a protocol version the client cannot read or that is newer are named, and a version it reads silently is not', () => {
+  const snapshot = { type: 'MESSAGES_SNAPSHOT', messages: [{ id: 'u1', role: 'user', content: [{ type: 'binary', mimeType: 'image/png', data: 'AAAA' }] }] };
+  const binary = read(wire(RUN, snapshot, DONE));
+  assert.deepEqual(rulesOf(binary.findings), ['compat.legacy-binary-content']);
+  assert.match(binary.findings[0]!.message, /^MESSAGES_SNAPSHOT\.messages\[0\]\.content\[0\] is a binary content part\./);
+
+  for (const [protocolVersion, expected] of [['2.0', ['compat.protocol-version-newer']], ['1.0.1', ['compat.protocol-version-unreadable']], ['1.0', []], ['0.9', []], [undefined, []]] as const) {
+    const { findings, frames } = read(wire({ ...RUN, ...(protocolVersion !== undefined && { protocolVersion }) }, DONE));
+    assert.deepEqual(rulesOf(findings), expected, String(protocolVersion));
+    assert.equal(frames[0]!.schemaVerdict, 'valid', 'a version rule never makes a valid frame invalid');
+  }
+});
+
+test('the upgrade never changes a frame: the parsed value is the JSON of the data and the envelopes are the received text', () => {
+  const chunks = wire(
+    { ...RUN, rawEvent: null },
+    { type: 'THINKING_START', title: 't' },
+    { type: 'THINKING_END' },
+    { type: 'MESSAGES_SNAPSHOT', messages: [{ id: 'u1', role: 'user', content: [{ type: 'binary', mimeType: 'image/png', data: 'AAAA' }] }] },
+    { ...DONE, outcome: null },
+  );
+  const { frames, findings } = read(chunks);
+  assert.ok(findings.length >= 4);
+  assert.equal(frames.map((frame) => frame.envelope).join(''), chunks.join(''));
+  for (const frame of frames) assert.deepEqual(frame.parsed, JSON.parse(frame.data!), frame.id);
 });

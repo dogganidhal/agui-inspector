@@ -31,6 +31,7 @@ import type {
   SessionStore,
   Unsubscribe,
 } from '../../contracts.ts';
+import { checkRuleId } from '../rules/catalogue.ts';
 
 export interface SessionStoreOptions {
   readonly id?: string;
@@ -140,6 +141,8 @@ export function createSessionStore(options: SessionStoreOptions = {}): SessionSt
       const { type, id } = finding.subject;
       const known = type === 'frame' ? frameIds.has(id) : type === 'run' ? runs.has(id) : exchanges.has(id);
       if (!known) throw new Error(`addFinding: finding ${finding.id} points at unknown ${type} ${id}`);
+      const bad = finding.rule === undefined ? undefined : checkRuleId(finding.kind, finding.rule);
+      if (bad !== undefined) throw new Error(`addFinding: finding ${finding.id} has a bad rule: ${bad}`);
       findings.push(finding);
       findingIds.add(finding.id);
       changed();

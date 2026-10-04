@@ -230,12 +230,12 @@ function AgentPanel({ agent, capabilities }: { agent: AgentConfig; capabilities?
     source = 'This agent declares no capabilities in the configuration.';
     body = <CapabilityGroups groups={describeCapabilities({})} />;
   } else if (typeof declared !== 'string') {
-    source = 'Declared capabilities, from the configuration. They are shown as declared; checking them against observed events comes in 1.0.';
+    source = 'Declared capabilities, from the configuration. They are shown as declared. A frame that contradicts a flag declared false gets a finding.';
     body = <CapabilityGroups groups={describeCapabilities(declared)} />;
   } else if (capabilities?.status === 'ready') {
     source = (
       <>
-        Declared capabilities, read from <span className="agui-settings-mono">{declared}</span>. They are shown as declared; checking them against observed events comes in 1.0.
+        Declared capabilities, read from <span className="agui-settings-mono">{declared}</span>. They are shown as declared. A frame that contradicts a flag declared false gets a finding.
       </>
     );
     body = <CapabilityGroups groups={capabilities.capabilities.groups} />;

@@ -189,6 +189,8 @@ export interface LoadedCapabilities {
   /** Where a `url` declaration was read from. */
   readonly url?: string;
   readonly groups: readonly CapabilityGroupView[];
+  /** What the agent declares, as the protocol describes it: the object `groups` was made from. `{}` when none. */
+  readonly declared: AgentCapabilities;
 }
 
 /** The eleven groups in their documented order, whether declared or not. */
@@ -207,8 +209,8 @@ export function describeCapabilities(capabilities: AgentCapabilities): Capabilit
 /** Reads the agent's declaration from its configured source only; there is no discovery. */
 export async function loadCapabilities(agent: AgentConfig, fetchText: FetchText): Promise<Result<LoadedCapabilities>> {
   const declared = agent.capabilities;
-  if (declared === undefined) return ok({ source: 'none', groups: describeCapabilities({}) });
-  if (typeof declared !== 'string') return ok({ source: 'inline', groups: describeCapabilities(declared) });
+  if (declared === undefined) return ok({ source: 'none', groups: describeCapabilities({}), declared: {} });
+  if (typeof declared !== 'string') return ok({ source: 'inline', groups: describeCapabilities(declared), declared });
 
   let text: string;
   try {
@@ -225,5 +227,15 @@ export async function loadCapabilities(agent: AgentConfig, fetchText: FetchText)
   if (!isRecord(json)) return fail(`Capabilities ${declared} must be a JSON object`);
   const parsed = parseCapabilities(json, `Capabilities ${declared}`);
   if (!parsed.ok) return parsed;
-  return ok({ source: 'url', url: declared, groups: describeCapabilities(parsed.value as AgentCapabilities) });
+  return ok({ source: 'url', url: declared, groups: describeCapabilities(parsed.value as AgentCapabilities), declared: parsed.value as AgentCapabilities });
+}
+
+/**
+ * What the selected agent declares right now, for the frame reader: an inline object as it is, a URL's object once
+ * it has loaded, and nothing otherwise (no agent, none declared, still loading, or failed). There is no discovery.
+ */
+export function declaredOf(agent: AgentConfig | undefined, loaded: LoadedCapabilities | undefined): AgentCapabilities | undefined {
+  if (agent === undefined || agent.capabilities === undefined) return undefined;
+  // The URL guards against a result that belongs to the agent selected before this one.
+  return typeof agent.capabilities === 'string' ? (loaded?.url === agent.capabilities ? loaded.declared : undefined) : agent.capabilities;
 }

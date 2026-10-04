@@ -250,6 +250,21 @@ test('findings point at something that exists and have unique ids', () => {
   assert.deepEqual(store.snapshot().findings.map((f) => f.id), ['a', 'b', 'c']);
 });
 
+test('a finding with a rule is stored when the rule is well formed and of its own family, and refused before any change otherwise', () => {
+  const { store } = setup();
+  store.appendExchange(exchange());
+  store.appendFrame(frame('exchange-1', 0));
+  const subject = { type: 'frame', id: 'exchange-1:frame-0' } as const;
+  store.addFinding({ ...finding('ok', subject, 'json'), rule: 'json.invalid' });
+  store.addFinding({ ...finding('unknown', subject, 'capability'), rule: 'capability.from-a-newer-version' });
+  store.addFinding(finding('none', subject));
+  const before = store.snapshot();
+  assert.throws(() => store.addFinding({ ...finding('bad', subject, 'json'), rule: 'Not A Rule' }), /bad rule: rule must be <family>\.<problem>/);
+  assert.throws(() => store.addFinding({ ...finding('wrong', subject, 'schema'), rule: 'json.invalid' }), /bad rule: rule family must match kind/);
+  assert.equal(store.snapshot(), before, 'a refused finding changes nothing');
+  assert.deepEqual(store.snapshot().findings.map((f) => [f.id, f.rule]), [['ok', 'json.invalid'], ['unknown', 'capability.from-a-newer-version'], ['none', undefined]]);
+});
+
 // ---- evidence, findings and outcomes stay independent -------------------------------------------------
 
 test('a finding never alters the frame, the run or the exchange it points at', () => {

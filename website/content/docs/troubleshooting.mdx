@@ -62,11 +62,11 @@ See [the token](./runs.mdx#the-token) and [credentials](./configuration.mdx#cred
 
 ## The run has no terminal event
 
-"The stream ended without a valid RUN_FINISHED or RUN_ERROR event" means no valid closing event arrived. If you pressed Stop, this finding is expected. Otherwise, check that the last event passed validation: its frame has no `json` or `schema` tag. Check that its Server-Sent Events (SSE) block ended with a blank line. Also look for a `transport` finding, which shows the connection was lost first. See [missing terminal events](./inspection.mdx#missing-terminal-events).
+"The stream ended without a valid RUN_FINISHED or RUN_ERROR event" (rule `terminal.missing`) means no valid closing event arrived. If you pressed Stop, this finding is expected. Otherwise, check that the last event passed validation: its frame has no `json` or `schema` tag. Check that its Server-Sent Events (SSE) block ended with a blank line. Also look for a `transport` finding, which shows the connection was lost first. See [missing terminal events](./inspection.mdx#missing-terminal-events).
 
 ## An event is in Frames but not in the conversation
 
-The inspector builds the conversation from valid events only. A frame with a `json` or `schema` tag adds nothing to it. A "Not shown" note in the conversation marks a valid event that refers to something that never started, such as text for a message with no `TEXT_MESSAGE_START`. In that case the run has a `sequence` finding. See [Read frames and findings](./inspection.mdx) and the [event reference](./event-views.mdx).
+The inspector builds the conversation from valid events only. A frame with a `json` or `schema` tag adds nothing to it. A frame with a `compat` tag is an older shape that the protocol client still accepts. It is not projected either, because only current valid events are. The finding says what to change on the server. A "Not shown" note in the conversation marks a valid event that refers to something that never started, such as text for a message with no `TEXT_MESSAGE_START`. In that case the run has a `sequence` finding. See [Read frames and findings](./inspection.mdx) and the [event reference](./event-views.mdx).
 
 ## Send is disabled
 

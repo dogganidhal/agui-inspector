@@ -11,6 +11,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import { expect, test as base, type Page } from '@playwright/test';
+import { contradictionEvents } from '../../../examples/reference-agent/rule-fixtures.ts';
 import { interactiveResponse, SUBAGENTS, type RunInput } from '../../../examples/reference-agent/scenarios.ts';
 import { buildApp } from '../../../scripts/build.mjs';
 
@@ -147,6 +148,11 @@ function answer(pathname: string, input: { threadId?: unknown; runId?: unknown; 
     for (const chunk of reply.chunks) response.write(chunk);
     return void response.end();
   }
+  if (pathname === '/contradiction') {
+    // A whole run, from the reference fixtures, that breaks what an agent can declare false.
+    response.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store' });
+    return void response.end(sse(contradictionEvents({ threadId, runId })));
+  }
   const activity =
     pathname === '/surface'
       ? [{ type: 'ACTIVITY_SNAPSHOT', messageId: 'activity-1', activityType: 'a2ui-surface', content: { a2ui_operations: formOperations }, replace: true }]
@@ -257,7 +263,9 @@ async function openSite(dist: string, options: SiteOptions): Promise<{ site: Sit
   pageOrigin = await listen(page);
 
   const capabilities = JSON.stringify({ identity: { name: 'Scripted agent', version: '1.0.0' } });
-  const agent = agentServer(agentSeen, () => pageOrigin, () => origins.foreign.origin, () => ({ '/capabilities': capabilities }));
+  // What the agent served at /contradiction declares false: a reasoning span, a state delta and an interrupt outcome.
+  const contradicted = JSON.stringify({ reasoning: { supported: false }, state: { deltas: false }, humanInTheLoop: { interrupts: false } });
+  const agent = agentServer(agentSeen, () => pageOrigin, () => origins.foreign.origin, () => ({ '/capabilities': capabilities, '/capabilities-contradicted': contradicted }));
   const foreign = agentServer(foreignSeen, () => pageOrigin, () => origins.foreign.origin, () => ({ '/capabilities': capabilities, '/config.json': JSON.stringify({ version: 0, agents: [{ id: 'foreign', url: `${origins.foreign.origin}/agent` }] }) }));
   const closed = agentServer(closedSeen, () => undefined, () => origins.foreign.origin, () => ({}));
   origins = {

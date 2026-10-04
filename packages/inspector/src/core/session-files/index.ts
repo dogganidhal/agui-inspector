@@ -22,6 +22,7 @@ import {
   type SessionStore,
 } from '../../contracts.ts';
 import { checkEvent, type EventCheck } from '../frames/index.ts';
+import { checkRuleId } from '../rules/catalogue.ts';
 import { createSessionStore, type SessionStoreOptions } from '../store/index.ts';
 
 /** Suggested name for the downloaded file. */
@@ -77,7 +78,7 @@ const frameOut = (f: RawFrame): RawFrame => ({
   provenance: f.provenance,
 });
 
-const findingOut = (f: Finding): Finding => ({ id: f.id, kind: f.kind, message: f.message, subject: { type: f.subject.type, id: f.subject.id } });
+const findingOut = (f: Finding): Finding => ({ id: f.id, kind: f.kind, ...(f.rule !== undefined && { rule: f.rule }), message: f.message, subject: { type: f.subject.type, id: f.subject.id } });
 
 const derivedOut = (d: DerivedEntry): DerivedEntry => ({
   id: d.id,
@@ -127,7 +128,7 @@ const TRANSPORT_STATES = ['created', 'sending', 'streaming', 'reading', 'complet
 const CLASSIFICATIONS = ['data', 'control', 'partial'];
 const JSON_VERDICTS = ['valid', 'invalid', 'not-applicable'];
 const SCHEMA_VERDICTS = ['valid', 'invalid', 'unknown-type', 'not-applicable'];
-const FINDING_KINDS = ['json', 'schema', 'sequence', 'terminal', 'transport', 'capture', 'projection'];
+const FINDING_KINDS = ['json', 'schema', 'sequence', 'terminal', 'transport', 'capture', 'projection', 'compat', 'capability'];
 const SUBJECT_TYPES = ['frame', 'run', 'exchange'];
 const DERIVATIONS = ['client-state', 'chunk-expansion', 'duration', 'projection'];
 const ATTRIBUTIONS = ['identified', 'ambiguous'];
@@ -329,9 +330,13 @@ function checkRun(value: unknown, position: number): Run {
 
 function checkFinding(value: unknown, position: number): Finding {
   const at = `findings[${position}]`;
-  const f = record(value, at, ['id', 'kind', 'message', 'subject']);
+  const f = record(value, at, ['id', 'kind', 'message', 'subject'], ['rule']);
   text(f.id, at, 'id');
   oneOf(f.kind, FINDING_KINDS, at, 'kind');
+  if (f.rule !== undefined) {
+    const problem = typeof f.rule === 'string' ? checkRuleId(f.kind as Finding['kind'], f.rule) : 'rule must be <family>.<problem>';
+    if (problem !== undefined) fail(`${at}: ${problem}`);
+  }
   text(f.message, at, 'message', { empty: true });
   const subject = record(f.subject, `${at}: subject`, ['type', 'id']);
   oneOf(subject.type, SUBJECT_TYPES, `${at}: subject`, 'type');

@@ -252,11 +252,14 @@ export function Finding({
   variant = 'neutral',
   icon = 'alert',
   kind,
+  rule,
   children,
 }: {
   variant?: 'neutral' | 'warn' | 'err';
   icon?: IconName;
   kind?: string;
+  /** The rule id of an inspection finding, shown in code font after the label. */
+  rule?: string;
   children: ReactNode;
 }): ReactElement {
   return (
@@ -265,6 +268,12 @@ export function Finding({
       <span>
         {kind && <b>{kind}</b>}
         {kind && ' · '}
+        {rule && (
+          <>
+            <code>{rule}</code>
+            {' · '}
+          </>
+        )}
         {children}
       </span>
     </div>

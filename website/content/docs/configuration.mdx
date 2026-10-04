@@ -115,7 +115,7 @@ The brand is not part of a session export, a profile or browser storage. For Pyt
 
 ### Declared capabilities
 
-Capabilities show in the eleven documented groups: `identity`, `transport`, `tools`, `output`, `state`, `multiAgent`, `reasoning`, `multimodal`, `execution`, `humanInTheLoop` and `custom`. A group the agent leaves out shows as "Not declared". An inline declaration needs no request. A URL is fetched once, through the callback. The inspector checks the shape against the protocol's `AgentCapabilitiesSchema`. In 0.1.0 the inspector does not discover capabilities or compare them with observed events.
+Capabilities show in the eleven documented groups: `identity`, `transport`, `tools`, `output`, `state`, `multiAgent`, `reasoning`, `multimodal`, `execution`, `humanInTheLoop` and `custom`. A group the agent leaves out shows as "Not declared". An inline declaration needs no request. A URL is fetched once, through the callback. The inspector checks the shape against the protocol's `AgentCapabilitiesSchema`. The inspector does not discover capabilities. It compares each stream with the selected agent's declaration and adds a `capability` finding to a frame that contradicts a flag declared as `false`. A flag that is left out is not declared, so it never gives a finding. The [rule catalogue](./rules.mdx#capability) lists the four rules. A URL that has not loaded yet or failed to load gives no finding.
 
 ## Client profile
 

@@ -21,14 +21,13 @@
 //
 // The token lives in this object and is read in exactly one place: the guarded transport call. It is
 // not given to the recorder, the store, a log or an error message. Nothing here touches browser storage.
-import { AGUIError, type Message, type ResumeEntry, type RunAgentInput, type State, type ToolMessage } from '@ag-ui/core';
+import { AGUIError, type AgentCapabilities, type Message, type ResumeEntry, type RunAgentInput, type State, type ToolMessage } from '@ag-ui/core';
 import { HttpAgent, type AgentSubscriber } from '@ag-ui/client';
 import type {
   A2uiAction,
   AgentConfig,
   AutomaticReplies,
   ClientProfileSettings,
-  FindingKind,
   InterruptAnswer,
   JsonValue,
   ObservedOutcome,
@@ -47,6 +46,8 @@ import { createFrameSink } from '../frames/index.ts';
 import { preparePreset } from '../presets/index.ts';
 import { composeRunInput } from '../profiles/index.ts';
 import { createRecorder, type CaptureRecorder, type RecorderClock } from '../recorder/index.ts';
+import { kindOf, type CatalogueRuleId } from '../rules/catalogue.ts';
+import { sequenceRuleOf } from '../rules/sequence.ts';
 import { canonicalizeLineEndings } from './line-endings.ts';
 import { runPreparations } from './prepare.ts';
 import {
@@ -127,6 +128,11 @@ export interface Runtime {
   /** Use an endpoint typed by the user, without a preset. */
   setTarget(url: string): boolean;
   setAuth(auth: VolatileAuth | undefined): void;
+  /**
+   * What the selected agent declares, for the frame reader to judge each stream against (specs/007). Memory only.
+   * The app sets it when the agent or its loaded capabilities change; a change of target clears it.
+   */
+  setDeclaredCapabilities(capabilities: AgentCapabilities | undefined): void;
   /** An ordinary message, quick messages included. Resolves when the run, and every automatic continuation after it, has ended. */
   send(text: string): Promise<void>;
   /** Ends the connection of every request that is still being sent or recorded. Not a protocol answer. */
@@ -172,13 +178,13 @@ const clip = (text: string) => (text.length > MAX_MESSAGE ? `${text.slice(0, MAX
 const PAUSED_NOTICE = `Automatic replies paused after ${AUTOMATIC_REPLY_LIMIT} in a row. Answer by hand to continue the run.`;
 
 /** The client's own words for a rejected stream, kept short and free of the received values. */
-function clientFailure(error: unknown): { kind: FindingKind; message: string } | undefined {
-  if (error instanceof AGUIError) return { kind: 'sequence', message: clip(error.message) };
-  if (error instanceof SyntaxError) return { kind: 'json', message: `The protocol client could not read a frame as JSON: ${clip(error.message)}` };
+function clientFailure(error: unknown): { rule: CatalogueRuleId; message: string } | undefined {
+  if (error instanceof AGUIError) return { rule: sequenceRuleOf(error.message), message: clip(error.message) };
+  if (error instanceof SyntaxError) return { rule: 'json.invalid', message: `The protocol client could not read a frame as JSON: ${clip(error.message)}` };
   if (error instanceof Error && error.name === 'ZodError') {
     const issues = (error as Error & { issues?: ReadonlyArray<{ path: PropertyKey[]; message: string }> }).issues ?? [];
     const first = issues[0];
-    return { kind: 'schema', message: `The protocol client rejected a frame: ${first ? `${first.path.map(String).join('.') || '(root)'}: ${first.message}` : 'invalid event'}${issues.length > 1 ? ` and ${issues.length - 1} more` : ''}` };
+    return { rule: 'schema.invalid-event', message: `The protocol client rejected a frame: ${first ? `${first.path.map(String).join('.') || '(root)'}: ${first.message}` : 'invalid event'}${issues.length > 1 ? ` and ${issues.length - 1} more` : ''}` };
   }
   return undefined;
 }
@@ -197,7 +203,8 @@ export function createRuntime(options: RuntimeOptions): Runtime {
   const randomUUID = options.randomUUID ?? (() => globalThis.crypto.randomUUID());
   const epoch = () => (options.clock ?? { epoch: () => Date.now() }).epoch();
   const transport = createGuardedTransport(policy, options.fetch ? { fetch: options.fetch } : {});
-  const recorder: CaptureRecorder = createRecorder(createFrameSink(store), options.clock);
+  let declared: AgentCapabilities | undefined;
+  const recorder: CaptureRecorder = createRecorder(createFrameSink(store, { declared: () => declared }), options.clock);
 
   let agent: AgentConfig | undefined;
   let targetUrl: string | undefined;
@@ -280,9 +287,10 @@ export function createRuntime(options: RuntimeOptions): Runtime {
     targetUrl = url;
     let cleared = false;
     if (changed) {
-      // The token was entered for the old target; it never reaches a new one.
+      // The token was entered for the old target; it never reaches a new one. Nor does the old agent's declaration.
       cleared = auth !== undefined;
       auth = undefined;
+      declared = undefined;
       stop();
       thread = { id: randomUUID(), messages: [], state: {} };
       replies = NO_REPLIES;
@@ -441,9 +449,9 @@ export function createRuntime(options: RuntimeOptions): Runtime {
         // The recorder reports capture problems on the exchange; the client's run carries on.
       }
     };
-    const addRunFinding = (kind: FindingKind, message: string) => {
+    const addRunFinding = (rule: CatalogueRuleId, message: string) => {
       try {
-        store.addFinding({ id: `${recordId}:finding-${(findings += 1)}`, kind, message, subject: { type: 'run', id: recordId } });
+        store.addFinding({ id: `${recordId}:finding-${(findings += 1)}`, kind: kindOf(rule), rule, message, subject: { type: 'run', id: recordId } });
       } catch {
         // No run record to point at (the exchange was never captured).
       }
@@ -492,7 +500,7 @@ export function createRuntime(options: RuntimeOptions): Runtime {
       },
       onRunFailed({ error: failure }) {
         const finding = clientFailure(failure);
-        if (finding) addRunFinding(finding.kind, finding.message);
+        if (finding) addRunFinding(finding.rule, finding.message);
       },
     };
 
@@ -594,6 +602,9 @@ export function createRuntime(options: RuntimeOptions): Runtime {
     setAuth(next) {
       auth = next;
       emit();
+    },
+    setDeclaredCapabilities(next) {
+      declared = next;
     },
     async send(text) {
       if (text.trim() === '') return problem('Enter a message to send');

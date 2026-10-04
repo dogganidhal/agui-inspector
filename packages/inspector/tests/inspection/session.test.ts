@@ -67,6 +67,21 @@ test('the replies the inspector answered are marked on the run, survive a round 
   assert.ok(plain.ok, 'a file written before the mark existed imports');
 });
 
+test('findings with rule ids and runs with automaticReplies round-trip together through one export and import', async () => {
+  const marked = clone(await richSession());
+  (marked.runs as unknown as Array<Record<string, unknown>>)[0] = { ...marked.runs[0]!, automaticReplies: { interruptIds: ['i-approve'], toolCallIds: ['c-1'] } };
+  assert.ok(marked.findings.length > 0 && marked.findings.every((finding) => finding.rule !== undefined));
+
+  const text = serializeSession(marked);
+  const result = parseSession(text);
+  assert.ok(result.ok);
+  assert.deepEqual(result.session, marked, 'both the rules and the marks come back');
+  assert.equal(serializeSession(result.session), text, 'and a second export is byte-identical');
+  const restored = restoreSession(result.session).snapshot();
+  assert.deepEqual(restored.findings.map((finding) => finding.rule), marked.findings.map((finding) => finding.rule));
+  assert.deepEqual(restored.runs[0]?.automaticReplies, { interruptIds: ['i-approve'], toolCallIds: ['c-1'] });
+});
+
 test('import rejects an automaticReplies that is not two lists of nonempty strings, naming the run', async () => {
   const bad = async (value: unknown) => {
     const file = await fileOf();
@@ -134,6 +149,41 @@ test('import allows header-like words inside payloads, which are evidence and no
   const edited = { ...clone(session), frames: session.frames.map((candidate) => (candidate === frame ? { ...frame, data: payload, parsed: JSON.parse(payload), eventType: 'CUSTOM' } : candidate)) };
   const result = parseSession(serializeSession(edited));
   assert.ok(result.ok, 'payload text is not a header field');
+});
+
+test('a finding keeps its rule through export and import, and a 0.1.0 file without rules still opens', async () => {
+  const session = await richSession();
+  assert.ok(session.findings.length > 0 && session.findings.every((finding) => finding.rule !== undefined), 'every finding the inspector created has a rule');
+  const file = JSON.parse(serializeSession(session)) as { session: { findings: Array<Record<string, unknown>> } };
+  assert.deepEqual(Object.keys(file.session.findings[0]!), ['id', 'kind', 'rule', 'message', 'subject']);
+  const again = parseSession(JSON.stringify(file));
+  assert.ok(again.ok);
+  assert.deepEqual(again.session.findings.map((finding) => finding.rule), session.findings.map((finding) => finding.rule));
+
+  // What 0.1.0 wrote: the same findings with no `rule`.
+  for (const finding of file.session.findings) delete finding.rule;
+  const old = parseSession(JSON.stringify(file));
+  assert.ok(old.ok, 'a 0.1.0 session opens');
+  assert.ok(old.session.findings.length > 0 && old.session.findings.every((finding) => !('rule' in finding)), 'nothing is invented for an old finding');
+  assert.equal(serializeSession(old.session).includes('"rule"'), false, 'and nothing is written for it');
+});
+
+test('import accepts a well-formed rule that this version does not know and the compat and capability kinds, and rejects a bad rule', async () => {
+  const withRule = async (patch: Record<string, unknown>) => {
+    const file = await fileOf();
+    Object.assign(file.session.findings![0]!, patch);
+    return file;
+  };
+  const kind = (await fileOf()).session.findings![0]!.kind as string;
+  assert.ok(parseSession(JSON.stringify(await withRule({ rule: `${kind}.from-a-newer-version` }))).ok, 'unknown but well formed');
+  for (const family of ['compat', 'capability']) {
+    const result = parseSession(JSON.stringify(await withRule({ kind: family, rule: `${family}.something` })));
+    assert.ok(result.ok, `${family} findings open`);
+  }
+  rejects(await withRule({ rule: 'Not A Rule' }), /findings\[0\].*rule must be <family>\.<problem>/);
+  rejects(await withRule({ rule: 7 }), /findings\[0\].*rule must be <family>\.<problem>/);
+  rejects(await withRule({ rule: `${kind === 'json' ? 'schema' : 'json'}.invalid` }), /findings\[0\].*rule family must match kind/);
+  rejects(await withRule({ severity: 'high' }), /findings\[0\].*unknown field.*severity/i);
 });
 
 test('import rejects invalid references', async () => {
