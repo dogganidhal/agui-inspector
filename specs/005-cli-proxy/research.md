@@ -46,6 +46,25 @@ the merged code):
 
 If the merged API differs, the change is made here in the plan and in `tasks.md` before any code.
 
+Reconciliation with the merged code (PR #93, read on 2026-10-04 before any code of this feature). The contract holds. The
+differences, none of which changes the design:
+
+- `config.json` is `{ version, agents, theme, brand }`. `brand` came with issue #73. The command passes no `theme` and
+  no `brand`, so its file has `version` and `agents` only.
+- The core answers 405 with `Allow: GET, HEAD` for every other method, `HEAD` included in what it serves. `server.ts` adds
+  no 405 of its own, and task T009 drops that conditional.
+- `toRequest` takes the path and query of an absolute-form target, reads `//` as a path, and turns `CONNECT`, `TRACE` and
+  `TRACK` into `OPTIONS`. The command refuses absolute-form targets and `CONNECT` before the core sees them, so the
+  bridge never has to.
+- `sendResponse` buffers a whole body. That is right for the page files and `config.json`. The relay does not use it.
+- The missing-files message is `the packaged inspector files are missing; build them with 'npm run build'`, so `run()`
+  prints the core's message as it is.
+- `buildServer()` in `scripts/build.mjs` already checks the `exports` targets. T010 adds the `bin` target to that check.
+  `tsconfig.server.json` includes `src/server/**/*` and `src/static-path.js`, and T002 adds `src/cli/**/*`.
+- `tests/e2e/js-helpers/package.spec.ts` already reads every `lib` file and requires `node:` or relative `.js` imports
+  only. The command files follow that rule.
+- `AGENTS.md` has a "Where things are" row for `src/server`. T032 adds one for `src/cli`.
+
 ## 3. The relay: `http.request` and `stream.pipeline`
 
 Decision: relay with the platform's `http.request` or `https.request`, `agent: false`, the raw header list for the

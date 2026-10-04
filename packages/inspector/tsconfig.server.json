@@ -8,5 +8,5 @@
     "stripInternal": true,
     "rewriteRelativeImportExtensions": true
   },
-  "include": ["src/server/**/*", "src/static-path.js"]
+  "include": ["src/server/**/*", "src/cli/**/*", "src/static-path.js"]
 }

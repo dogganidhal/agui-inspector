@@ -21,17 +21,17 @@ rebased on it.
 
 ## Phase 1: Setup
 
-- [ ] T001 Read the merged core of feature 006: `packages/inspector/src/server/core.ts`, `node.ts`,
+- [x] T001 Read the merged core of feature 006: `packages/inspector/src/server/core.ts`, `node.ts`,
   `packages/inspector/tsconfig.server.json`, the `buildServer()` step of `scripts/build.mjs` and the `assetsDir` hook.
   Check each point of research 2 (the core serves `hosting-config.json`; `config.json` carries only the fields given; how
   `handle` treats methods other than GET and HEAD; the error for missing page files; the asset for `/`). Write any
   difference into `research.md` section 2 and into `plan.md` before writing code. If the core does not answer 405 for
   other methods, `server.ts` (T010) does it with `Allow: GET, HEAD`.
-- [ ] T002 Make the package ship the command. In `packages/inspector/package.json` add
+- [x] T002 Make the package ship the command. In `packages/inspector/package.json` add
   `"bin": { "agui-inspector": "./lib/cli/main.js" }` (leave `exports`, `files` and `dependencies` alone). In
   `packages/inspector/tsconfig.server.json` add `src/cli/**/*` to `include`. The build check for the `bin` target comes with
   `main.ts` in T010, so the build keeps passing until then. Depends on T001.
-- [ ] T003 Update the two tests that forbid a `bin`. In `packages/inspector/tests/foundation/policy.test.ts` remove
+- [x] T003 Update the two tests that forbid a `bin`. In `packages/inspector/tests/foundation/policy.test.ts` remove
   `'bin'` from the forbidden list for the published manifest only and assert that
   `json('packages/inspector/package.json').bin` deep-equals `{ 'agui-inspector': './lib/cli/main.js' }`, that every other
   manifest still has no `bin`, and that the published manifest's `dependencies` keys are unchanged from `main` (no new
@@ -42,7 +42,7 @@ rebased on it.
 
 ## Phase 2: Foundation, the arguments (blocks every story)
 
-- [ ] T004 [P] Write `packages/inspector/tests/cli/args.test.ts` for `parseCli(argv)`. Cover: `--target` repeatable and a
+- [x] T004 [P] Write `packages/inspector/tests/cli/args.test.ts` for `parseCli(argv)`. Cover: `--target` repeatable and a
   header attached to the last `--target` before it (`--target A --header "X: a" --target B --header "X: b"`);
   `--header=Name: value` and `--header "Name: value"` give the same result; `--port` default 4747, `0`, `65535`, and the
   refusals `-1`, `65536`, `abc`, `1.5`, empty; `--help` and `--version` (kind `help` and `version`, even with other
@@ -56,7 +56,7 @@ rebased on it.
   a repeated name for one target replaces the earlier value. For every failing input assert that the message does not
   contain a unique synthetic secret placed in the header value, in the target's query or in its password, and that an
   unquoted `--header Authorization: Bearer SECRET` fails without printing `SECRET`.
-- [ ] T005 Implement `packages/inspector/src/cli/args.ts` to make T004 pass: `parseCli(argv)`, the `Target` type
+- [x] T005 Implement `packages/inspector/src/cli/args.ts` to make T004 pass: `parseCli(argv)`, the `Target` type
   (`n`, `url`, `origin`, `host` without brackets, `port`, `tls`, `path` as `url.pathname`, `headers` keyed by lowercase
   name), the `Cli` result (`help`, `version`, `serve` with `port` and `targets`, `error` with `message`) and the `USAGE`
   text of the command line contract. Use `parseArgs` with `strict: true`, `allowPositionals: true`, `tokens: true`, and
@@ -107,7 +107,7 @@ recorded, and every request the page made went to its own origin.
   403 with a plain text body) and call `relay` with the text after the segment (`/` when empty) plus the query, exactly
   as received; otherwise answer from the core with `sendResponse(await handle(toRequest(request), asset), response)`,
   where the asset is the path without its first `/`, with `/` as `index.html`, decoded once (a failed decode is 404).
-  Add the 405 for other methods only if T001 found the core does not. Bind with `server.listen(port, '127.0.0.1')`,
+  The core answers 405 itself (research 2), so add none. Bind with `server.listen(port, '127.0.0.1')`,
   never another address. `close()` ends the listener and calls `closeAllConnections()`. Depends on T007, T008.
 - [ ] T010 [US1] Implement `packages/inspector/src/cli/run.ts` and `packages/inspector/src/cli/main.ts`.
   `run(argv, io)` with `io = { out(text), err(text), stop: AbortSignal }` returns the exit code: parse; for `help` and
