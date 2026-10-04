@@ -126,7 +126,7 @@ MVP first: Phases 1 to 3 give lanes. Then the timeline (Phase 4), then the keys 
 
 - T013 and the plan name `lanes-view.test.tsx`. The file is `lanes-view.test.ts`: the repository's view tests are `.ts` files that call `createElement`.
 - T028 names `tests/e2e/conversation/lanes-app.spec.ts`. The whole-app spec is `tests/e2e/hosted/subagent-lanes.spec.ts`, because the production page and its policy are served by `tests/e2e/hosted/support.ts`. That file gets a `/subagents` route that answers with the reference agent's scripted run. It also holds the second test, the 0.1.0 session.
-- `tests/e2e/conversation/site.ts` gets a `close` helper, and the conversation fixture host passes `onReveal` to the conversation view too, so a spec can read what a row asked the page to reveal.
+- `tests/e2e/conversation/site.ts` gets a `close` helper, and the conversation fixture host passes `onReveal` to the conversation view when the page address has `?reveal`, so a spec can read what a row asked the page to reveal. It is off by default, because it turns run ids and frame references into buttons, which changes the tab order that the Markdown spec checks.
 - The timeline indents a nested row with `margin-left`, not `padding-left`: the name sits in its own box, and a margin moves the box where a padding would only move its text.
 - The run's own bar is an outline in the `--muted` color. A fill in `--line-2` measured 1.4:1 against the track, below the 3:1 that T019 asks for.
 - A lane's header line keeps the `under run <id>` text that the 0.1.0 marker had, so the 0.1.0 end-to-end checks of `events.spec.ts` pass unchanged. It sits beside the description and the spawning tool call.

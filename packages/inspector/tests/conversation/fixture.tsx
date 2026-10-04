@@ -15,6 +15,8 @@ import '../../src/views/conversation/conversation.css';
 const host = harness((callback) => void requestAnimationFrame(callback));
 
 const noop = () => undefined;
+/** `?reveal` gives the conversation view a reveal action, so its run ids and frame references are buttons. Off by default, as the views mount on their own. */
+const withReveal = new URLSearchParams(location.search).has('reveal');
 /** What the conversation and state views asked the page to reveal, in order: the page's navigation is outside this host. */
 const revealed: EvidenceTarget[] = [];
 const props: ConversationViewProps = {
@@ -34,7 +36,7 @@ function Page(): ReactElement {
       <div data-pane="conversation">
         <ConversationView
           {...props}
-          onReveal={(target) => void revealed.push(target)}
+          {...(withReveal && { onReveal: (target: EvidenceTarget) => void revealed.push(target) })}
           renderActivity={(entry) => (entry.activityType === 'rendered-demo' ? <p data-testid="rendered-activity">Surface for {entry.messageId}</p> : undefined)}
         />
       </div>

@@ -359,7 +359,10 @@ test('events with no start event and a child with an unseen parent are labelled,
 });
 
 test('a messages snapshot takes an ended lane out of the transcript, keeps its row, and the row opens its start frame', async ({ page, site }) => {
-  await run(page, site, [
+  await page.goto(`${site.origin}?reveal`);
+  await page.waitForFunction(() => '__conversation' in window);
+  await start(page, 'ex1', 't1', 'r1');
+  await send(page, 'ex1', [
     RUN,
     started('sub-done-r1'),
     inLane('sub-done-r1', { type: 'CUSTOM', name: 'x', value: 1 }),
@@ -370,6 +373,7 @@ test('a messages snapshot takes an ended lane out of the transcript, keeps its r
     finished('sub-open-r1'),
     DONE,
   ]);
+  await close(page, 'ex1', 'completed');
   await expect(byId(page, 'sub-done-r1')).toHaveCount(0);
   await expect(byId(page, 'sub-open-r1')).toHaveCount(1);
   await expect(byId(page, 'sub-open-r1')).toContainText('after');
