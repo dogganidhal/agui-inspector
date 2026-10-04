@@ -222,7 +222,7 @@ and every id has a fixture.
 - **FR-006**: The inspector MUST show the full rule id wherever it lists a finding in detail: in a frame's detail, on an
   exchange and on a run. A frame row keeps its short tag, which is the kind of its first finding. The frames list MUST
   still filter to frames that have findings. `compat` and `capability` findings MUST use the warning styling that
-  `sequence` findings have. The other kinds keep the error styling.
+  `sequence` findings have, in the finding text and on the frame row's tag. The other kinds keep the error styling.
 - **FR-007**: A session export MUST carry each finding's rule id as an optional field `rule`. The format version stays
   0. An import MUST accept a finding without `rule` (a 0.1.0 export) and show it without a rule id. An import MUST
   accept a finding with a well-formed `rule` that the catalogue does not know. An import MUST reject a `rule` that is
@@ -281,7 +281,8 @@ and every id has a fixture.
 - **FR-010**: The declared capabilities of a stream MUST be those of the agent selected when the stream starts, from
   the configuration, inline or from the capabilities URL, exactly as the settings view reads them today. When there are
   none (no agent, none declared, a URL not loaded yet or failed), capability rules MUST NOT produce findings or errors.
-  The inspector MUST NOT fetch capabilities for this feature on its own initiative or by discovery.
+  A loaded declaration counts only for the agent whose capabilities URL it was read from, so it never carries over to
+  another agent. The inspector MUST NOT fetch capabilities for this feature on its own initiative or by discovery.
 - **FR-011**: A capability rule MUST fire only when the capability is declared `false`. A capability that is omitted or
   `true` MUST NOT produce a finding. The finding goes on the frame that contradicts the declaration, one per frame per
   rule, and names the event type and the capability. A stream of 200 such frames gets 200 findings. A rule fires on the
@@ -295,8 +296,9 @@ and every id has a fixture.
 | `capability.state-delta-unsupported` | `STATE_DELTA` | `state.deltas: false` |
 | `capability.state-snapshot-unsupported` | `STATE_SNAPSHOT` | `state.snapshots: false` |
 
-- **FR-012**: A capability rule MUST read the event type of any frame whose data is a JSON object, after the compat
-  upgrades below, whether or not the rest of the event is valid.
+- **FR-012**: A capability rule MUST read the event type of any frame whose data is a JSON object, whether or not the
+  rest of the event is valid. The retired `THINKING_*` types of FR-013 count as the reasoning events that the client
+  reads them as. A `null` outcome is not an interrupt outcome.
 
 **Older event versions the client accepts**
 
@@ -339,10 +341,10 @@ and every id has a fixture.
 **Fixtures, tests and docs**
 
 - **FR-021**: Every rule MUST have a fixture that breaks it. A fixture is deterministic and model-free, and lives with
-  the reference agent's fixtures, so that the conformance suite of the next minor can reuse it. For a rule about the
-  inspector's own failure (`schema.check-failed`, `transport.failed`, `capture.failed`,
-  `capture.response-not-captured`, `capture.rule-check-failed`, `sequence.unclassified`) the fixture is an injected
-  failure.
+  the reference agent's fixtures, so that the conformance suite of the next minor can reuse it. For a rule about a
+  failure of the inspector's own machinery (`schema.check-failed`, `capture.failed`, `capture.response-not-captured`,
+  `capture.rule-check-failed`, `sequence.unclassified`) the fixture is an injected failure. The fixture of
+  `transport.failed` is a request that gets no response.
 - **FR-022**: A unit test MUST fail when a catalogue rule has no fixture, when a fixture has no rule, and when playing a
   fixture does not produce a finding with that rule id. Sequence and compat fixtures MUST also be played through the real
   protocol client, to show that the client rejects the sequence fixtures with the message the mapping expects, and
