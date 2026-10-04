@@ -76,10 +76,11 @@ export const formOperations = [
   { version: V, updateDataModel: { surfaceId: 'form', path: '/', value: { note: 'first draft' } } },
 ];
 
-const formerCatalogOperations = formOperations.map((operation) => ('createSurface' in operation ? { ...operation, createSurface: { ...operation.createSurface, catalogId: FORMER_CATALOG } } : operation));
 
 /** The id an agent still uses for the basic catalog, which only a config alias makes known. */
 export const FORMER_CATALOG = 'https://catalog.invalid/old/basic.json';
+
+const formerCatalogOperations = formOperations.map((operation) => ('createSurface' in operation ? { ...operation, createSurface: { ...operation.createSurface, catalogId: FORMER_CATALOG } } : operation));
 
 /** A reply in five deltas, then a subagent that starts and finishes: every place the conversation shows an offset and a frame reference. */
 const evidenceEvents = [
