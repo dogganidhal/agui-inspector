@@ -112,7 +112,7 @@ section.agui-tl  data-timeline="subagents"  (above the transcript, only when mod
             └── ol.agui-tl-rows
                 ├── li  run row (text, bar, not a button)
                 ├── li > button.agui-tl-row  data-tl-row="<lane id>"  data-status  tabindex 0 or -1  aria-label
-                │     span.agui-tl-label  (indent by depth, ellipsis, title = full text)
+                │     span.agui-tl-label  (a name box indented by depth with margin-left, ellipsis, title = full text)
                 │     span.agui-tl-track > span.agui-tl-bar (style left, width) > span.agui-tl-end (glyph)
                 │     span  status word and duration (visible text)
                 └── button "Show <n> more rows"  (after the first 100 rows)
@@ -121,7 +121,7 @@ section.agui-tl  data-timeline="subagents"  (above the transcript, only when mod
 - A bar's `left` is `startMs / axisMs`, its `width` is `(endMs - startMs) / axisMs`, as percentages, clamped to the
   track. A minimum width keeps a zero-length bar visible.
 - A row whose lane is not in the transcript says "Replaced transcript" beside its status and its activation calls
-  `onReveal({ exchangeId, frameId })` for its start frame, or for its first frame when it has no start. Without
+  `onReveal({ exchangeId, frameId })` for its start frame, for its first lifecycle frame when it has no start, or for its exchange when it has no lifecycle frame. Without
   `onReveal` the row is not a jump target and says so in its name.
 - The note says: "Positions and durations are derived from the offsets at which frames arrived. The optional timestamp
   of an event is not used."
