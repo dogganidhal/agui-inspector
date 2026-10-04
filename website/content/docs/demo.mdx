@@ -94,7 +94,7 @@ The broken stream from [your first run](#break-the-stream), which also says what
 
 ## A2UI showcase
 
-Each of this agent's seven quick messages starts a separate story. The stories are built in [`a2ui-showcase.ts`](https://github.com/dogganidhal/agui-inspector/blob/main/examples/reference-agent/a2ui-showcase.ts) and use only the bundled basic catalog (A2UI v0.9). A story keeps nothing between runs. The agent rebuilds each step from the name and resolved context of the action you clicked, so a run's Request body shows what the server received. A story that spans several runs replaces one activity in place, so the surface updates where it is. [A2UI surfaces](./a2ui.mdx) describes the renderer. To write your own story, see [writing a showcase story](./demo-internals.mdx#writing-a-showcase-story).
+Each of this agent's eight quick messages starts a separate story. The stories are built in [`a2ui-showcase.ts`](https://github.com/dogganidhal/agui-inspector/blob/main/examples/reference-agent/a2ui-showcase.ts) and use the bundled catalogs: the A2UI v0.9 basic catalog, and for one story the v0.8 standard catalog. A story keeps nothing between runs. The agent rebuilds each step from the name and resolved context of the action you clicked, so a run's Request body shows what the server received. A story that spans several runs replaces one activity in place, so the surface updates where it is. [A2UI surfaces](./a2ui.mdx) describes the renderer. To write your own story, see [writing a showcase story](./demo-internals.mdx#writing-a-showcase-story).
 
 ### Find a table for 4
 
@@ -126,7 +126,11 @@ Three invalid attempts with two `retrying` frames between them. Then `failed` wi
 
 ### Probe the sandbox
 
-One list asks for a picture, a video, a sound and an `openUrl`. It also has markup in a text and a component missing from the catalog. It is followed by a non-object entry, one with no version, a v0.8 entry, an unknown catalog and an update for a missing surface. Inspect what a client refuses, and check that the rest is still drawn. Every address is on the reserved `.invalid` host, so the page requests nothing.
+One list asks for a picture, a video, a sound and an `openUrl`. It also has markup in a text and a component missing from the catalog. It is followed by a non-object entry, one with no version, one that declares v0.8 as its version (the v0.8 protocol has no such field), an unknown catalog and an update for a missing surface. Inspect what a client refuses, and check that the rest is still drawn. Every address is on the reserved `.invalid` host, so the page requests nothing.
+
+### Review an expense report (v0.8)
+
+Two A2UI v0.8 surfaces in one activity. The form has an amount field, a category choice, a checkbox for the receipt, an urgency slider, two tabs of policy notes and a Submit expense button. The second surface has a status line and a Withdraw button. Submit expense sends the four values you entered. The answer changes the status line to "Submitted ..." and adds a line that shows what the agent received, and your input stays. Withdraw sends the status text and removes the form with a v0.8 `deleteSurface`. The messages are `surfaceUpdate`, `dataModelUpdate`, `beginRendering` and `deleteSurface`, and none of them carries a `version` key. The story names no address.
 
 ### Show the order form
 

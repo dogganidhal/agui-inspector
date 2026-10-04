@@ -12,7 +12,7 @@ A developer tool for [AG-UI](https://docs.ag-ui.com) servers. Point it at an age
 [![License: MIT](https://img.shields.io/badge/license-MIT-0a0a0a.svg)](LICENSE)
 [![PyPI](https://img.shields.io/pypi/v/agui-inspector?color=0a0a0a)](https://pypi.org/project/agui-inspector/)
 [![AG-UI 1.0](https://img.shields.io/badge/AG--UI-1.0-0a0a0a.svg)](https://docs.ag-ui.com)
-[![A2UI v0.9](https://img.shields.io/badge/A2UI-v0.9-0a0a0a.svg)](https://dogganidhal.github.io/agui-inspector/docs/a2ui/)
+[![A2UI v0.8 and v0.9](https://img.shields.io/badge/A2UI-v0.8%20%7C%20v0.9-0a0a0a.svg)](https://dogganidhal.github.io/agui-inspector/docs/a2ui/)
 
 </div>
 
@@ -91,7 +91,7 @@ your server. Your server must allow the page's origin through CORS.
   drops, repairs or reorders a frame, even one that is not JSON.
 - Checks frames against the AG-UI schemas and the event order, and shows each problem on its frame and its run.
 - Shows all 31 AG-UI event types in a frames list with a timeline, a conversation view and a state view.
-- Lets you answer interrupts and client tool calls by hand, or set them in the client profile so they are answered for you, and draws A2UI v0.9 surfaces with the official renderer.
+- Lets you answer interrupts and client tool calls by hand, or set them in the client profile so they are answered for you, and draws A2UI v0.8 and v0.9 surfaces with the official renderers.
 - Sends raw JSON exactly as you type it, including run inputs that break the schema.
 - Reads agents and presets from a configuration file, saves sessions to a file and opens them again later, and restyles
   through ten CSS properties for light and dark mode, without a rebuild.

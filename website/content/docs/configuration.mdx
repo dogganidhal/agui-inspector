@@ -8,7 +8,7 @@ Three things control a run:
 | Surface | Decides | Who edits it |
 | --- | --- | --- |
 | `hosting-config.json` | Where this deployment may connect. Read first, and nothing later can change it. See [Host the static page](./hosted.mdx#hosting-configjson). | The deployer |
-| `config.json` | The agents the page lists, their optional [presets](./presets.mdx), an optional theme and an optional brand. | The deployer, or `mount_inspector`, which writes it from its arguments |
+| `config.json` | The agents the page lists, their optional [presets](./presets.mdx), an optional theme, an optional brand and optional A2UI catalog aliases. | The deployer, or `mount_inspector`, which writes it from its arguments |
 | The client profile | Your client settings: what the next run sends (protocol version, tools, context, message mode, forwarded properties) and whether A2UI surfaces render. Edit it under Settings. The browser stores it. | You, in the browser |
 
 A preset holds what one agent needs for a run: setup requests, variables, forwarded properties, a message mode and quick messages. The profile can override two of these. Its `messageMode` replaces the preset's mode when set. Its `forwardedProps` are merged over the preset's ([client profile](#client-profile)).
@@ -39,6 +39,9 @@ A configuration is JSON that lists agents. The embedded bundle reads `config.jso
     "name": "Acme Console",
     "logo": "/static/acme.svg",
     "logoDark": "/static/acme-dark.svg"
+  },
+  "catalogAliases": {
+    "https://catalogs.example.com/old/basic.json": "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json"
   }
 }
 ```
@@ -52,6 +55,7 @@ A configuration is JSON that lists agents. The embedded bundle reads `config.jso
 | `agents[].preset` | Optional. See [presets](./presets.mdx). |
 | `theme` | Optional. `light` and `dark` maps that give string values to the ten public `--agui-*` names. See [Theme](#theme). |
 | `brand` | Optional. The name and logos that replace the default ones in the top bar. See [Brand](#brand). |
+| `catalogAliases` | Optional. Maps an A2UI catalog id that an agent still uses to a catalog the inspector bundles. See [Catalog aliases](#catalog-aliases). |
 
 The agents appear in a picker beside the endpoint field in the top bar, on every pane and tab, and again under Settings. Both pickers change the same selection. The top-bar picker appears only when at least one agent is configured. An endpoint you type by hand matches no agent, so the picker then shows "Custom URL".
 
@@ -112,6 +116,27 @@ A brand problem causes a warning and never stops startup, like a theme problem. 
 A warning names the field and never repeats the value. `parseConfig(text, page)` returns the accepted fields as `brand`, with each logo as the full URL it resolves to, and the messages in `warnings` after the theme's. It takes the page's origin and location to check logos. Without them, only a path or a `data:` image passes.
 
 The brand is not part of a session export, a profile or browser storage. For Python, see [Branding the embedded page](./embedding.mdx#branding-the-embedded-page). For colors, see [Theming](./theming.mdx).
+
+### Catalog aliases
+
+`catalogAliases` maps an A2UI catalog id that the inspector does not know to a catalog that it bundles, so the surface draws. The field is optional and applies to every agent. [A2UI surfaces](./a2ui.mdx#catalogs-and-aliases) explains the catalogs and when an alias applies.
+
+| Part | Rule |
+| --- | --- |
+| Key | The id an agent sends in `createSurface.catalogId` or `beginRendering.catalogId`. It must not be empty. It must not be a bundled id or the built-in alias |
+| Value | The id of a bundled catalog: `https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json` or `https://a2ui.org/specification/v0_8/standard_catalog_definition.json` |
+
+An alias problem causes a warning and never stops startup, like a theme problem. The page shows a "Configuration" warning under the top bar, on every tab, and ignores that entry. The valid aliases, the agents and the theme still work. A warning cuts an id at 120 characters.
+
+| Input | Warning |
+| --- | --- |
+| `catalogAliases` is not an object | `catalogAliases must be an object from a catalog id to a bundled catalog id; it was ignored` |
+| An empty key | `catalogAliases: "" is not a catalog id; it was ignored` |
+| A key that is a bundled id or the built-in alias | `catalogAliases: "<key>" is already a built-in catalog id; it was ignored` |
+| A value that is not a string | `catalogAliases: "<key>" must map to a catalog id (a string); it was ignored` |
+| A value that is not a bundled id, another alias included | `catalogAliases: "<key>" maps to "<value>", which is not a catalog this inspector bundles; it was ignored` |
+
+An alias changes only which bundled catalog a surface uses. The inspector fetches no catalog, rewrites no received message and sends no request for an alias. The content security policy is the same with or without aliases. `parseConfig` returns the accepted entries as `catalogAliases` and the messages in `warnings`.
 
 ### Declared capabilities
 

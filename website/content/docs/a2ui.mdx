@@ -1,12 +1,12 @@
 ---
 title: A2UI surfaces
-description: What an A2UI surface is, how you use one in the inspector, and which v0.9 components, functions and catalogs work.
+description: What an A2UI surface is, how you use one in the inspector, how v0.8 and v0.9 surfaces are told apart, and which components, functions, catalogs and aliases work.
 ---
 
 import runLight from '../../../docs/images/run-light.webp';
 import runDark from '../../../docs/images/run-dark.webp';
 
-An A2UI surface is a form or other interface that your agent describes and the inspector draws inside an activity card. You fill it in and press its buttons as a user would. Each action starts a run that sends it to your agent, so you can check the surface and your agent's answer. Only A2UI v0.9 is supported.
+An A2UI surface is a form or other interface that your agent describes and the inspector draws inside an activity card. You fill it in and press its buttons as a user would. Each action starts a run that sends it to your agent, so you can check the surface and your agent's answer. The inspector draws A2UI v0.8 and v0.9 surfaces and finds the version of each one itself.
 
 <Screenshot light={runLight} dark={runDark} alt="A release deploy board drawn as an A2UI surface on the left, and on the right the run's ten frames, from RUN_STARTED through an ACTIVITY_SNAPSHOT and seven ACTIVITY_DELTA frames to RUN_FINISHED." />
 
@@ -21,7 +21,7 @@ The left pane shows the activity card, with its Rendered and JSON switch at the 
 
 ## What is drawn
 
-An `ACTIVITY_SNAPSHOT` of type `a2ui-surface` carries `{ "a2ui_operations": [...] }`, a list of v0.9 messages: `createSurface`, `updateComponents`, `updateDataModel` or `deleteSurface`. `@a2ui/web_core/v0_9` builds the surfaces and `@a2ui/react/v0_9` draws them. Both are [pinned](./dependencies.mdx) and bundled, so surfaces render offline.
+An `ACTIVITY_SNAPSHOT` of type `a2ui-surface` carries `{ "a2ui_operations": [...] }`, a list of A2UI messages. v0.9 messages are `createSurface`, `updateComponents`, `updateDataModel` and `deleteSurface`. v0.8 messages are `beginRendering`, `surfaceUpdate`, `dataModelUpdate` and `deleteSurface`. A list can hold both. `@a2ui/web_core` builds the surfaces, and `@a2ui/react/v0_9` or `@a2ui/react/v0_8` draws them. Both are [pinned](./dependencies.mdx) and bundled, so surfaces render offline.
 
 | Situation | What you see |
 | --- | --- |
@@ -30,9 +30,34 @@ An `ACTIVITY_SNAPSHOT` of type `a2ui-surface` carries `{ "a2ui_operations": [...
 | Another activity type | JSON in the activity card, outside this view |
 | No `a2ui_operations`, `status` of `building`, `retrying` or `failed` | The status (see [generation lifecycle](#generation-lifecycle)) |
 | No `a2ui_operations`, any other case | "No A2UI operations yet." |
+| An entry that is neither v0.8 nor v0.9 | An error naming its position, with the entry as received. The others still apply (see [versions](#versions)) |
 | An operation the renderer cannot apply | An error naming its position, with the entry as received. The others still apply |
 | `a2ui_operations` is not a list | One error showing the value received |
 | A component type not in the catalog | An error in its place naming the type, with its definition under "As received". The rest still draws |
+
+## Versions
+
+The inspector reads the version from each entry of `a2ui_operations`, so there is no setting for it. One list can hold surfaces of both versions.
+
+| Entry | Version |
+| --- | --- |
+| An object with `"version": "v0.9"` | v0.9 |
+| An object with no `version` that holds `beginRendering`, `surfaceUpdate`, `dataModelUpdate` or `deleteSurface` | v0.8 |
+| Anything else | Refused |
+
+`deleteSurface` exists in both versions, so the `version` key decides which one it is.
+
+A refused entry gets an error with its position, and the entry itself is under "As received". Every other entry still applies. The three errors are:
+
+| Entry | Error |
+| --- | --- |
+| Not an object | `This operation is not an object.` |
+| An object with no version and no v0.8 message name | `This operation has no version and no v0.8 message name. A2UI v0.9 operations declare "version": "v0.9".` |
+| A `version` other than `v0.9` | `This operation declares version v0.8. A2UI v0.9 operations declare "v0.9", and v0.8 messages have no version.` |
+
+The v0.8 protocol has no `version` field, so a message that declares `v0.8` is refused. A v0.8 message can also fail the v0.8 check: two message kinds in one message, an unknown key or a missing required field. Its error names the problem and the position.
+
+A surface has the version of the messages that build it. A v0.8 surface and a v0.9 surface can share an id. They are two surfaces, and a message changes only the surface of its own version. Surfaces appear in the order the list first names them, whatever their version.
 
 ## Actions
 
@@ -50,9 +75,11 @@ When a user activates a control, the surface creates an action with exactly five
 
 The renderer resolves the bindings in `context`, copies it at the click and sets `timestamp`. The inspector puts the object in `forwardedProps.a2uiAction.userAction` and starts a normal [run](./runs.mdx). It never sends the action as a tool reply.
 
+A v0.8 button names its action as `{ "name": "send_note", "context": [{ "key": "note", "value": { "path": "/note" } }] }`. At the click the renderer turns the `context` list into an object, with the data that each path holds. The action reaches your agent in the same five fields. A path that points at an object gives that object as JSON.
+
 ## How operations are applied
 
-On each change, the inspector passes the activity's operation list to a session. An identical list changes nothing. A list that only grew at the end applies the new entries and keeps typed text. Any other change, such as an `ACTIVITY_DELTA` that rewrites an earlier operation, rebuilds the surfaces and loses typed values.
+On each change, the inspector passes the activity's operation list to a session. An identical list changes nothing. A list that only grew at the end applies the new entries and keeps typed text. Any other change, such as an `ACTIVITY_DELTA` that rewrites an earlier operation, rebuilds the surfaces and loses typed values. This is the same for both versions.
 
 The session gives the renderer copies, so the received list never changes. Typing into a bound field changes only the surface's data model. The JSON view, the frames, the exported session and the projection still show what the agent sent.
 
@@ -77,21 +104,46 @@ A surface cannot make the inspector request, open or load anything:
 - No Markdown renderer is configured, so link and image syntax stay as typed.
 - The Material Symbols font behind `Icon` names never loads.
 - Catalogs are never fetched.
+- The v0.8 renderer tries to inject a stylesheet into the document head when it starts. The page's content security policy forbids inline styles, so the inspector prevents that and styles v0.8 surfaces itself. The policy is the same with and without v0.8 surfaces.
 
-## Versions and catalogs
+## Catalogs and aliases
 
-The inspector accepts only `"version": "v0.9"`. It reports an operation with no version or `v0.8` as unsupported and skips it.
+The inspector bundles two catalogs and never fetches one. A surface names its catalog by id: `createSurface.catalogId` in v0.9, and the optional `beginRendering.catalogId` in v0.8.
 
-The only catalog is the bundled basic catalog, under exactly two ids with the same guards:
+| Catalog id | Catalog | Where it comes from |
+| --- | --- | --- |
+| `https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json` | v0.9 basic | Declared by the renderer package |
+| `https://a2ui.org/specification/v0_9/basic_catalog.json` | v0.9 basic | The default of `@ag-ui/a2ui-middleware` 0.0.11 when the agent sets none. This is the one built-in alias |
+| `https://a2ui.org/specification/v0_8/standard_catalog_definition.json` | v0.8 standard | The default that the v0.8 protocol names. A v0.8 surface that names no catalog uses it |
 
-| Catalog id | Source |
-| --- | --- |
-| `https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json` | Declared by the renderer package |
-| `https://a2ui.org/specification/v0_9/basic_catalog.json` | Default of `@ag-ui/a2ui-middleware` 0.0.11 when the agent sets none (the one built-in alias) |
+Any other id gives "Catalog not found: <id>" with the entry as received, and the surface is not drawn. The v0.8 processor does not look at `catalogId`, so the inspector checks it. Matching is exact: a trailing slash, another scheme or another case makes a different id. The inspector never rewrites `createSurface` or `beginRendering`, so the activity JSON and the recording show the id the agent sent.
 
-One activity can use both. The inspector never rewrites `createSurface`, so the activity JSON and the recording show the id the agent sent. Any other id gives "Catalog not found" with the entry as received. Near misses fail too, for example a trailing slash or a `v0_8` path. Catalog aliases in the configuration are planned for [0.2.0](https://github.com/dogganidhal/agui-inspector/blob/main/ROADMAP.md#020). Loading catalogs from an address is not planned.
+### Aliases
+
+If your agent names a catalog by an id that used to be valid, map that id to a bundled catalog with `catalogAliases` in `config.json`:
+
+```json
+{
+  "version": 0,
+  "agents": [{ "id": "support", "url": "/agents/support/stream" }],
+  "catalogAliases": {
+    "https://catalogs.example.com/old/basic.json": "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json",
+    "https://catalogs.example.com/old/standard.json": "https://a2ui.org/specification/v0_8/standard_catalog_definition.json"
+  }
+}
+```
+
+- The key is the id the agent sends. The value must be the id of a bundled catalog, from the table above.
+- An alias serves the surfaces of its target's version. A v0.8 surface that names an alias of the v0.9 catalog gets "Catalog not found".
+- An alias cannot point at another alias, and it cannot redefine an id in the table, the built-in one included.
+- A bad entry gives a warning under the top bar, and the page ignores that entry. The agents and the other aliases still work. [Configuration](./configuration.mdx#catalog-aliases) lists each warning.
+- For the Python helper, pass `catalog_aliases` to `mount_inspector` ([embedding](./embedding.mdx#catalog-aliases)).
+
+Loading a catalog from an address is not supported.
 
 ## Components
+
+These are the components of the v0.9 basic catalog. [A2UI v0.8 surfaces](#a2ui-v08-surfaces) covers v0.8.
 
 All 18 basic-catalog components are bundled. The inspector draws eight itself (`Row`, `Divider`, `Icon`, `Button`, `TextField`, `ChoicePicker`, `Tabs`, `Modal`), because the renderer's markup has no labels or its styles never load. They keep the official schemas and bindings, so basic-catalog surfaces work unchanged.
 
@@ -121,6 +173,8 @@ When you write a surface:
 - `accessibility.label` and `accessibility.description` become `aria-label` and `aria-description` only on the eight components the inspector draws. An input with a visible label takes its name from it. Otherwise `accessibility.label` applies.
 
 ## Functions and checks
+
+This section is about v0.9. v0.8 has no functions and no checks.
 
 A surface can call basic-catalog functions anywhere a value is dynamic: `{ "call": "formatDate", "args": { ... } }`. The pinned renderer does not need the `"returnType": "string"` from the official samples.
 
@@ -171,11 +225,35 @@ A `TextField` shows its first failing message under itself. A `Button` shows its
 
 The renderer's `CheckBox` draws its own message, and the button cannot see it. A button that repeats a `CheckBox` message shows it twice. Give the button a form-level message ("Accept the terms and fix the fields above").
 
+## A2UI v0.8 surfaces
+
+A v0.8 surface is built from three kinds of message. `surfaceUpdate` defines components, `dataModelUpdate` sets data as `key` and typed value entries, and `beginRendering` names the root component. The surface appears once `beginRendering` has arrived. Until then the inspector keeps its components and data, draws nothing and reports nothing. In v0.8, every component that a `surfaceUpdate` mentions must be defined in that same message.
+
+The v0.8 renderer draws the 18 components of the v0.8 standard catalog: `Text`, `Image`, `Icon`, `Video`, `AudioPlayer`, `Row`, `Column`, `List`, `Card`, `Tabs`, `Divider`, `Modal`, `Button`, `CheckBox`, `TextField`, `DateTimeInput`, `MultipleChoice` and `Slider`. They follow the inspector's theme in light and dark mode. Every control has a role and an accessible name, and works with the keyboard. The rules in [nothing leaves the page](#nothing-leaves-the-page) apply to v0.8 too. The inspector draws eight of the components itself and keeps the renderer's own for the rest:
+
+| Component | Behavior |
+| --- | --- |
+| `Text` | Plain text. A `usageHint` of `h1` to `h5` gives a heading, `caption` gives small muted text, and anything else gives a paragraph. The renderer's own `Text` turns Markdown into links and images, so the inspector does not use it, and link and image syntax stays as typed |
+| `Image`, `Video`, `AudioPlayer` | A note with the address as text |
+| `Icon` | The icon name in a small tag, announced as an image with that name |
+| `Button` | `primary` gives the primary look. A press sends the button's action |
+| `Tabs`, `Modal` | The same tabs and dialog as v0.9 (see [components](#components)) |
+| `TextField`, `CheckBox`, `Slider`, `DateTimeInput`, `MultipleChoice` | The renderer's own, styled by the theme. `obscured` shows the text as typed. `MultipleChoice` is one `select`, so `maxAllowedSelections` has no effect |
+| `Row`, `Column`, `List`, `Card`, `Divider` | The renderer's own, styled by the theme |
+
+When you write a v0.8 surface:
+
+- The renderer reads a string property that equals a component id as a reference to that component. A `Text` with `"usageHint": "h1"` next to a component whose id is `h1` is a circular dependency. Use ids such as `heading-one`.
+- A `Button` used as a `Modal` entry point still sends its own action. v0.8 has no action that only opens a modal.
+- A message that the renderer cannot build, such as a circular reference or a component without a required property, is reported at its position. The renderer rebuilds the whole tree after every message, so a surface that holds such a component repeats the error for each later message.
+- `beginRendering.styles` can carry `primaryColor` (a `#rrggbb` value) and `font` (a name). They apply to that surface only. The primary color is used for its primary buttons, checkboxes, sliders and selected tab.
+- v0.8 has no functions, checks or `openUrl`, so [functions and checks](#functions-and-checks) does not apply to it.
+
 ## Theme and size
 
 Surfaces follow the inspector's theme in light and dark mode, so overriding the [public `--agui-*` properties](./theming.mdx#public-properties) restyles them without a rebuild.
 
-In 0.1.0 the renderer is in the main bundle. Loading it on first use is not planned.
+Both renderers are in the main bundle. Adding the v0.8 renderer made the production bundle about 215 KB larger minified and about 70 KB larger gzipped. The limits are 2,000,000 and 600,000 bytes, and `npm run check:bundle:renderer` reports how much room is left. Loading a renderer on first use is not planned.
 
 For the view's module wiring, its stylesheet and the tests, see [Architecture and UI internals](./internals.mdx#a2ui-view-wiring).
 

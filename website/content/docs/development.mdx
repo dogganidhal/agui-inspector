@@ -95,7 +95,7 @@ Run them from the repository root.
 | `npm run test:unit` | Compiles `*.test.ts(x)` with esbuild into `.build/tests` and runs them with `node --test`. Add paths (`-- packages/inspector/tests/foundation`) to run only those tests. If it finds no tests, it fails. |
 | `npm run build` | Writes `packages/inspector/dist` (`index.html`, `app.js`, `app.css`) and compiles the Express, Hono and Next.js helpers to `packages/inspector/lib`. `-- --outdir <dir>` builds the page elsewhere and skips `lib`. |
 | `npm run check:bundle` | Checks `packages/inspector/dist` against the [bundle budget](#bundle-budget). Run `npm run build` first. |
-| `npm run check:bundle:renderer` | Builds the scaffold plus the pinned A2UI v0.9 renderer into `.build/representative` and reports how much budget is left. |
+| `npm run check:bundle:renderer` | Builds the scaffold plus the pinned A2UI v0.8 and v0.9 renderers into `.build/representative` and reports how much budget is left. |
 | `npm run test:benchmark` | Checks the 5,000-frame fixture and schedule and reports responsiveness as pending. `-- --strict` fails while it is pending. `-- --measure` runs the browser benchmark. |
 | `npm run test:e2e` | Runs Playwright against `tests/e2e`. With no spec it fails with "No tests found", so a missing suite never counts as passing. |
 | `npm exec -- tsc -p demo/tsconfig.json` | Strict type check of the demo's page bootstrap, with the DOM library and no Node types. |
@@ -133,9 +133,9 @@ It measures gzip size per file (level 6, no modification time in the header) and
 only on the bytes. The command prints each file and both totals. It fails when either total is above 2,000,000
 minified or 600,000 gzip bytes (decimal). A total equal to the limit passes. A missing or empty directory fails.
 
-The scaffold says little about the final app. So `npm run check:bundle:renderer` bundles it with the pinned A2UI v0.9
-renderer and catalog, A2UI core, the AG-UI client, the event schemas and the upstream render tool. With the pinned
-versions, that is about 1.02 MB minified and 250 KB gzipped. Use it for planning only: the integrated app adds its own
+The scaffold says little about the final app. So `npm run check:bundle:renderer` bundles it with the pinned A2UI v0.8
+and v0.9 renderers and the v0.9 catalog, A2UI core, the AG-UI client, the event schemas and the upstream render tool.
+With the pinned versions, that is about 1.43 MB minified and 375 KB gzipped. Use it for planning only: the integrated app adds its own
 code, and the strict check runs on that build too. Gzip output can differ slightly between Node versions, so compare
 numbers from the same Node version.
 
