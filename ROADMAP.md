@@ -26,35 +26,42 @@ maintainer's approval of the `pypi` and `npm` deployments. See
 [distribution](https://dogganidhal.github.io/agui-inspector/docs/releases/). Nothing in this repository authorizes
 publishing, tagging or releasing. Each remains the maintainer's decision.
 
-Next is [0.2.0](#020). There is no 1.0.0 target for now. [Decisions](#decisions) explains why.
+0.2.0 is complete on `main`: every item below has merged, and the release waits for the maintainer to merge the
+`chore: version packages` pull request and approve the deployments. After it comes [0.3.0](#030). There is no 1.0.0
+target for now. [Decisions](#decisions) explains why.
 
 ## 0.2.0
 
-0.2.0 ships when every item below has merged. Each item has an issue and starts as a feature spec through Spec Kit.
-None of them waits for another, so the order is a priority: branding first, then the best impact for the effort.
+Every item below has merged. Each one has an issue and a feature spec under [`specs/`](specs). The order was the
+priority: branding first, then the best impact for the effort.
 
-| # | Capability | Scope | Impact | Effort | Issue |
-| --- | --- | --- | --- | --- | --- |
-| 1 | Branding | The adopter's logo and product name in the top bar, set in `config.json` and through `mount_inspector` | High | Small | [#73](https://github.com/dogganidhal/agui-inspector/issues/73) |
-| 2 | Client automation | Interrupts resolved or cancelled automatically, and scripted client tool results, set in the client profile | Medium | Small | [#74](https://github.com/dogganidhal/agui-inspector/issues/74) |
-| 3 | CLI and proxy | `npx agui-inspector --target <url>`: local bundle serving, loopback-only listener, explicit target allowlist, unchanged target bytes | High | Medium | [#75](https://github.com/dogganidhal/agui-inspector/issues/75) |
-| 4 | JS server helpers | Express, Hono and Next.js helpers with the same contract as `mount_inspector` | High | Medium | [#76](https://github.com/dogganidhal/agui-inspector/issues/76) |
-| 5 | Protocol diagnostics | A rule catalogue with ids, protocol version handling, and findings for frames that contradict declared capabilities | High | Medium | [#77](https://github.com/dogganidhal/agui-inspector/issues/77) |
-| 6 | A2UI v0.8 and catalog aliases | v0.8 surfaces through the v0.8 renderer of `@a2ui/react`, and catalog aliases in the config | Medium | Medium | [#78](https://github.com/dogganidhal/agui-inspector/issues/78) |
-| 7 | Inspection views | Subagent lanes and a timeline, state history with diffs, a waterfall of runs, and Markdown on demand | High | Large | [#79](https://github.com/dogganidhal/agui-inspector/issues/79) |
-| 8 | Transport and resumption | The protobuf encoding and resumable runs through `connectAgent` | Low | Medium | [#80](https://github.com/dogganidhal/agui-inspector/issues/80) |
-| 9 | Plugins | Hooks before a run and on its input, header providers, and renderers for custom events and activities | Medium | Large | [#81](https://github.com/dogganidhal/agui-inspector/issues/81) |
+| # | Capability | Scope | Impact | Effort | Issue | Merged in |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | Branding | The adopter's logo and product name in the top bar, set in `config.json` and through `mount_inspector` | High | Small | [#73](https://github.com/dogganidhal/agui-inspector/issues/73) | [#88](https://github.com/dogganidhal/agui-inspector/pull/88), [#102](https://github.com/dogganidhal/agui-inspector/pull/102) |
+| 2 | Client automation | Interrupts resolved or cancelled automatically, and scripted client tool results, set in the client profile | Medium | Small | [#74](https://github.com/dogganidhal/agui-inspector/issues/74) | [#91](https://github.com/dogganidhal/agui-inspector/pull/91) |
+| 3 | CLI and proxy | `npx agui-inspector --target <url>`: local bundle serving, loopback-only listener, explicit target allowlist, unchanged target bytes | High | Medium | [#75](https://github.com/dogganidhal/agui-inspector/issues/75) | [#97](https://github.com/dogganidhal/agui-inspector/pull/97) |
+| 4 | JS server helpers | Express, Hono and Next.js helpers with the same contract as `mount_inspector` | High | Medium | [#76](https://github.com/dogganidhal/agui-inspector/issues/76) | [#93](https://github.com/dogganidhal/agui-inspector/pull/93) |
+| 5 | Protocol diagnostics | A rule catalogue with ids, protocol version handling, and findings for frames that contradict declared capabilities | High | Medium | [#77](https://github.com/dogganidhal/agui-inspector/issues/77) | [#94](https://github.com/dogganidhal/agui-inspector/pull/94) |
+| 6 | A2UI v0.8 and catalog aliases | v0.8 surfaces through the v0.8 renderer of `@a2ui/react`, and catalog aliases in the config | Medium | Medium | [#78](https://github.com/dogganidhal/agui-inspector/issues/78) | [#92](https://github.com/dogganidhal/agui-inspector/pull/92) |
+| 7 | Inspection views | Subagent lanes and a timeline, state history with diffs, a waterfall of runs, and Markdown on demand | High | Large | [#79](https://github.com/dogganidhal/agui-inspector/issues/79) | [#89](https://github.com/dogganidhal/agui-inspector/pull/89), [#90](https://github.com/dogganidhal/agui-inspector/pull/90), [#98](https://github.com/dogganidhal/agui-inspector/pull/98), [#99](https://github.com/dogganidhal/agui-inspector/pull/99), [#105](https://github.com/dogganidhal/agui-inspector/pull/105) |
+| 8 | Protobuf streams | The protobuf encoding, recorded and decoded. Resuming runs moved to [#95](https://github.com/dogganidhal/agui-inspector/issues/95) | Low | Medium | [#80](https://github.com/dogganidhal/agui-inspector/issues/80) | [#100](https://github.com/dogganidhal/agui-inspector/pull/100) |
+| 9 | Plugins | Hooks before a run and on its input, header providers, and renderers for custom events and activities | Medium | Large | [#81](https://github.com/dogganidhal/agui-inspector/issues/81) | [#104](https://github.com/dogganidhal/agui-inspector/pull/104) |
 
 Branding has three constraints. The logo comes from the page's own origin or a `data:` URI, so the content security
 policy and the no-third-party-request rule stay as they are. A bad value shows a configuration warning and never stops
 startup. Without a brand, the default mark and name stay.
 
-[#86](https://github.com/dogganidhal/agui-inspector/issues/86) brings the docs in line with this roadmap. Several pages
-still mention 1.0.0 plans.
+[#86](https://github.com/dogganidhal/agui-inspector/issues/86) brought the docs in line with this roadmap
+([#87](https://github.com/dogganidhal/agui-inspector/pull/87)). Two fixes came out of using the branded page: a brand
+with a logo and no name shows the logo alone ([#102](https://github.com/dogganidhal/agui-inspector/pull/102)), and the
+light or dark choice survives a reload ([#101](https://github.com/dogganidhal/agui-inspector/issues/101),
+[#103](https://github.com/dogganidhal/agui-inspector/pull/103)).
 
-## Next minor
+## 0.3.0
 
-These build on 0.2.0 and ship in the release after it.
+These build on 0.2.0 and ship in the release after it. They are tracked in the
+[0.3.0 milestone](https://github.com/dogganidhal/agui-inspector/milestone/1). Their dependencies in 0.2.0 have
+merged, so only the conformance suite waits, for the Python reference agent.
 
 | Capability | Scope | Needs | Issue |
 | --- | --- | --- | --- |
@@ -65,7 +72,7 @@ These build on 0.2.0 and ship in the release after it.
 
 ## Decisions
 
-Taken on 2026-10-04, when this roadmap was revised.
+Taken on 2026-10-04, when this roadmap was revised, except where a line says otherwise.
 
 - The next release is 0.2.0. There is no 1.0.0 target. The 1.0.0 acceptance criteria in the constitution apply to a
   1.0.0 release only, and none is planned.
@@ -79,6 +86,10 @@ Taken on 2026-10-04, when this roadmap was revised.
 - The in-app inspector is not planned. It is too soon to tell how a custom element should isolate the styles that A2UI
   injects into the document. This closes G-06 for now.
 - The inspector does not move upstream for now, and the package keeps the name `agui-inspector`. This closes G-03.
+- Resuming runs through `connectAgent` left 0.2.0 on 2026-10-04 and moved to
+  [#95](https://github.com/dogganidhal/agui-inspector/issues/95). `HttpAgent` in `@ag-ui/client` 1.0.1 has no
+  `connect()`, and AG-UI defines no HTTP contract for it. Under the rule above, it waits for upstream. #95 carries the
+  `blocked: upstream` label and no milestone.
 - Formats stay at version 0. New fields are optional, as `theme` was in 0.1.0, so existing files keep working. A change
   that breaks an existing file comes with migration steps in the changelog.
 
