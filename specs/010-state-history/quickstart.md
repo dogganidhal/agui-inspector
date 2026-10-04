@@ -21,10 +21,10 @@ workload. The workload test prints the open time and the 95th percentile of 100 
 ## End-to-end tests
 
 ```sh
-npm run test:e2e -- tests/e2e/conversation tests/e2e/inspection --workers=2
+npm run test:e2e -- tests/e2e/conversation tests/e2e/hosted --workers=2
 ```
 
-Expect: both `state-history.spec.ts` files pass (`tests/e2e/conversation` and `tests/e2e/inspection`). It covers pointer and keyboard selection, the past-state banner and
+Expect: both `state-history.spec.ts` files pass (`tests/e2e/conversation` and `tests/e2e/hosted`). It covers pointer and keyboard selection, the past-state banner and
 "Back to latest", 100 live changes with a past point selected, a shortened long value, a 250-difference snapshot,
 and export, reload and import with every point compared.
 

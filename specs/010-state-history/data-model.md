@@ -53,14 +53,13 @@ pointAt(model: StateModel, index: number): PointDetail
 pointCount(model: StateModel): number
 
 interface PointDetail {
-  readonly kind: 'start' | 'change';
   /** The state after the point. Undefined when there is none yet. */
   readonly state: JsonValue | undefined;
   /** The net differences from the state before. Absent for the starting state and for a first state. */
   readonly diff?: readonly Difference[];
   /** A snapshot with no earlier state: shown in full, with no diff. */
   readonly firstState: boolean;
-  /** Absent for the starting state. */
+  /** The change the point follows. Absent for the starting state. */
   readonly change?: StateChange;
 }
 ```

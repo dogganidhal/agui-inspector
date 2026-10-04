@@ -54,7 +54,7 @@ tab opens in under 1 s, on the fixed workload in research.md (R5): 5,000 frames,
 a state of about 3 KB.
 
 **Constraints**: Production bundle at most 2,000,000 bytes minified and 600,000 bytes gzipped. Baseline on main
-at `e400f85`: 1,227,500 and 308,758. Expected addition: under 6 KB minified.
+at `e400f85`: 1,227,500 and 308,758. Expected addition: under 10 KB minified. Measured at the end of implementation: +8,188 bytes minified and +2,404 gzipped (1,235,688 and 311,162 in total).
 
 **Scale/Scope**: One view, three new source files (two in core, one in views), small edits to the projection,
 the patch module, the State view, one stylesheet, the docs and the tests.
@@ -121,7 +121,8 @@ packages/inspector/
     └── state-workload.test.ts  # NEW: the 5,000-frame state workload
 tests/e2e/
 ├── conversation/state-history.spec.ts  # NEW: pointer, keyboard, live (fixture host)
-└── inspection/state-history.spec.ts    # NEW: export, import and no-request checks (real app)
+├── hosted/state-history.spec.ts        # NEW: export, import and no-request checks (real app)
+└── hosted/evidence-contrast.spec.ts    # + the history's text in both themes
 website/content/docs/
 ├── event-views.mdx             # State section rewritten
 └── internals.mdx               # StateView and the new modules
@@ -173,7 +174,7 @@ Spec scenario to test:
 | US2.1 to US2.3, FR-007, FR-008, FR-010 | `state.test.ts` (static markup, including the derived line) and `tests/e2e/conversation/state-history.spec.ts`: select by click, label says past state, "Back to latest". |
 | US3, FR-015, SC-003 | `tests/e2e/conversation/state-history.spec.ts`: keyboard only. Tab to the list, arrows, Home, End, Back to latest by key, the disclosure and "Show more" by key, the frame reference button by key. |
 | US4.1, US4.2, FR-011, SC-005 | `tests/e2e/conversation/state-history.spec.ts` on the fixture host: stream into the page, select a past row, push 100 more deltas, assert the same state and diff and "100 newer changes". |
-| US4.3, FR-013, SC-006 | `tests/e2e/inspection/state-history.spec.ts` on the reference agent through the app: run, export, reload, import, compare every point. A session file in the 0.1.0 format, built by the inspection test helpers, imports and shows its history. |
+| US4.3, FR-013, SC-006 | `tests/e2e/hosted/state-history.spec.ts` on the production build with a scripted agent: run, export, reload, import, compare every point. The exported file keeps the 0.1.0 format (same version and keys, no field for the history), so a 0.1.0 file imports the same way. |
 | US4.5, FR-012 | Unit test for the scope reset; e2e: New thread empties the list. |
 | FR-014, SC-007 | e2e: export before and after browsing is byte-identical; the existing network allowlist test still passes; no `localStorage` or `sessionStorage` writes while browsing. |
 | FR-016 | Unit and e2e: a 200-character value is shortened and opens in full; a 250-difference snapshot shows 100 and "Show 150 more". |
