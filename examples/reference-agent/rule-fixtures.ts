@@ -8,7 +8,7 @@
 import type { AgentCapabilities } from '@ag-ui/core';
 import type { CatalogueRuleId } from '../../packages/inspector/src/core/rules/catalogue.ts';
 import type { FindingSubject } from '../../packages/inspector/src/contracts.ts';
-import { invalidCases, missingTerminalScenarios } from './protocol-fixtures.ts';
+import { eventFixtures, invalidCases, missingTerminalScenarios } from './protocol-fixtures.ts';
 import { fragment, type RecorderScenario } from './recorder-fixtures.ts';
 
 const encoder = new TextEncoder();
@@ -111,4 +111,44 @@ export const ruleFixtures: Partial<Record<CatalogueRuleId, RuleFixture>> = {
   ),
   /** At 1.0.1 every message the client can raise has its own rule, so only a synthetic error reaches this one. */
   'sequence.unclassified': { injected: 'client-error', lands: ['run'] },
+
+  'capability.reasoning-unsupported': {
+    scenario: stream('rule-capability-reasoning', [started, { type: 'REASONING_START', messageId: 'rs1' }, { type: 'REASONING_END', messageId: 'rs1' }, finished]),
+    via: 'reader',
+    lands: ['frame'],
+    declared: { reasoning: { supported: false } },
+  },
+  'capability.interrupt-unsupported': {
+    scenario: stream('rule-capability-interrupt', [started, { ...finished, outcome: { type: 'interrupt', interrupts: [{ id: 'i1', reason: 'approval', message: 'Approve?' }] } }]),
+    via: 'reader',
+    lands: ['frame'],
+    declared: { humanInTheLoop: { interrupts: false } },
+  },
+  'capability.state-delta-unsupported': {
+    scenario: stream('rule-capability-state-delta', [started, eventFixtures.STATE_DELTA, finished]),
+    via: 'reader',
+    lands: ['frame'],
+    declared: { state: { deltas: false } },
+  },
+  'capability.state-snapshot-unsupported': {
+    scenario: stream('rule-capability-state-snapshot', [started, eventFixtures.STATE_SNAPSHOT, finished]),
+    via: 'reader',
+    lands: ['frame'],
+    declared: { state: { snapshots: false } },
+  },
 };
+
+/**
+ * One stream for an agent whose declaration it breaks three times: a reasoning span, a state delta and an interrupt
+ * outcome. The hosted end-to-end check serves it, and declares `reasoning.supported`, `state.deltas` and
+ * `humanInTheLoop.interrupts` as `false` for the agent.
+ */
+export function contradictionEvents(ids: { readonly threadId: string; readonly runId: string }): readonly object[] {
+  return [
+    { type: 'RUN_STARTED', ...ids },
+    { type: 'REASONING_START', messageId: 'rs1' },
+    { type: 'REASONING_END', messageId: 'rs1' },
+    eventFixtures.STATE_DELTA,
+    { type: 'RUN_FINISHED', ...ids, outcome: { type: 'interrupt', interrupts: [{ id: 'i1', reason: 'approval', message: 'Approve the refund?' }] } },
+  ];
+}

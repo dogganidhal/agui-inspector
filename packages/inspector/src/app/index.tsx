@@ -11,7 +11,7 @@
 import { StrictMode, useCallback, useEffect, useState, useSyncExternalStore, type ReactElement, type ReactNode } from 'react';
 import { createRoot, type Root as ReactRoot } from 'react-dom/client';
 import type { A2uiAction, AppProps, BrandConfig, ClientProfileSettings, DeploymentMode, EvidenceTarget, InspectionSession, SessionStore } from '../contracts';
-import { loadCapabilities } from '../core/config/index';
+import { declaredOf, loadCapabilities } from '../core/config/index';
 import { exportProfile, importProfile, saveProfile, type StorageLike } from '../core/profiles/index';
 import { publishChunkExpansions, type ActivityEntry } from '../core/projection/index';
 import { guardedFetchText } from '../core/runtime/index';
@@ -285,6 +285,12 @@ function Root({ started, storage }: { started: Started; storage?: StorageLike })
     };
   }, [agent, runtime]);
 
+  // The frame reader judges each stream against what the selected agent declares: inline, or once its URL has loaded.
+  const loaded = capabilities?.status === 'ready' ? capabilities.capabilities : undefined;
+  useEffect(() => {
+    runtime.setDeclaredCapabilities(declaredOf(agent, loaded));
+  }, [agent, loaded, runtime]);
+
   const targetChanged = (cleared: boolean) => cleared && toast('Token cleared: it applies to one target only');
   const resetVariables = () => {
     settings.variables = {};
@@ -335,7 +341,10 @@ function Root({ started, storage }: { started: Started; storage?: StorageLike })
         if (next === undefined) return;
         resetVariables();
         setSelectedId(id);
-        targetChanged(runtime.selectAgent(next));
+        const cleared = runtime.selectAgent(next);
+        // Selecting clears the old declaration. Picking the agent again after a typed endpoint changes no state above.
+        runtime.setDeclaredCapabilities(declaredOf(next, loaded));
+        targetChanged(cleared);
       },
       onChangeProfile: changeProfile,
       onChangeVariable(name, value) {

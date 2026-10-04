@@ -91,8 +91,9 @@ test('a url declaration shows loading, an error, or the loaded groups with their
   const failed = view({ status: 'error', message: 'Capabilities /agents/remote/capabilities: blocked by CORS' });
   assert.match(failed, /role="alert"/);
   assert.match(failed, /blocked by CORS/);
-  const groups = describeCapabilities({ state: { snapshots: true, deltas: false } });
-  const ready = view({ status: 'ready', capabilities: { source: 'url', url: '/agents/remote/capabilities', groups } });
+  const declared = { state: { snapshots: true, deltas: false } };
+  const groups = describeCapabilities(declared);
+  const ready = view({ status: 'ready', capabilities: { source: 'url', url: '/agents/remote/capabilities', groups, declared } });
   assert.match(ready, />snapshots</);
   assert.match(ready, /agui-settings-off/);
 });

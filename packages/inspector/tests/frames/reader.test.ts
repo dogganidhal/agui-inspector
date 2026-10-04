@@ -2,7 +2,7 @@
 // not only the parsed events: the reader may add findings, never change what crossed the wire.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { EventType } from '@ag-ui/core';
+import { EventType, type AgentCapabilities } from '@ag-ui/core';
 import {
   baselineRunTypes,
   eventFixtures,
@@ -23,14 +23,14 @@ type Check = NonNullable<Parameters<typeof createFrameReader>[2]>['check'];
 /** Pushes chunks (text is encoded; bytes pass through) with offsets 10, 20, 30 ... unless given. */
 function read(
   chunks: ReadonlyArray<string | Uint8Array>,
-  options: { offsets?: readonly number[]; end?: FindingSubject | false; check?: Check } = {},
+  options: { offsets?: readonly number[]; end?: FindingSubject | false; check?: Check; declared?: () => AgentCapabilities | undefined } = {},
 ) {
   const frames: RawFrame[] = [];
   const findings: Finding[] = [];
   const reader = createFrameReader(
     { appendFrame: (frame) => void frames.push(frame), addFinding: (finding) => void findings.push(finding) },
     EXCHANGE,
-    options.check ? { check: options.check } : {},
+    { ...(options.check && { check: options.check }), ...(options.declared && { declared: options.declared }) },
   );
   chunks.forEach((chunk, i) => reader.push(typeof chunk === 'string' ? encoder.encode(chunk) : chunk, options.offsets?.[i] ?? (i + 1) * 10));
   if (options.end !== false) reader.end(options.end);
@@ -448,4 +448,90 @@ test('finding ids are unique within an exchange and distinct from the recorderâ€
     assert.equal(new Set(ids).size, ids.length, scenario.name);
     assert.ok(ids.every((id) => !/^finding-\d+$/.test(id)));
   }
+});
+
+// ---- capability findings (specs/007, US2) -------------------------------------------------------
+
+const wire = (...events: readonly object[]) => events.map((event) => `data: ${JSON.stringify(event)}\n\n`);
+const RUN = { type: 'RUN_STARTED', threadId: 't', runId: 'r' };
+const DONE = { type: 'RUN_FINISHED', threadId: 't', runId: 'r', outcome: { type: 'success' } };
+
+test('a frame that contradicts a declared false gets a finding on that frame, and the stream is read as it would be without one', () => {
+  const declared = () => ({ state: { deltas: false } });
+  const chunks = wire(RUN, eventFixtures.STATE_DELTA, eventFixtures.STATE_SNAPSHOT, DONE);
+  const { frames, findings } = read(chunks, { declared });
+  const plain = read(chunks);
+
+  assert.deepEqual(findings.map((finding) => [finding.id, finding.kind, finding.rule, finding.subject]), [
+    ['exchange-1:frame-1:finding', 'capability', 'capability.state-delta-unsupported', { type: 'frame', id: 'exchange-1:frame-1' }],
+  ]);
+  assert.match(findings[0]!.message, /STATE_DELTA came from an agent that declares state\.deltas: false/);
+  assert.deepEqual(frames, plain.frames, 'frames, envelopes, offsets and verdicts do not depend on the declaration');
+  assert.equal(frames.map((frame) => frame.envelope).join(''), chunks.join(''));
+  assert.deepEqual(plain.findings, []);
+});
+
+test('a second finding on a frame takes the next id, and an invalid frame of the right type still counts', () => {
+  const { findings } = read(wire(RUN, { type: 'STATE_DELTA' }, DONE), { declared: () => ({ state: { deltas: false } }) });
+  assert.deepEqual(findings.map((finding) => [finding.id, finding.rule]), [
+    ['exchange-1:frame-1:finding', 'schema.invalid-event'],
+    ['exchange-1:frame-1:finding-2', 'capability.state-delta-unsupported'],
+  ]);
+});
+
+test('no provider, a provider that returns nothing and a declaration without the flag give no finding', () => {
+  const chunks = wire(RUN, eventFixtures.STATE_DELTA, DONE);
+  assert.deepEqual(read(chunks).findings, []);
+  assert.deepEqual(read(chunks, { declared: () => undefined }).findings, []);
+  assert.deepEqual(read(chunks, { declared: () => ({ state: { deltas: true } }) }).findings, []);
+  assert.deepEqual(read(chunks, { declared: () => ({}) }).findings, []);
+});
+
+test('the declaration is read once, when the stream starts: a later change does not change a running stream', () => {
+  let declaration: AgentCapabilities | undefined;
+  let asked = 0;
+  const { findings, reader } = read(wire(RUN), { declared: () => (asked += 1, declaration), end: false });
+  declaration = { state: { deltas: false } };
+  reader.push(encoder.encode(wire(eventFixtures.STATE_DELTA, eventFixtures.STATE_DELTA).join('')), 99);
+  assert.equal(asked, 1, 'one read for the stream, not one for each frame');
+  assert.deepEqual(findings, [], 'a stream that started with nothing declared is not judged against what is declared later');
+
+  declaration = undefined;
+  const second = read(wire(RUN, eventFixtures.STATE_DELTA), { declared: () => (declaration = { state: { deltas: false } }), end: false });
+  declaration = undefined;
+  second.reader.push(encoder.encode(wire(eventFixtures.STATE_DELTA).join('')), 99);
+  assert.equal(second.findings.length, 2, 'and one that started with a declaration keeps it');
+});
+
+test('every contradicting frame gets its own finding: 200 deltas from an agent that declares none give 200 findings', () => {
+  const chunks = wire(RUN, ...Array.from({ length: 200 }, () => eventFixtures.STATE_DELTA), DONE);
+  const { findings, frames } = read(chunks, { declared: () => ({ state: { deltas: false } }) });
+  assert.equal(findings.length, 200);
+  assert.equal(new Set(findings.map((finding) => finding.id)).size, 200);
+  assert.equal(frames.length, 202);
+});
+
+test('a provider that throws, or a declaration that throws when read, costs no frame and is reported once on a frame', () => {
+  const chunks = wire(RUN, eventFixtures.STATE_DELTA, DONE);
+  const provider = read(chunks, {
+    declared: () => {
+      throw new RangeError('provider exploded');
+    },
+  });
+  assert.equal(provider.frames.length, 3);
+  assert.deepEqual(provider.findings.map((finding) => [finding.rule, finding.subject]), [['capture.rule-check-failed', { type: 'frame', id: 'exchange-1:frame-0' }]]);
+  assert.match(provider.findings[0]!.message, /RangeError/);
+  assert.ok(!provider.findings[0]!.message.includes('provider exploded'), 'the error message stays out of the finding');
+
+  const hostile = read(chunks, {
+    declared: () =>
+      ({
+        get state(): never {
+          throw new Error('getter exploded');
+        },
+      }) as AgentCapabilities,
+  });
+  assert.equal(hostile.frames.length, 3, 'every frame is kept');
+  assert.deepEqual(hostile.frames.map((frame) => frame.schemaVerdict), ['valid', 'valid', 'valid']);
+  assert.deepEqual(hostile.findings.map((finding) => finding.rule), ['capture.rule-check-failed', 'capture.rule-check-failed', 'capture.rule-check-failed'], 'the next frames are still read, and each says so');
 });

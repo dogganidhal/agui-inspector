@@ -11,7 +11,7 @@
 //
 // Sequence violations are the protocol client's to report, and a run's outcome is not decided here:
 // a stream without a valid RUN_FINISHED or RUN_ERROR gets a `terminal` finding and nothing else.
-import { EventType } from '@ag-ui/core';
+import { EventType, type AgentCapabilities } from '@ag-ui/core';
 import { EventSchemas } from '@ag-ui/core/schemas';
 import type {
   ExchangeId,
@@ -24,6 +24,7 @@ import type {
 } from '../../contracts.ts';
 import type { RecorderSink } from '../recorder/index.ts';
 import { kindOf, type CatalogueRuleId } from '../rules/catalogue.ts';
+import { capabilityRules, type RuleHit } from '../rules/frame-rules.ts';
 
 export type FrameOutput = Pick<SessionStore, 'appendFrame' | 'addFinding'>;
 
@@ -84,6 +85,11 @@ export interface FrameReader {
 export interface FrameReaderOptions {
   /** Replaces the schema check. Only tests need this. */
   readonly check?: (value: unknown) => EventCheck;
+  /**
+   * What the selected agent declares. The reader asks once, when the stream starts, so a stream is judged against
+   * one declaration. Nothing declared, or a provider that throws, means no capability findings.
+   */
+  readonly declared?: () => AgentCapabilities | undefined;
 }
 
 const LF = 10;
@@ -92,6 +98,14 @@ const BOM = '﻿';
 
 export function createFrameReader(output: FrameOutput, exchangeId: ExchangeId, options: FrameReaderOptions = {}): FrameReader {
   const check = options.check ?? checkEvent;
+  let declared: AgentCapabilities | undefined;
+  // A provider that throws costs no frame: it is reported on the first frame the rules read, once.
+  let ruleFailure: string | undefined;
+  try {
+    declared = options.declared?.();
+  } catch (error) {
+    ruleFailure = error instanceof Error ? error.name : 'error';
+  }
   // ignoreBOM keeps a leading byte order mark in the text: the envelope is what was received.
   const decoder = new TextDecoder('utf-8', { ignoreBOM: true });
 
@@ -178,6 +192,16 @@ export function createFrameReader(output: FrameOutput, exchangeId: ExchangeId, o
       }
     }
 
+    // The rules read the parsed value and add findings beside the frame. A rule step that throws costs no frame.
+    let hits: readonly RuleHit[] = [];
+    if (jsonVerdict === 'valid') {
+      try {
+        hits = capabilityRules(parsed, declared);
+      } catch (error) {
+        ruleFailure ??= error instanceof Error ? error.name : 'error';
+      }
+    }
+
     const frame: RawFrame = {
       ...base,
       classification: 'data',
@@ -201,6 +225,11 @@ export function createFrameReader(output: FrameOutput, exchangeId: ExchangeId, o
     if (jsonVerdict === 'invalid') finding('json.invalid', 'Data is not valid JSON');
     else if (schemaVerdict === 'unknown-type') finding('schema.unknown-event-type', `${problems[0]}; it is not in the supported baseline`);
     else if (schemaVerdict === 'invalid') finding(unexpected ? 'schema.check-failed' : 'schema.invalid-event', unexpected ? (problems[0] as string) : `Does not match the AG-UI event schema: ${problems.join('; ')}`);
+    for (const hit of hits) finding(hit.rule, hit.message);
+    if (ruleFailure !== undefined) {
+      finding('capture.rule-check-failed', `A rule check failed unexpectedly (${ruleFailure}). The frame was kept and read`);
+      ruleFailure = undefined;
+    }
   }
 
   function readLine(line: string) {

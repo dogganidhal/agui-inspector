@@ -35,7 +35,7 @@ async function settled(store: ReturnType<typeof createSessionStore>): Promise<In
 /** The recorder and reader of the page, over a store, playing one scenario. */
 async function viaReader(fixture: Extract<RuleFixture, { scenario: unknown }>): Promise<InspectionSession> {
   const store = createSessionStore({ schedule: (callback) => queueMicrotask(callback) });
-  const recorder = createRecorder(createFrameSink(store));
+  const recorder = createRecorder(createFrameSink(store, { declared: () => fixture.declared }));
   try {
     const response = await recorder.record(fixture.scenario.request, scenarioSend(fixture.scenario));
     await drain(response.body);
@@ -129,7 +129,7 @@ for (const [rule, fixture] of entries) {
 }
 
 test('every rule of this phase has a fixture', () => {
-  const missing = RULES.filter((rule) => !['compat', 'capability'].includes(rule.family) && rule.id !== 'capture.rule-check-failed' && !(rule.id in ruleFixtures)).map((rule) => rule.id);
+  const missing = RULES.filter((rule) => rule.family !== 'compat' && rule.id !== 'capture.rule-check-failed' && !(rule.id in ruleFixtures)).map((rule) => rule.id);
   assert.deepEqual(missing, []);
   assert.deepEqual(
     entries.filter(([rule]) => !RULES.some((candidate) => candidate.id === rule)),

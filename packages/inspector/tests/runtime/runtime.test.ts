@@ -759,3 +759,64 @@ test('a preparation whose answer is still being read stays stoppable after the r
   assert.deepEqual(ended.exchanges.map((exchange) => [exchange.kind, exchange.transport]), [['preparation', 'user-stopped'], ['conversation', 'completed']]);
   assert.equal(runtime.getState().capturing, false);
 });
+
+// ---------------------------------------------------------------------------------------------
+// Declared capabilities (specs/007): the frame reader judges each stream against what the agent declares
+// ---------------------------------------------------------------------------------------------
+
+const deltaRoute = route((call) => [start(call), { type: 'STATE_DELTA', delta: [{ op: 'add', path: '/n', value: 1 }] }, finish(call)]);
+const capabilityFindings = (session: { findings: ReadonlyArray<{ rule?: string; subject: { type: string; id: string } }> }) =>
+  session.findings.filter((finding) => finding.rule?.startsWith('capability.')).map((finding) => [finding.rule, finding.subject.type]);
+
+test('a run is judged against the declaration the app set, and only against it', async () => {
+  const { runtime, settle } = rig([deltaRoute]);
+  runtime.selectAgent(support);
+  await runtime.send('no declaration yet');
+  assert.deepEqual(capabilityFindings(await settle()), []);
+
+  runtime.setDeclaredCapabilities({ state: { deltas: true } });
+  await runtime.send('declared true');
+  assert.deepEqual(capabilityFindings(await settle()), []);
+
+  runtime.setDeclaredCapabilities({ state: { deltas: false } });
+  await runtime.send('declared false');
+  const session = await settle();
+  assert.deepEqual(capabilityFindings(session), [['capability.state-delta-unsupported', 'frame']]);
+  const delta = session.frames.filter((frame) => frame.eventType === 'STATE_DELTA').at(-1)!;
+  assert.deepEqual(session.findings.find((finding) => finding.rule === 'capability.state-delta-unsupported')?.subject, { type: 'frame', id: delta.id }, 'the finding sits on the contradicting frame');
+  assert.equal(runtime.getState().error, undefined, 'a finding is not a banner');
+});
+
+test('a raw submission is judged like a run', async () => {
+  const { runtime, settle } = rig([deltaRoute]);
+  runtime.selectAgent(support);
+  runtime.setDeclaredCapabilities({ state: { deltas: false } });
+  await runtime.sendRaw(JSON.stringify({ threadId: 't', runId: 'r', messages: [], state: {}, tools: [], context: [], forwardedProps: {} }));
+  const session = await settle();
+  assert.deepEqual(session.exchanges.map((exchange) => exchange.kind), ['raw']);
+  assert.deepEqual(capabilityFindings(session), [['capability.state-delta-unsupported', 'frame']]);
+});
+
+test('another agent or a typed endpoint does not inherit the declaration of the one before it', async () => {
+  const { runtime, settle } = rig([deltaRoute]);
+  runtime.selectAgent(support);
+  runtime.setDeclaredCapabilities({ state: { deltas: false } });
+  runtime.selectAgent({ id: 'other', name: 'Other', url: AGENT });
+  await runtime.send('another agent');
+  assert.deepEqual(capabilityFindings(await settle()), []);
+
+  runtime.setDeclaredCapabilities({ state: { deltas: false } });
+  runtime.setTarget(AGENT);
+  await runtime.send('a typed endpoint');
+  assert.deepEqual(capabilityFindings(await settle()), []);
+});
+
+test('the declaration is memory only: it is in no recorded exchange, frame, run or finding', async () => {
+  const { runtime, settle } = rig([deltaRoute]);
+  runtime.selectAgent(support);
+  runtime.setDeclaredCapabilities({ identity: { name: 'unique-declared-name-7f3a91' }, state: { deltas: false } });
+  await runtime.send('hello');
+  const session = await settle();
+  assert.ok(!JSON.stringify([session.exchanges, session.runs, session.frames]).includes('unique-declared-name-7f3a91'));
+  assert.ok(!JSON.stringify(session.findings).includes('unique-declared-name-7f3a91'));
+});
