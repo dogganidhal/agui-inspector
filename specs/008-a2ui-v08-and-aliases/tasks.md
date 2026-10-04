@@ -15,7 +15,7 @@ when its tests pass.
 
 ## Phase 1: Setup
 
-- [ ] T001 Measure the bundle with the v0.8 imports before building anything on them. In `scripts/bundle-budget.mjs`
+- [x] T001 Measure the bundle with the v0.8 imports before building anything on them. In `scripts/bundle-budget.mjs`
   make the representative build (`buildRepresentative`) import `A2UIProvider` and `A2UIRenderer` from
   `@a2ui/react/v0_8` and `A2uiMessageProcessor` and `A2uiMessageSchema` from `@a2ui/web_core/v0_8` beside the v0.9
   pieces, and change its header comments and printed text to name both renderers. Update the matching assertion
@@ -28,10 +28,10 @@ when its tests pass.
 Pure core code, the one session change, and the shared scenario data. No view change yet, so every existing v0.9 test
 stays green except the ones that assert the old refusal text, which this phase rewrites.
 
-- [ ] T002 [P] Add the shared types in `src/contracts.ts`: `export type CatalogAliases = { readonly [id: string]: string }`,
+- [x] T002 [P] Add the shared types in `src/contracts.ts`: `export type CatalogAliases = { readonly [id: string]: string }`,
   an optional `readonly catalogAliases?: CatalogAliases` on `ConfigFile`, and an optional
   `readonly catalogAliases?: CatalogAliases` on `A2uiViewProps`. `src/contracts.ts` must not import React.
-- [ ] T003 [P] Create `src/core/a2ui/catalogs.ts` as in [data-model.md](data-model.md#catalog-table-corea2uicatalogsts-new):
+- [x] T003 [P] Create `src/core/a2ui/catalogs.ts` as in [data-model.md](data-model.md#catalog-table-corea2uicatalogsts-new):
   the literals `BASIC_V09` (`https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json`) and `STANDARD_V08`
   (`https://a2ui.org/specification/v0_8/standard_catalog_definition.json`), `KNOWN`, `BUILT_IN_ALIASES` (the
   middleware default `https://a2ui.org/specification/v0_9/basic_catalog.json` to `BASIC_V09`), `catalogIds(version, configured?)`,
@@ -44,7 +44,7 @@ stays green except the ones that assert the old refusal text, which this phase r
   kept as data, `catalogIds('v0.9')` and `catalogIds('v0.8')` with and without config, a config alias of the other
   version not counted, and the two literals equal to `basicCatalog.id` from `@a2ui/react/v0_9` and to the default
   named in the description of `beginRendering.catalogId` in `@a2ui/web_core/v0_8`'s schema.
-- [ ] T004 [P] Create `src/core/a2ui/operations.ts`: `classify(operations)` and `surfaceKey(entry)` as in
+- [x] T004 [P] Create `src/core/a2ui/operations.ts`: `classify(operations)` and `surfaceKey(entry)` as in
   [data-model.md](data-model.md#operation-entries-corea2uioperationsts-new). An object with `"version": "v0.9"` is
   v0.9. An object with no `version` and at least one of `beginRendering`, `surfaceUpdate`, `dataModelUpdate`,
   `deleteSurface` is v0.8. Everything else is refused with `This operation is not an object.`,
@@ -54,13 +54,13 @@ stays green except the ones that assert the old refusal text, which this phase r
   `packages/inspector/tests/a2ui/versions.test.ts`: all three refusals, `deleteSurface` with and without `version`,
   an explicit `"version": "v0.8"`, a v0.9 key without a version, two v0.8 kinds in one message (still classified
   v0.8), `surfaceKey` for each message kind, and a non-string `surfaceId`.
-- [ ] T005 [P] Extend `src/core/a2ui/actions.ts`: a function that turns the v0.8 renderer's
+- [x] T005 [P] Extend `src/core/a2ui/actions.ts`: a function that turns the v0.8 renderer's
   `{ userAction: { name, surfaceId, sourceComponentId, timestamp, context } }` into the existing `A2uiAction`, sharing
   the five-field copy with `toA2uiAction`. It converts `Map` values to plain objects, deeply, before
   `structuredClone`. Add cases to `packages/inspector/tests/a2ui/surfaces.test.ts` (or a new
   `packages/inspector/tests/a2ui/actions.test.ts`): five fields exactly, a `Map` context value written as an object,
   and the copy is independent of the source.
-- [ ] T006 [P] Add the shared scenario data to `examples/reference-agent/a2ui-scenarios.ts`: `STANDARD_V08_CATALOG_ID`,
+- [x] T006 [P] Add the shared scenario data to `examples/reference-agent/a2ui-scenarios.ts`: `STANDARD_V08_CATALOG_ID`,
   `v08Surfaces` (the six messages of [reference-story.md](contracts/reference-story.md): `expense` with a title,
   amount `TextField`, category `MultipleChoice`, `CheckBox`, `Slider`, two-note `Tabs` and a "Submit expense" `Button`
   whose `submit_expense` action binds amount, category, receipt and urgency; `status` with a bound `Text` and a
@@ -73,7 +73,7 @@ stays green except the ones that assert the old refusal text, which this phase r
   `tests/demo/a2ui-scenarios-v08.test.ts`: every v0.8 message passes `A2uiMessageSchema` from `@a2ui/web_core/v0_8`,
   a real `A2uiMessageProcessor` shows both surfaces after the six messages, each continuation extends the list, and
   after `withdraw_expense` only `status` is visible.
-- [ ] T007 Rework the session in `src/core/a2ui/index.ts` per
+- [x] T007 Rework the session in `src/core/a2ui/index.ts` per
   [data-model.md](data-model.md#session-snapshot-corea2uiindexts-extended), after T002 to T005. `apply` classifies
   with `classify`, diffs the whole list once (not a list: release and one issue showing the value; same list: nothing;
   prefix of the new list: only the tail; else rebuild with `epoch` + 1, clean issues and `order`), applies v0.9
@@ -91,13 +91,13 @@ stays green except the ones that assert the old refusal text, which this phase r
   never changes (`JSON.stringify` before and after), and one list of 200 v0.8 messages applied in a single pass.
   Rewrite the assertions on the old wording (`packages/inspector/tests/a2ui/surfaces.test.ts:373`
   and any other `Only A2UI v0.9 is supported`) to the new text.
-- [ ] T008 [P] Change `src/views/a2ui/catalog.tsx`: `createBundledCatalogs(report, aliasIds)` builds the basic
+- [x] T008 [P] Change `src/views/a2ui/catalog.tsx`: `createBundledCatalogs(report, aliasIds)` builds the basic
   catalog and one `Catalog` per id in `aliasIds` (same components, functions, guards and stand-ins), and the hard-coded
   `MIDDLEWARE_CATALOG_ID` goes away because `catalogIds('v0.9')` supplies it. The one-argument form keeps working
   with the built-in ids as its default. Update `packages/inspector/tests/a2ui/catalog.test.ts`: the two ids of 0.1.0
   still resolve with no config, plus a configured alias of the basic catalog with the same shared components and the
   `openUrl` guard, and a configured alias of the v0.8 catalog still gives `Catalog not found`.
-- [ ] T009 [P] Update the three browser or demo assertions on the old refusal wording, to the texts of
+- [x] T009 [P] Update the three browser or demo assertions on the old refusal wording, to the texts of
   [a2ui-operations.md](contracts/a2ui-operations.md#which-version-an-entry-is): `tests/e2e/a2ui/surfaces.spec.ts`
   (line 138, `Only A2UI v0.9 is supported`), `tests/e2e/public-demo/a2ui-showcase.spec.ts` (lines 369 and 370) and
   `tests/demo/a2ui-showcase.test.ts` (lines 484 and 485). The sandbox probe keeps its entry that declares
@@ -113,15 +113,15 @@ shows a v0.8 surface yet.
 **Independent test**: Feed `v08Surfaces` to the fixture host, check both surfaces, type, press the button, and compare
 the action and the JSON view.
 
-- [ ] T010 [P] [US1] Create `src/views/a2ui/v08-theme.ts`: one `Types.Theme` (from `@a2ui/react/v0_8`) with every key
+- [x] T010 [P] [US1] Create `src/views/a2ui/v08-theme.ts`: one `Types.Theme` (from `@a2ui/react/v0_8`) with every key
   of `components`, `elements` and `markdown` set to `agui-a2ui-*` class maps (no utility class from the renderer).
   Export it as a constant.
-- [ ] T011 [P] [US1] Move the markup of the v0.9 `Tabs` and `Modal` in `src/views/a2ui/components.tsx` into
+- [x] T011 [P] [US1] Move the markup of the v0.9 `Tabs` and `Modal` in `src/views/a2ui/components.tsx` into
   `src/views/a2ui/parts.tsx` as `TabsView` (titles, a `renderPanel(index)` callback, an accessibility label, the
   WAI-ARIA tabs with Arrow, Home and End keys) and `ModalView` (trigger node, content node, label; native `dialog`,
   Escape and Close and backdrop shut it, focus returns to the trigger). The v0.9 components call them. No visible
   v0.9 change: `tests/e2e/a2ui/components.spec.ts` stays green.
-- [ ] T012 [US1] Create `src/views/a2ui/v08.tsx` (after T010 and T011). `V08Host({ session, snapshot, onAction, children })`:
+- [x] T012 [US1] Create `src/views/a2ui/v08.tsx` (after T010 and T011). `V08Host({ session, snapshot, onAction, children })`:
   mounts `A2UIProvider` from `@a2ui/react/v0_8` with the theme of T010 and an `onAction` that maps through T005 and
   calls the activity's `onAction`; before the first provider render it adds `<template id="a2ui-structural-styles">`
   to `document.head` once (guard `typeof document`) so the renderer never injects its stylesheet; inside the provider a
@@ -137,20 +137,20 @@ the action and the JSON view.
   `Unknown component type: <type>. The catalog has no such component, so nothing is drawn for it.` and the stored
   definition under "As received" (read from `getSurface(surfaceId).components`), (d) calls `children(ids)` with the ids
   of the v0.8 surfaces that have a component tree. Each v0.8 surface keys on `<id>:<epoch>` so a rebuild remounts.
-- [ ] T013 [US1] Update `src/views/a2ui/index.tsx` (after T012): `Rendered` draws `snapshot.order` as one list, a v0.9
+- [x] T013 [US1] Update `src/views/a2ui/index.tsx` (after T012): `Rendered` draws `snapshot.order` as one list, a v0.9
   surface from `snapshot.surfaces` and a v0.8 surface inside `V08Host`, each in
   `<div className="agui-a2ui-surface" data-surface data-version>`. `V08Host` mounts only when
   `snapshot.v08.messages.length > 0`. `A2uiView` and `a2uiActivity` take the optional `catalogAliases` and pass it
   to `createSurfaceSession({ aliases, catalog: createBundledCatalogs })`. The `Issues` block and the lifecycle views are
   unchanged. Keep the "No surface has been created yet." note for an empty result.
-- [ ] T014 [P] [US1] Add the v0.8 rules to `src/views/a2ui/a2ui.css` under
+- [x] T014 [P] [US1] Add the v0.8 rules to `src/views/a2ui/a2ui.css` under
   `.agui-a2ui-surface[data-version="v0.8"]`: the host classes of the stock layout components (`a2ui-row`,
   `a2ui-column`, `a2ui-list`, `a2ui-card`, `a2ui-divider`, `a2ui-textfield`, `a2ui-checkbox`, `a2ui-slider`,
   `a2ui-datetime-input`, `a2ui-multiplechoice` and their `data-alignment` and `data-distribution` attributes), the
   theme classes of T010, and the accent and font taken from `var(--p-50, var(--acc))` and
   `var(--font-family, var(--agui-font-sans))`. Colors come from `--agui-*` tokens only, so light, dark and overrides
   work. No `url(`, no `@import`, no font face.
-- [ ] T015 [US1] Extend the browser fixture `packages/inspector/tests/a2ui/fixture.tsx` (and `tests/e2e/a2ui/support.ts` if its helpers need the
+- [x] T015 [US1] Extend the browser fixture `packages/inspector/tests/a2ui/fixture.tsx` (and `tests/e2e/a2ui/support.ts` if its helpers need the
   new calls) so `window.__a2ui.set`,
   `activity` and the continuation helper accept v0.8 lists and an `aliases(map)` call (after T013). Add
   `tests/e2e/a2ui/v08.spec.ts` with the US1 scenarios: both surfaces drawn from `v08Surfaces`; a surface with no
@@ -165,7 +165,7 @@ the action and the JSON view.
   types, from a new `packages/inspector/tests/a2ui/gallery-v08.ts` that lists one surface with all 18 types, the way
   `gallery.ts` does for v0.9); an overridden `--agui-r` reaches a v0.8 control; `surface.styles`
   `primaryColor` changes the accent of that surface only.
-- [ ] T016 [US1] Run `npm run build && npm run check:bundle` and write the totals into the PR body. Check
+- [x] T016 [US1] Run `npm run build && npm run check:bundle` and write the totals into the PR body. Check
   `dist/app.js` for `dompurify` and `@a2ui/markdown-it` (they must be absent, since `dependencies.mdx` says so) in a
   new assertion of `packages/inspector/tests/foundation/budget.test.ts`.
 
@@ -178,7 +178,7 @@ not covered yet.
 
 **Independent test**: Feed `mixedSurfaces` plus bad entries. Both surfaces draw, the errors name their positions.
 
-- [ ] T017 [US2] Extend `tests/e2e/a2ui/v08.spec.ts` with the US2 scenarios from `mixedSurfaces`: both versions drawn in the
+- [x] T017 [US2] Extend `tests/e2e/a2ui/v08.spec.ts` with the US2 scenarios from `mixedSurfaces`: both versions drawn in the
   order first named; a v0.8 and a v0.9 surface that share an id are two surfaces (`data-version` tells them apart); an
   unversioned `deleteSurface` removes only the v0.8 surface, a v0.9 one only the v0.9 surface; a non-object, a
   versionless v0.9-shaped entry, an explicit `"version": "v0.8"`, a v0.8 message with two kinds and a v0.8 message
@@ -186,7 +186,7 @@ not covered yet.
   still draws (SC-003: two bad entries, exactly two alerts); a v0.8 `surfaceUpdate` that makes a circular reference is
   reported by position and the other surface survives. Typed text in the v0.9 surface survives an appended v0.8
   tail and the reverse.
-- [ ] T018 [P] [US2] Add unit tests in `packages/inspector/tests/a2ui/surfaces.test.ts` for the mixed list: `order`,
+- [x] T018 [P] [US2] Add unit tests in `packages/inspector/tests/a2ui/surfaces.test.ts` for the mixed list: `order`,
   `v08.messages` positions with v0.9 entries between them, and `refused` for a message the real v0.8 processor throws
   on (a circular reference and `Invalid data; expected Text`), driven through a real `A2uiMessageProcessor`.
 
@@ -198,29 +198,29 @@ not covered yet.
 
 **Independent test**: Load a config with one alias per version, send surfaces that use them and one that does not.
 
-- [ ] T019 [P] [US3] Parse the field in `src/core/config/index.ts`: add `catalogAliases` to the `unexpectedKey` list of
+- [x] T019 [P] [US3] Parse the field in `src/core/config/index.ts`: add `catalogAliases` to the `unexpectedKey` list of
   `parseConfig`, call `checkAliases` from `core/a2ui/catalogs.ts`, append its warnings to `warnings`, and return the
   accepted aliases only when at least one survived (`...(aliases !== undefined && { catalogAliases: aliases })`).
   `ParsedConfig` carries them. Add cases to `packages/inspector/tests/config/settings.test.ts` (or a new
   `packages/inspector/tests/config/aliases.test.ts`): a valid field kept, no field means no `catalogAliases` key, each
   warning of the contract with the file still loading and the agents listed, a valid and an invalid entry together,
   `"catalogAliases": 3`, a `__proto__` key, an empty object.
-- [ ] T020 [US3] Plumb it (after T019 and T013): `src/app/startup.ts` returns `catalogAliases` beside `theme`, and
+- [x] T020 [US3] Plumb it (after T019 and T013): `src/app/startup.ts` returns `catalogAliases` beside `theme`, and
   `src/app/index.tsx` passes it to `a2uiActivity(entry, { renderEnabled, onAction, catalogAliases })`. Add a startup
   test beside the theme one (`the theme in config.json is handed to the page with no extra request, in every deployment mode`)
   in `packages/inspector/tests/hosted/startup.test.ts`: the aliases are handed over with no extra request.
-- [ ] T021 [P] [US3] Add `catalog_aliases: dict[str, str] | None = None` to `mount_inspector` in
+- [x] T021 [P] [US3] Add `catalog_aliases: dict[str, str] | None = None` to `mount_inspector` in
   `packages/python/src/agui_inspector/__init__.py`. A dict goes into `config.json` as `catalogAliases`, unchanged, even
   when empty. `None` leaves the field out. Document it in the docstring in the style of `theme`. Add tests to
   `packages/python/tests/test_embedding.py`: served for Starlette and FastAPI, a custom mount path, absent when `None`,
   delivered unchanged when odd (an empty key, a non-string value), as the theme tests do.
-- [ ] T022 [US3] Add an end-to-end chain test in `packages/inspector/tests/a2ui/catalog.test.ts`: `parseConfig` of a text with
+- [x] T022 [US3] Add an end-to-end chain test in `packages/inspector/tests/a2ui/catalog.test.ts`: `parseConfig` of a text with
   aliases, then `createSurfaceSession({ aliases: parsed.catalogAliases, catalog: createBundledCatalogs })` draws a v0.9
   surface that names a former id, with the real renderer models, `noFetch` and the operations unchanged
   (`JSON.stringify` before and after), and an unlisted or near-miss id (`<id>/`, another scheme, another case) gives
   `Catalog not found: <id>` with the entry as received. Add the v0.8 equivalent (a v0.8 `beginRendering` with an
   aliased id is accepted, an id aliased to the v0.9 catalog is refused, no `catalogId` is accepted).
-- [ ] T023 [US3] Add browser scenarios. In `tests/e2e/a2ui/v08.spec.ts` use `__a2ui.aliases(...)` for a former id on a
+- [x] T023 [US3] Add browser scenarios. In `tests/e2e/a2ui/v08.spec.ts` use `__a2ui.aliases(...)` for a former id on a
   v0.9 and on a v0.8 surface, the JSON view still showing the former id, and an unknown id showing the alert. In
   `tests/e2e/config/settings.spec.ts` serve a `config.json` with `catalogAliases` for the whole hosted page and the
   reference agent: the sandbox probe's `https://catalog.invalid/custom.json` entry draws when the alias maps it to the
@@ -235,12 +235,12 @@ not covered yet.
 
 **Independent test**: Send the quick message to the A2UI agent, act on a surface, read the new docs.
 
-- [ ] T024 [US4] Add the story to `examples/reference-agent/a2ui-showcase.ts`: `SHOWCASE.v08 = 'Review an expense report (v0.8)'`
+- [x] T024 [US4] Add the story to `examples/reference-agent/a2ui-showcase.ts`: `SHOWCASE.v08 = 'Review an expense report (v0.8)'`
   placed after `sandbox` in the object, `ACTIONS.submitExpense = 'submit_expense'`, `ACTIONS.withdrawExpense = 'withdraw_expense'`, the first-run snapshot from
   `v08Surfaces` (message id `a2ui-surface-expense-<runId>`, `replace: true`) and each action's answer
   from `v08Continuation`. Update the header comment ("made of the basic catalog (v0.9) alone"). Nothing is remembered
   between runs, and no address resolves.
-- [ ] T025 [P] [US4] Update `demo/config.json`: the A2UI agent's `quickMessages` gain `Review an expense report (v0.8)`
+- [x] T025 [P] [US4] Update `demo/config.json`: the A2UI agent's `quickMessages` gain `Review an expense report (v0.8)`
   before `Show the order form`, and its declared capability `custom.a2ui` becomes
   `{ "versions": ["v0.8", "v0.9"], "catalogs": ["basic", "standard"], "activityType": "a2ui-surface", "activityDeltas": true }`
   (keep the `identity.description` accurate; `grep -rn "custom" website/content/docs/demo*.mdx` for a docs line that
@@ -248,13 +248,13 @@ not covered yet.
   "seven different answers" count and name, the "every operation speaks v0.9 outside the sandbox probe" test (the v0.8
   story carries no `version` key at all and no v0.9 key), the declared capability object, and a new test for the story
   (first run, both actions' answers, no resolvable address, each continuation keeps the first six messages).
-- [ ] T026 [US4] Add a story case to `tests/e2e/public-demo/a2ui-showcase.spec.ts`: choose the story in the demo, see both
+- [x] T026 [US4] Add a story case to `tests/e2e/public-demo/a2ui-showcase.spec.ts`: choose the story in the demo, see both
   surfaces, submit and see the updated status line and the echo, withdraw and see `expense` disappear, and no
   request outside the origin. Add one hosted-app case
   in `tests/e2e/hosted/app.spec.ts` or `tests/e2e/a2ui/received.spec.ts` that sends the same quick message to the
   Node reference agent and checks the recorded request of the action run carries the five fields, and that the frames of the first run in the
   recording are byte for byte the same before and after acting (SC-002).
-- [ ] T027 [P] [US4] Rewrite `website/content/docs/a2ui.mdx`: the intro and the first bullets (drop "Only A2UI v0.9 is
+- [x] T027 [P] [US4] Rewrite `website/content/docs/a2ui.mdx`: the intro and the first bullets (drop "Only A2UI v0.9 is
   supported"), "What is drawn" (both message families), a new "Versions" section (how the version of an entry is found,
   the three refusals with their text, one id space per version, drawing order, a v0.8 surface shows once its root is
   named, the explicit-version case), a "v0.8 surfaces" section (the 18 components and which behave differently from
@@ -263,7 +263,7 @@ not covered yet.
   ids, the config field, exact matching, no chains, the wrong-version alias, the built-in middleware row, "Catalog not
   found" with the entry as received), "Actions" with the v0.8 context list, "Theme and size" (the v0.8 renderer is in
   the main bundle, with the measured numbers of T016). Short plain sentences, no em dashes, no bold labels.
-- [ ] T028 [P] [US4] Update the neighbors: `website/content/docs/configuration.mdx` (the `catalogAliases` row in the field
+- [x] T028 [P] [US4] Update the neighbors: `website/content/docs/configuration.mdx` (the `catalogAliases` row in the field
   table, a "Catalog aliases" section with the example and the warning table of the contract),
   `website/content/docs/embedding.mdx` (the `catalog_aliases` argument), `website/content/docs/demo.mdx` (eight quick
   messages, a "Review an expense report (v0.8)" section, the sandbox probe's v0.8 entry described as an entry that
@@ -278,12 +278,12 @@ not covered yet.
 
 ## Phase 7: Polish and cross-cutting
 
-- [ ] T029 Add the changesets: `.changeset/a2ui-v08-and-aliases-inspector.md` (`agui-inspector`, minor) and
+- [x] T029 Add the changesets: `.changeset/a2ui-v08-and-aliases-inspector.md` (`agui-inspector`, minor) and
   `.changeset/a2ui-v08-and-aliases-python.md` (`agui-inspector-python`, minor), one plain paragraph each: v0.8
   surfaces are drawn, `catalogAliases` is a new optional config field, and `catalog_aliases` is a new argument of
   `mount_inspector`. Versions are never edited by hand.
-- [ ] T030 Run `npm run check:ci` and fix what it finds. While iterating, use targeted e2e runs with `--workers=2`.
-- [ ] T031 If the code and the spec disagree, run `/speckit-converge`. Write the missing work into this file.
+- [x] T030 Run `npm run check:ci` and fix what it finds. While iterating, use targeted e2e runs with `--workers=2`.
+- [x] T031 If the code and the spec disagree, run `/speckit-converge`. Write the missing work into this file.
 - [ ] T032 Run `/ponytail:ponytail-review` on the diff and fix what it finds. Run the humanizer skill on the new docs
   text and on the PR body.
 - [ ] T033 Rebase on `origin/main` (keep merged features intact, expect conflicts in `parseConfig`, `mount_inspector`
@@ -347,3 +347,26 @@ spec's alias scenarios 1, 3, 4, 6 and 7 pass without it.
 | SC-005 | T015, T016, T026 |
 | SC-006 | T030 |
 | SC-007 | T027, T028 |
+
+## Implementation notes
+
+Where the work differs from the task text above. The design documents were updated to match.
+
+- T003 and T019: `catalogs.ts` holds the table (`catalogIds`, `resolves`, `isBuiltIn` and the literals). The alias rules and
+  their warnings are `parseCatalogAliases` in `core/config/index.ts`, beside `parseTheme` and `parseBrand`, and their tests
+  are in `packages/inspector/tests/config/aliases.test.ts`. A warning cuts an id at 120 characters.
+- T004: `classify` takes an optional `offset`, so the session can classify a tail.
+- T006 and T024: the story has no `Modal` (research R10), and its activity id is the constant `a2ui-expense-v08`.
+  `gallery-v08.ts` covers `Modal`.
+- T011: `parts.tsx` also holds `IconView`, `ButtonView`, `BlockedView` and `UnknownView`, because the v0.8 components have the
+  same shape as the v0.9 ones. See the PR body for the list of what is shared.
+- T015: `gallery-v08.ts` and its unit test are new, and the browser spec opens the fixture at `/strict`
+  (the page's `style-src 'self'`).
+- T016: the DOMPurify check is in `budget.test.ts`. `@a2ui/markdown-it` is not checked, because the v0.9 renderer carries its
+  name in a warning string.
+- T020: the startup test sits beside the theme one in `tests/hosted/startup.test.ts`.
+- T023 and T026: the alias end-to-end tests are in `tests/e2e/a2ui/aliases.spec.ts`, with a scripted route in
+  `tests/e2e/hosted/support.ts`, and not in `settings.spec.ts`. The second half of T026 (a hosted-app case on the Node
+  reference agent) is covered by the demo spec, which runs the same producers through the service worker and compares every
+  run's bytes with them.
+- T033 is the rebase and push after the review below.

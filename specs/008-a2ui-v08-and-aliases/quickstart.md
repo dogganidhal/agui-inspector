@@ -51,10 +51,10 @@ npm run check:ci
 | Scenario | Proves |
 | --- | --- |
 | `packages/inspector/tests/a2ui/versions.test.ts` | Version of each entry, refusals and their text, order, per-version surface ids |
-| `packages/inspector/tests/a2ui/catalogs.test.ts` | The id table, alias rules and warnings, built-in alias as a row, ids against the packages |
-| `packages/inspector/tests/a2ui/surfaces.test.ts` (extended) | Diff (unchanged, appended, rebuilt) for v0.8, refusal report-back, mixed lists, nothing rewritten |
+| `packages/inspector/tests/a2ui/catalogs.test.ts`, `packages/inspector/tests/config/aliases.test.ts` | The id table, built-in alias as a row, ids against the packages, alias rules and warnings |
+| `packages/inspector/tests/a2ui/session-v08.test.ts`, `actions.test.ts` | Diff (unchanged, appended, rebuilt) for v0.8, refusal report-back, mixed lists, nothing rewritten, the v0.8 action |
 | `tests/e2e/a2ui/v08.spec.ts` | Drawing, action round trip, typed text, keyboard, guards, theme, zero requests and console errors |
-| `tests/e2e/config/settings.spec.ts` (extended) | Alias warnings, and a configured alias drawing a surface through the whole app |
+| `tests/e2e/a2ui/aliases.spec.ts` | Alias warnings, and a configured alias drawing a surface through the whole app, hosted and embedded |
 | `tests/e2e/public-demo/a2ui-showcase.spec.ts` (extended) | The v0.8 story in the demo |
 | `packages/python/tests/test_embedding.py` (extended) | `catalog_aliases` reaches `config.json` |
 | `npm run check:bundle`, `check:bundle:renderer` | Both limits, with the v0.8 renderer in |

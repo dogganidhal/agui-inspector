@@ -89,11 +89,11 @@ packages/inspector/src/
 ├── contracts.ts                    # ConfigFile.catalogAliases, A2uiViewProps.catalogAliases
 ├── core/
 │   ├── a2ui/
-│   │   ├── catalogs.ts             # new: id table, alias rules, catalogIds, resolves, checkAliases
+│   │   ├── catalogs.ts             # new: id table, built-in alias, catalogIds, resolves, isBuiltIn
 │   │   ├── operations.ts           # new: classify, surfaceKey
 │   │   ├── actions.ts              # toA2uiAction accepts the v0.8 userAction (Map to object)
 │   │   └── index.ts                # session: classification, v0.8 validation and feed, order, refused()
-│   └── config/index.ts             # catalogAliases branch of parseConfig
+│   └── config/index.ts             # parseCatalogAliases and the catalogAliases branch of parseConfig
 ├── app/
 │   ├── startup.ts                  # returns catalogAliases beside theme
 │   └── index.tsx                   # hands them to a2uiActivity
@@ -113,10 +113,12 @@ examples/reference-agent/
 └── a2ui-showcase.ts                # SHOWCASE.v08, ACTIONS.submitExpense, the story
 demo/config.json                    # quick message, declared A2UI versions
 
-packages/inspector/tests/a2ui/      # versions, catalogs, surfaces (extended), fixture host
+packages/inspector/tests/a2ui/      # versions, catalogs, session-v08, actions, gallery-v08, fixture host
 packages/inspector/tests/config/    # alias parsing
-tests/e2e/a2ui/v08.spec.ts          # new
-tests/e2e/config/settings.spec.ts   # extended
+packages/inspector/tests/hosted/    # startup hands the aliases over
+tests/e2e/a2ui/v08.spec.ts          # new: the v0.8 renderer under the page's real style-src
+tests/e2e/a2ui/aliases.spec.ts      # new: aliases through the assembled application
+tests/e2e/hosted/support.ts         # a scripted route that names a former catalog id
 tests/e2e/public-demo/              # extended
 tests/demo/a2ui-showcase.test.ts    # extended
 packages/python/tests/test_embedding.py

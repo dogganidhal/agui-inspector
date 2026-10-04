@@ -193,8 +193,9 @@ before `Show the order form`. It sends one activity with two v0.8 surfaces:
 - `expense`: a heading, a text field bound to the amount, a `MultipleChoice` for the category, a `CheckBox`
   ("Receipt attached"), a `Slider`, `Tabs` with a policy note, and a `Button` whose action `submit_expense` binds
   the four values.
-- `status`: a `Text` bound to a data path that reads "Waiting for review", a `Modal` whose trigger opens the policy
-  note, and a `Button` "Withdraw" whose action `withdraw_expense` binds the status text.
+- `status`: a `Text` bound to a data path that reads "Waiting for review", and a `Button` "Withdraw" whose action
+  `withdraw_expense` binds the status text. The story has no `Modal`: v0.8 has no action that only opens a dialog, so a
+  `Modal` trigger button would send a third, pointless action. The gallery (`gallery-v08.ts`) covers `Modal`.
 
 The `submit_expense` run answers with the same list plus a `dataModelUpdate` that changes the status text and a
 `surfaceUpdate` that adds a line echoing the received context. This is the shape of the v0.9 form's `continuation`.
@@ -226,3 +227,18 @@ explicit-`version: "v0.8"` entry, which is still refused. No address in the stor
 | Bundle growth | Measured in the task that adds the import, before the rest is built. If the limits were at risk, loading the renderer on demand would be the next step, and it needs a spec change |
 | Two global registries (the renderer's singleton) leak between activities | Replacements are idempotent writes of the same functions, and stand-ins depend only on the type name |
 | A config alias collides with another worker's config change (branding, #73) | Both add one optional top-level field and one `parseConfig` branch. The rebase in phase 2 resolves it, and the `known fields` list is the only shared line |
+
+## R13. Found while building
+
+- The v0.8 processor reads a string property that equals a component id as a reference to that component. A `Text` with
+  `"usageHint": "h1"` beside a component with the id `h1` is a circular dependency. The story and the gallery avoid such
+  ids, and the A2UI page says so.
+- The v0.9 renderer injects a `<style>` for Safari's date input (`a2ui-date-time-input-webkit-styles`) as `@a2ui/react/v0_9`
+  loads. The page's static policy has no `style-src` and the full policy is added at startup, after the bundle has
+  loaded, so the assembled page does not report it. The v0.8 renderer injects on its first mount, after startup, which is why
+  the style placeholder (R4) matters there. The fixture page at `/strict` carries `style-src 'self'`, and `v08.spec.ts`
+  names the v0.9 violation by its hash and fails on any other.
+- With the placeholder removed, the demo story's console check fails on the renderer's policy violation. That test is the
+  guard for it.
+- The alias warning texts cut an id at 120 characters, not 48, because the two bundled ids are 70 and 74 characters long and
+  a near miss differs at the end.

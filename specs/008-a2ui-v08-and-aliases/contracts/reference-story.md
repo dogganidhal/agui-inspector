@@ -6,7 +6,7 @@
 | --- | --- |
 | Agent | The reference agent's A2UI agent (`__demo__/agent/a2ui` in the demo, the A2UI route of the fixture server) |
 | Quick message | `Review an expense report (v0.8)`, between `Probe the sandbox` and `Show the order form` |
-| Activity | `a2ui-surface`, message id `a2ui-surface-expense-<runId>` for the first run, then the same id for each action's run |
+| Activity | `a2ui-surface`, message id `a2ui-expense-v08` for the first run and for each action's run, so a later run changes the surface in place |
 | Operations | v0.8 only. No `version` key anywhere. No address that resolves |
 
 First run, as one `ACTIVITY_SNAPSHOT` with `replace: true`:
@@ -16,7 +16,7 @@ First run, as one `ACTIVITY_SNAPSHOT` with `replace: true`:
 | 0 | `surfaceUpdate` for `expense`: `Column` (title `Text` h2, amount `TextField`, category `MultipleChoice`, `CheckBox`, `Slider`, `Tabs` of two notes, `Button` "Submit expense") |
 | 1 | `dataModelUpdate` for `expense` with the starting values |
 | 2 | `beginRendering` for `expense` with no `catalogId` |
-| 3 | `surfaceUpdate` for `status`: `Column` of a `Text` bound to `/status`, a `Modal` whose trigger is a `Button` "Show policy", and a `Button` "Withdraw" whose action `withdraw_expense` binds `{ status }` to `/status` |
+| 3 | `surfaceUpdate` for `status`: `Column` of a `Text` bound to `/status` and a `Button` "Withdraw" whose action `withdraw_expense` binds `{ status }` to `/status` |
 | 4 | `dataModelUpdate` for `status`: `status = "Waiting for review"` |
 | 5 | `beginRendering` for `status` with `catalogId` = the v0.8 standard id |
 
