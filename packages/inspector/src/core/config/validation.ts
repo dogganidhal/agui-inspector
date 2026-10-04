@@ -78,3 +78,32 @@ export function themeValueProblem(value: unknown): string | undefined {
   }
   return undefined;
 }
+
+/** Where the page is, so a logo can be judged by the URL it resolves to. */
+export interface PageLocation {
+  readonly origin: string;
+  readonly baseUrl: string;
+}
+
+/** For a reader that is not told the page: a path or a `data:` image passes, since nothing else stays on every page's origin. */
+export const NO_PAGE: PageLocation = { origin: 'http://placeholder.invalid', baseUrl: 'http://placeholder.invalid/' };
+
+/**
+ * The resolved URL of a logo, or why it cannot be one. The check runs on the parsed URL, not on the text, so a tab,
+ * a backslash or a scheme-relative form cannot hide another origin from it. A `data:` image has no origin; anything
+ * else must be http(s) on the page's origin and carry no credentials. The page's policy (`img-src 'self' data:`)
+ * is the second line.
+ */
+export function logoSource(value: unknown, page: PageLocation): Result<string> {
+  if (typeof value !== 'string' || value.trim() === '') return fail('must be a nonempty string');
+  let url: URL;
+  try {
+    url = new URL(value, page.baseUrl);
+  } catch {
+    return fail('is not a valid URL');
+  }
+  if (url.protocol === 'data:' && /^image\//i.test(url.pathname)) return ok(url.href);
+  if ((url.protocol !== 'http:' && url.protocol !== 'https:') || url.origin !== page.origin) return fail('must be a path on this origin or a data:image URI');
+  if (url.username !== '' || url.password !== '') return fail('must not contain credentials (user:password@)');
+  return ok(url.href);
+}

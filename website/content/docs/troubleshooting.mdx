@@ -95,7 +95,8 @@ To try again, use Export session to keep anything you need, then reload. If the 
 
 ## A configuration warning or error
 
-- A "Configuration" warning under the top bar means the page rejected a theme entry. It ignores only that entry, and agents and presets keep working. See [theming](./theming.mdx).
+- A "Configuration" warning under the top bar means the page rejected a theme entry or a brand field. It ignores only that entry, and agents and presets keep working. See [theming](./theming.mdx) and [configuration](./configuration.mdx#theme).
+- Your logo does not show, and the default mark is there. Read the warning. A logo on another origin, a scheme such as `javascript:`, a `data:` URI that is not an image and a URL with `user:password@` are rejected. A valid logo that is missing, is not an image or redirects to another origin gives `brand.logo could not be loaded`. Open the logo's URL in the same browser, and check that your server sends an image type. See [brand](./configuration.mdx#brand).
 - An error and no agents means the page could not use the agent configuration. The cause is an unknown field, a field that looks like a credential, an unsupported version, or a missing `config` file that `hosting-config.json` names. The endpoint field and import still work. See [Configuration and client profiles](./configuration.mdx).
 - If the page cannot read a saved profile, it reports this and uses the defaults.
 

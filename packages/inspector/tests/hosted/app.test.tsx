@@ -7,6 +7,7 @@ import { test } from 'node:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { AppProps } from '../../src/contracts.ts';
 import { App, type AppExtras } from '../../src/app/index.tsx';
+import { Brand } from '../../src/app/brand.tsx';
 import { defaultProfile } from '../../src/core/profiles/index.ts';
 import { createSessionStore } from '../../src/core/store/index.ts';
 
@@ -98,6 +99,61 @@ test('the top bar offers the configured agents beside the endpoint, naming the s
 test('the top bar says Custom URL when agents exist and none is selected, and has no picker without agents', () => {
   assert.match(bar(build({}, 0, { agents: several, selectedAgentId: undefined }).markup), /agui-settings-picker-name">Custom URL</);
   assert.doesNotMatch(bar(build({}, 0, { agents: [], selectedAgentId: undefined }).markup), /agui-settings-picker/);
+});
+
+// Spec 003: the brand in the top bar. Without one the bar is what 0.1.0 had.
+
+const brandOf = (markup: string) => markup.slice(markup.indexOf('<span class="agui-app-brand">'), markup.indexOf('</h1>') + 5);
+const DEFAULT_BRAND = '<span class="agui-app-brand"><span class="agui-app-mark" aria-hidden="true">';
+
+test('with no brand the top bar shows the default mark and the name agui-inspector, and loads no image', () => {
+  const header = bar(build().markup);
+  assert.ok(header.includes(DEFAULT_BRAND));
+  assert.match(brandOf(header), /<\/span><h1>agui-inspector<\/h1>$/);
+  assert.doesNotMatch(header, /<img|data-for|agui-app-logo/);
+  assert.equal(brandOf(bar(build({ brand: {} }).markup)), brandOf(header));
+});
+
+test('a name replaces the heading text only, and is text, never markup', () => {
+  const header = bar(build({ brand: { name: 'Acme Console' } }).markup);
+  assert.ok(header.includes(DEFAULT_BRAND), 'the default mark stays');
+  assert.match(brandOf(header), /<h1>Acme Console<\/h1>$/);
+  assert.doesNotMatch(header, /agui-inspector<\/h1>/);
+  assert.match(bar(build({ brand: { name: '<b>Acme</b>' } }).markup), /<h1>&lt;b&gt;Acme&lt;\/b&gt;<\/h1>/);
+  assert.equal(build({ brand: { name: 'Acme' } }).markup.match(/<h1>/g)?.length, 1);
+});
+
+test('a logo replaces the default mark with an unframed decorative image, and the name stays agui-inspector without one', () => {
+  const header = bar(build({ brand: { logo: '/static/acme.svg' } }).markup);
+  assert.ok(brandOf(header).startsWith('<span class="agui-app-brand"><span class="agui-app-logo" aria-hidden="true"><img class="agui-app-logo-img" src="/static/acme.svg" alt=""/></span>'));
+  assert.doesNotMatch(header, /agui-app-mark/);
+  assert.match(brandOf(header), /<h1>agui-inspector<\/h1>$/);
+  assert.deepEqual([...header.matchAll(/\ssrc="([^"]*)"/g)].map((match) => match[1]), ['/static/acme.svg'], 'the logo is the only image the brand adds');
+
+  const both = bar(build({ brand: { name: 'Acme', logo: 'data:image/png;base64,AAAA' } }).markup);
+  assert.match(brandOf(both), /<img class="agui-app-logo-img" src="data:image\/png;base64,AAAA" alt=""\/><\/span><h1>Acme<\/h1>$/);
+});
+
+test('a dark logo is a second image in its own wrapper, and a single logo has no wrapper', () => {
+  const header = bar(build({ brand: { logo: '/a.svg', logoDark: '/b.svg' } }).markup);
+  assert.ok(
+    header.includes(
+      '<span class="agui-app-logo" aria-hidden="true"><span data-for="light"><img class="agui-app-logo-img" src="/a.svg" alt=""/></span><span data-for="dark"><img class="agui-app-logo-img" src="/b.svg" alt=""/></span></span>',
+    ),
+  );
+  assert.doesNotMatch(bar(build({ brand: { logo: '/a.svg' } }).markup), /data-for/);
+});
+
+test('a logo that failed to load is the default mark again, in the theme that used it', () => {
+  const html = (failed: Array<'logo' | 'logoDark'>, brand: { logo: string; logoDark?: string }) => renderToStaticMarkup(<Brand brand={brand} failed={failed} onFailed={() => {}} />);
+  const MARK = /<span class="agui-app-mark" aria-hidden="true">/;
+  const single = html(['logo'], { logo: '/a.svg' });
+  assert.match(single, MARK);
+  assert.doesNotMatch(single, /<img/);
+  const dark = html(['logoDark'], { logo: '/a.svg', logoDark: '/b.svg' });
+  assert.match(dark, /<span data-for="light"><img [^>]*src="\/a\.svg"[^>]*\/><\/span><span data-for="dark"><span class="agui-app-mark"/);
+  assert.doesNotMatch(dark, /\/b\.svg/);
+  assert.doesNotMatch(html([], { logo: '/a.svg' }), MARK);
 });
 
 test('the footer names the counts and the privacy facts of the mode', () => {

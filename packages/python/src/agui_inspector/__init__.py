@@ -16,7 +16,7 @@ from dataclasses import asdict, dataclass
 from importlib.resources import files
 from typing import Any
 
-__all__ = ["Agent", "mount_inspector"]
+__all__ = ["Agent", "Brand", "mount_inspector"]
 
 DEFAULT_PATH = "/agui-inspector"
 _CONFIG_VERSION = 0
@@ -37,6 +37,19 @@ class Agent:
     preset: dict[str, Any] | None = None
 
 
+@dataclass(frozen=True)
+class Brand:
+    """The adopter's name and logos for the page's top bar. Every field is optional.
+
+    ``logo`` and ``logo_dark`` (the logo for the dark theme) are a path on the page's own origin or a
+    ``data:`` image URI. The helper serves no logo file: the host serves it from one of its own routes.
+    """
+
+    name: str | None = None
+    logo: str | None = None
+    logo_dark: str | None = None
+
+
 def _assets_root():
     return files(__package__) / "static"
 
@@ -51,6 +64,11 @@ def _find(asset: str):
     return node if node.is_file() else None
 
 
+def _brand_config(brand: Brand) -> dict[str, str]:
+    fields = {"name": brand.name, "logo": brand.logo, "logoDark": brand.logo_dark}
+    return {key: value for key, value in fields.items() if value is not None}
+
+
 def mount_inspector(
     app,
     *,
@@ -58,6 +76,7 @@ def mount_inspector(
     enabled: bool = False,
     path: str = DEFAULT_PATH,
     theme: dict[str, dict[str, str]] | None = None,
+    brand: Brand | None = None,
 ) -> None:
     """Serve the inspector page, its assets and ``<path>/config.json`` from ``app``.
 
@@ -73,6 +92,10 @@ def mount_inspector(
     ``theme`` is ``{"light": {...}, "dark": {...}}``, either map optional, from the ten documented
     ``--agui-*`` property names to CSS values. It goes into ``config.json`` as given: the page
     validates it and shows a warning for any name or value it rejects, never an error.
+
+    ``brand`` puts the adopter's name and logo in the page's top bar. Like ``theme`` it goes into
+    ``config.json`` as given, with ``logo_dark`` written as ``logoDark`` and unset fields left out. The page
+    accepts a logo only from its own origin or as a ``data:`` image and warns about anything else.
     """
     if not enabled:
         return
@@ -97,6 +120,7 @@ def mount_inspector(
             "version": _CONFIG_VERSION,
             "agents": [{k: v for k, v in asdict(a).items() if v is not None} for a in agents],
             **({"theme": theme} if theme is not None else {}),
+            **({"brand": _brand_config(brand)} if brand is not None else {}),
         }
     )
     headers = {"content-security-policy": _CSP}

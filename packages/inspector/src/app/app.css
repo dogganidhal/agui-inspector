@@ -50,6 +50,7 @@ body,
   display: inline-flex;
   align-items: center;
   gap: calc(var(--u) * 2);
+  min-width: 0;
 }
 .agui-app-brand h1 {
   margin: 0;
@@ -57,6 +58,41 @@ body,
   font-weight: 600;
   letter-spacing: -0.01em;
   white-space: nowrap;
+  /* An adopter's name can be any length; the bar keeps its row. The viewport term keeps the brand and the theme switch on one row on a phone. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: min(calc(var(--u) * 60), 40vw);
+}
+/* An adopter's logo (spec 003): as tall as the default mark, any width up to a limit, never framed or recolored. */
+.agui-app-logo,
+.agui-app-logo > span {
+  display: inline-flex;
+  align-items: center;
+}
+.agui-app-logo-img {
+  display: block;
+  height: calc(var(--u) * 7);
+  width: auto;
+  max-width: min(calc(var(--u) * 40), 30vw);
+  object-fit: contain;
+}
+/* A dark logo shows under the selectors that choose the dark tokens (views/theme/tokens.css). Both images load. */
+.agui-app-logo > [data-for="dark"] {
+  display: none;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .agui-app-logo > [data-for="light"] {
+    display: none;
+  }
+  :root:not([data-theme="light"]) .agui-app-logo > [data-for="dark"] {
+    display: inline-flex;
+  }
+}
+:root[data-theme="dark"] .agui-app-logo > [data-for="light"] {
+  display: none;
+}
+:root[data-theme="dark"] .agui-app-logo > [data-for="dark"] {
+  display: inline-flex;
 }
 .agui-app-mark {
   display: inline-grid;

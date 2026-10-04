@@ -16,7 +16,7 @@ The code under `packages/inspector/src` has three layers:
 - `app` is the assembly that builds the page. `startup.ts` reads `hosting-config.json`, turns it into the transport
   policy and the content security policy, and only then creates the runtime. `index.tsx` keeps the page's state around
   one shared session store and turns each view callback into one call on a core module. `boundary.tsx` keeps a render
-  failure inside the pane where it happened.
+  failure inside the pane where it happened. `brand.tsx` draws the top bar's mark and name, or the adopter's logo and name.
 
 The shared types are in `contracts.ts`, which imports no React either.
 
@@ -408,6 +408,16 @@ request. The scenarios are in [`examples/reference-agent/a2ui-scenarios.ts`](htt
 | `tests/e2e/theme/theme.spec.ts` | Every primitive and state from `packages/inspector/tests/theme/fixture.tsx`, in light, dark and overridden: computed styles match the tokens, `--agui-*` alone restyles everything, nothing is requested from another origin, focus, popover, dialog, toast and reduced motion work, and a host stylesheet with the same generic names changes nothing. |
 | `tests/e2e/theme/config.spec.ts` | The production build with real `config.json` maps (hosted, embedded, behind the Python helper, from a generic static server): light and dark from the system preference and from the switch, a missing map, each rejected form shown as a warning with no request and the same policy, agents that still run, a hostile host stylesheet, and an unpainted `body`. |
 | `tests/e2e/hosted/evidence-contrast.spec.ts` | In the built page's default light and dark themes, the conversation's frame references and offsets have a contrast of at least 4.5:1 against the background behind them. Colors an adopter sets are not checked. |
+
+## Brand tests
+
+| File | Covers |
+| --- | --- |
+| `packages/inspector/tests/config/brand.test.ts` | Reading `brand`: the default, every valid shape, every rejected value with its warning, and the origin check on the resolved URL (scheme-relative forms, backslashes, tabs, `javascript:`, `blob:`, `data:` that is not an image, credentials). |
+| `packages/inspector/tests/hosted/startup.test.ts` | The page's origin reaches the reader, a brand adds no request, the policy is unchanged, and the brand is never stored or exported. |
+| `packages/inspector/tests/hosted/app.test.tsx` | The top bar's markup: the default, a name, a logo, a dark logo and a logo that failed to load. |
+| `packages/python/tests/test_embedding.py` | `Brand` in `config.json`: set fields only, no brand and the same bytes as before, unchanged routes and headers. |
+| `tests/e2e/branding/brand.spec.ts` | The production build in hosted, embedded, Python and generic static serving: light and dark logos by system preference and by the switch, every rejected value, a logo that fails to load, and a long name or wide logo on a desktop and a phone. |
 
 ## Hosted deployment tests
 

@@ -21,7 +21,7 @@ from starlette.responses import Response
 from starlette.testclient import TestClient
 
 import agui_inspector
-from agui_inspector import Agent, mount_inspector
+from agui_inspector import Agent, Brand, mount_inspector
 
 INDEX = "<!doctype html><title>inspector</title><script type=\"module\" src=\"./app.js\"></script>"
 APP_JS = "export const app = 1;\n"
@@ -180,6 +180,72 @@ class EnabledTest(StaticFixture):
                 mount_inspector(app, agents=AGENTS, theme={"light": {"--agui-accent": "red"}})
                 self.assertEqual(before, list(app.routes))
                 self.assertEqual(404, TestClient(app).get("/agui-inspector/config.json").status_code)
+
+    def test_brand_is_served_in_config_json_for_starlette_and_fastapi(self):
+        brand = Brand(name="Acme", logo="/static/acme.svg", logo_dark="/static/acme-dark.svg")
+        expected = {"name": "Acme", "logo": "/static/acme.svg", "logoDark": "/static/acme-dark.svg"}
+        for name, app in self.apps():
+            with self.subTest(name):
+                mount_inspector(app, agents=AGENTS, enabled=True, theme={"dark": {"--agui-bg": "#101418"}}, brand=brand)
+                body = TestClient(app).get("/agui-inspector/config.json").json()
+                self.assertEqual({"version": 0, "agents": [{"id": "support", "url": "/agents/support/stream"}], "theme": {"dark": {"--agui-bg": "#101418"}}, "brand": expected}, body)
+                self.assertEqual(["version", "agents", "theme", "brand"], list(body))
+
+    def test_unset_brand_fields_are_left_out_and_an_empty_brand_is_an_empty_object(self):
+        for brand, expected in (
+            (Brand(name="Acme"), {"name": "Acme"}),
+            (Brand(logo="/a.svg"), {"logo": "/a.svg"}),
+            (Brand(logo="/a.svg", logo_dark="/b.svg"), {"logo": "/a.svg", "logoDark": "/b.svg"}),
+            (Brand(), {}),
+        ):
+            with self.subTest(brand):
+                app = Starlette()
+                mount_inspector(app, agents=AGENTS, enabled=True, brand=brand)
+                self.assertEqual(expected, TestClient(app).get("/agui-inspector/config.json").json()["brand"])
+
+    def test_no_brand_serves_the_bytes_it_served_before(self):
+        for name, app in self.apps():
+            with self.subTest(name):
+                mount_inspector(app, agents=AGENTS, enabled=True)
+                text = TestClient(app).get("/agui-inspector/config.json").text
+                self.assertEqual(json.dumps({"version": 0, "agents": [{"id": "support", "url": "/agents/support/stream"}]}), text)
+
+    def test_brand_follows_a_custom_mount_path(self):
+        app = Starlette()
+        mount_inspector(app, agents=AGENTS, enabled=True, path="/tools/inspector", brand=Brand(name="Acme"))
+        client = TestClient(app)
+        self.assertEqual({"name": "Acme"}, client.get("/tools/inspector/config.json").json()["brand"])
+        self.assertEqual(404, client.get("/agui-inspector/config.json").status_code)
+
+    def test_brand_values_are_delivered_unchanged_so_the_page_alone_judges_them(self):
+        brand = Brand(name="  ", logo="https://example.invalid/x.png", logo_dark="javascript:alert(1)")
+        app = Starlette()
+        mount_inspector(app, agents=AGENTS, enabled=True, brand=brand)
+        self.assertEqual({"name": "  ", "logo": "https://example.invalid/x.png", "logoDark": "javascript:alert(1)"}, TestClient(app).get("/agui-inspector/config.json").json()["brand"])
+
+    def test_a_brand_adds_no_route_and_changes_no_header(self):
+        for name, make in (("starlette", Starlette), ("fastapi", FastAPI)):
+            with self.subTest(name):
+                plain, branded = make(), make()
+                mount_inspector(plain, agents=AGENTS, enabled=True)
+                mount_inspector(branded, agents=AGENTS, enabled=True, brand=Brand(name="Acme", logo="/a.svg"))
+                self.assertEqual([r.path for r in plain.routes], [r.path for r in branded.routes])
+                for route in ("/agui-inspector/", "/agui-inspector/config.json", "/agui-inspector/app.js"):
+                    a, b = TestClient(plain).get(route), TestClient(branded).get(route)
+                    self.assertEqual(a.headers["content-security-policy"], b.headers["content-security-policy"], route)
+                    self.assertEqual(a.headers["content-type"], b.headers["content-type"], route)
+
+    def test_a_disabled_helper_with_a_brand_still_mounts_nothing(self):
+        for name, app in self.apps():
+            with self.subTest(name), self.assertNoLogs("agui_inspector"):
+                before = list(app.routes)
+                mount_inspector(app, agents=AGENTS, brand=Brand(name="Acme"))
+                self.assertEqual(before, list(app.routes))
+
+    def test_brand_is_exported_and_frozen(self):
+        self.assertIn("Brand", agui_inspector.__all__)
+        with self.assertRaises(AttributeError):
+            Brand(name="Acme").name = "Other"  # type: ignore[misc]
 
     def test_agents_need_a_unique_nonempty_id_and_a_url(self):
         for bad in ([Agent(id="a", url="/1"), Agent(id="a", url="/2")], [Agent(id="", url="/1")], [Agent(id="a", url="")]):
