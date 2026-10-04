@@ -3,11 +3,11 @@ title: Embed in Starlette or FastAPI
 description: Serve the inspector from your own Starlette or FastAPI application with one helper call.
 ---
 
-Python is the first server language with an embedded helper, and it will not be the only one: JavaScript helpers for Express, Hono and Next.js are planned for 1.0.0. A server in any other language can already use the [hosted page](./hosted.mdx) or [serve the static assets](#serving-the-assets-from-another-server).
+Python is the first server language with an embedded helper, and it will not be the only one: JavaScript helpers for Express, Hono and Next.js are planned for [0.2.0](https://github.com/dogganidhal/agui-inspector/blob/main/ROADMAP.md#020). A server in any other language can already use the [hosted page](./hosted.mdx) or [serve the static assets](#serving-the-assets-from-another-server).
 
 The Python package `agui-inspector` (MIT) contains the prebuilt inspector files and one helper, `mount_inspector`, that serves them from your Starlette or FastAPI application. The host needs no Node toolchain, and the helper downloads nothing at startup. Version 0.1.0 is on [PyPI](https://pypi.org/project/agui-inspector/).
 
-The helper adds a separate page to your server. That page sends its own requests to your agent URLs, so it records the runs it starts. It does not attach to the agent that your own frontend runs, and it does not see that agent's requests. Watching your application's `AbstractAgent` is the planned in-app mode (see the [roadmap](https://github.com/dogganidhal/agui-inspector/blob/main/ROADMAP.md#100-stable-target)). It is not built yet.
+The helper adds a separate page to your server. That page sends its own requests to your agent URLs, so it records the runs it starts. It does not attach to the agent that your own frontend runs, and it does not see that agent's requests. Watching your application's `AbstractAgent` would need an in-app mode. The inspector has none, and the [roadmap](https://github.com/dogganidhal/agui-inspector/blob/main/ROADMAP.md#decisions) does not plan one.
 
 ## Quick start
 
@@ -131,7 +131,7 @@ Open `http://127.0.0.1:8000/agui-inspector/` and sign in with that user and pass
 
 ## Serving the assets from another server
 
-Any static file server can host the same inspector. The npm package exports `staticAssetsPath` from [`static-path.js`](https://github.com/dogganidhal/agui-inspector/blob/main/packages/inspector/src/static-path.js). Serve the directory it points at, put a `config.json` next to its `index.html`, and open the page. The npm package has no CLI and no server helper. See also [Host the static page](./hosted.mdx).
+Any static file server can host the same inspector. The npm package exports `staticAssetsPath` from [`static-path.js`](https://github.com/dogganidhal/agui-inspector/blob/main/packages/inspector/src/static-path.js). Serve the directory it points at, put a `config.json` next to its `index.html`, and open the page. The npm package has no CLI and no server helper. Install it with `npm install agui-inspector`. See also [Host the static page](./hosted.mdx).
 
 ## Working from a source checkout
 

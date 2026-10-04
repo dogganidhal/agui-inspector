@@ -218,9 +218,8 @@ workflow reruns it on the tagged commit. The 5,000-frame responsiveness check is
 the physical runner and CI cannot certify it.
 
 Today every suite exists, including the network-allowlist checks under `tests/e2e`, and runs in `npm run check:ci` on
-Python 3.10 and 3.14. Release verification is not complete: the responsiveness certification is still pending. The
-roadmap's [current status](https://github.com/dogganidhal/agui-inspector/blob/main/ROADMAP.md#current-status) is the one summary of the release, including the
-publication gates.
+Python 3.10 and 3.14. The roadmap's [decisions](https://github.com/dogganidhal/agui-inspector/blob/main/ROADMAP.md#decisions) say a release needs this gate to pass and the
+maintainer's approval of the deployment, and nothing else.
 
 The foundation tests check that the pinned dependencies work together: the 31 event types, the fetch hook,
 sequence-error reporting while the recording branch keeps reading, resume and cancel entries, the render tool, the

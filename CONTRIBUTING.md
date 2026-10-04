@@ -16,7 +16,7 @@ Report vulnerabilities privately, as described in [SECURITY.md](SECURITY.md).
 [ROADMAP.md](ROADMAP.md) says what each release contains, and the [constitution](.specify/memory/constitution.md) sets
 the engineering rules. Fixes and small improvements inside that scope can go straight to a pull request. For a new
 capability, open an issue first: features are specified under [`specs/`](specs) with [Spec Kit](https://github.com/github/spec-kit)
-before they are built, and the 1.0.0 items in the roadmap have no specification yet.
+before they are built. The 0.2.0 items in the roadmap have no specification yet.
 
 Coding agents follow a stricter rule: all of their work goes through Spec Kit, as described in [AGENTS.md](AGENTS.md).
 If you work with an agent, expect it to start from a spec.

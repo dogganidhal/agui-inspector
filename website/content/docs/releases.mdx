@@ -6,8 +6,8 @@ description: For maintainers. What must be true before a release, how the Python
 This page is for maintainers. To learn what you can rely on today, read
 [Project status and privacy](./status.mdx) instead.
 
-The package name is `agui-inspector` on both npm and PyPI. The first release, Python 0.1.0, reached
-[PyPI](https://pypi.org/project/agui-inspector/) on 2026-10-03. The name is still unregistered on npm.
+The package name is `agui-inspector` on both npm and PyPI. Version 0.1.0 reached
+[PyPI](https://pypi.org/project/agui-inspector/) on 2026-10-03 and [npm](https://www.npmjs.com/package/agui-inspector) on 2026-10-04.
 No command in the repository publishes, tags or releases by itself. A release happens when the maintainer merges the
 version pull request and approves the `pypi` and `npm` deployments. The roadmap's
 [current status](https://github.com/dogganidhal/agui-inspector/blob/main/ROADMAP.md#current-status) is the one summary of where the release stands. To run
@@ -18,8 +18,7 @@ changes that are not released yet, use a source checkout, as
 
 - Python 0.1.0 is published. `release.yml`, the only workflow that publishes, tagged it and uploaded the wheel
   and the sdist to PyPI with attestations. The [changelog](https://github.com/dogganidhal/agui-inspector/blob/main/packages/python/CHANGELOG.md) lists each release.
-- The npm release is set up in the same workflow, but nothing is published to npm. It waits for the maintainer's
-  [one-time setup](#one-time-setup-for-npm).
+- npm 0.1.0 is published. `release.yml` packed the tarball and published it to npm with provenance.
 - The npm package and the Python package have `"license": "MIT"`. The root manifest and the Python version holder are
   `"private": true`; `packages/inspector` is not. The npm `files` list and the Python `license-files` include
   `LICENSE` and `THIRD_PARTY_NOTICES.txt` (see [Dependencies](./dependencies.mdx)), so the npm tarball, the wheel and
@@ -32,8 +31,8 @@ changes that are not released yet, use a source checkout, as
 | Gate | Status | What it decides |
 | --- | --- | --- |
 | License | Closed: MIT. | `LICENSE` and the third-party notices ship in every distribution. |
-| Package names | Closed: `agui-inspector` on npm and PyPI. | The name in both manifests. The first PyPI publish registered it. On npm, the maintainer registers it with a first publish by hand. |
-| Upstream placement | Open. | Whether upstream accepts the inspector under `apps/inspector`, and when. `@ag-ui/inspector` applies only if upstream adopts the project. Nothing registers or reserves it. |
+| Package names | Closed: `agui-inspector` on npm and PyPI. | The name in both manifests. The first PyPI publish registered it. On npm, a placeholder 0.0.0, published by hand, registered it. |
+| Upstream placement | Closed for now. | The [roadmap decisions](https://github.com/dogganidhal/agui-inspector/blob/main/ROADMAP.md#decisions) keep the inspector out of upstream and keep the name `agui-inspector`. Nothing registers or reserves `@ag-ui/inspector`. |
 
 While a gate is open, stop and ask instead of picking a default.
 
@@ -94,8 +93,8 @@ Only the maintainer can do these. Nothing in the repository changes a setting.
 
 ### Cutting a release
 
-1. Check the gates CI cannot cover: the headed benchmark on the physical runner (see
-   [Integrated-MVP gate](./development.mdx#integrated-mvp-gate)) and a manual smoke test of each distribution mode.
+1. Check that `npm run check:ci` passes on `main`. A release needs it and the maintainer's approval of the
+   deployments, and nothing else (see the [roadmap decisions](https://github.com/dogganidhal/agui-inspector/blob/main/ROADMAP.md#decisions)).
 2. The first release removed the `Private :: Do Not Upload` classifier, in the same pull request as the `minor`
    changeset that moves the package from 0.0.0 to 0.1.0. `test_distribution.py` now checks that the classifier is
    absent, and the build job refuses to publish if it returns.
@@ -124,14 +123,13 @@ downloads the tarball that the build job packed and runs `npm publish ./npm-dist
 publishing trades the job's OIDC token for a short-lived publish token, so no npm token is stored anywhere.
 `--provenance` attaches a signed statement that names the workflow and the commit. It also makes the publish fail
 instead of going out without one. The tarball holds the `dist` directory that the wheel carries, and the tests compare
-the two. The root manifest and the Python version holder stay `"private": true`. `@ag-ui/inspector` still waits for the
-upstream placement gate.
+the two. The root manifest and the Python version holder stay `"private": true`.
 
 ### One-time setup for npm
 
 npm cannot register a trusted publisher for a name that does not exist, and it has no pending publishers like PyPI.
-So a placeholder version, 0.0.0, is published by hand, and every real release comes from CI. Only the maintainer can
-do these steps. Do all of them before the pull request that adds this workflow reaches `main`.
+So a placeholder version, 0.0.0, was published by hand, and every real release comes from CI. Only the maintainer can
+do these steps. They are done for `agui-inspector`. A fork needs them before its workflow first runs.
 
 1. From a checkout of that pull request, build and publish the placeholder with your own npm login. It is the only
    version without provenance:
@@ -155,9 +153,9 @@ do these steps. Do all of them before the pull request that adds this workflow r
 4. In the repository settings, create the `npm` environment, add yourself as a required reviewer and limit deployment
    to `main`.
 
-The pull request that adds the npm release also adds a `minor` changeset for `agui-inspector`. After it merges,
-Changesets opens a version pull request that moves the package from 0.0.0 to 0.1.0, the same version as the Python
-package. Merging that pull request is the first release from CI, and the first one with provenance.
+The pull request that added the npm release also added a `minor` changeset for `agui-inspector`. After it merged,
+Changesets opened a version pull request that moved the package from 0.0.0 to 0.1.0, the same version as the Python
+package. Merging that pull request was the first npm release from CI, and the first one with provenance.
 
 ## Build provenance
 
@@ -208,6 +206,4 @@ A provenance statement would cover these inputs:
 | `uv` version used by CI | Pinned in `.github/workflows/ci.yml` |
 | Static asset content | `static.sha256`, compared with the npm directory |
 
-Still needed: the maintainer's one-time npm setup, the first npm publish with provenance from CI, and the headed
-benchmark on the physical runner. The required reviewer on the `pypi` and `npm` environments is the guard against an
-accidental upload.
+The required reviewer on the `pypi` and `npm` environments is the guard against an accidental upload.
