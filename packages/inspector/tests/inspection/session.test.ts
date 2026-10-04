@@ -67,6 +67,21 @@ test('the replies the inspector answered are marked on the run, survive a round 
   assert.ok(plain.ok, 'a file written before the mark existed imports');
 });
 
+test('findings with rule ids and runs with automaticReplies round-trip together through one export and import', async () => {
+  const marked = clone(await richSession());
+  (marked.runs as unknown as Array<Record<string, unknown>>)[0] = { ...marked.runs[0]!, automaticReplies: { interruptIds: ['i-approve'], toolCallIds: ['c-1'] } };
+  assert.ok(marked.findings.length > 0 && marked.findings.every((finding) => finding.rule !== undefined));
+
+  const text = serializeSession(marked);
+  const result = parseSession(text);
+  assert.ok(result.ok);
+  assert.deepEqual(result.session, marked, 'both the rules and the marks come back');
+  assert.equal(serializeSession(result.session), text, 'and a second export is byte-identical');
+  const restored = restoreSession(result.session).snapshot();
+  assert.deepEqual(restored.findings.map((finding) => finding.rule), marked.findings.map((finding) => finding.rule));
+  assert.deepEqual(restored.runs[0]?.automaticReplies, { interruptIds: ['i-approve'], toolCallIds: ['c-1'] });
+});
+
 test('import rejects an automaticReplies that is not two lists of nonempty strings, naming the run', async () => {
   const bad = async (value: unknown) => {
     const file = await fileOf();
