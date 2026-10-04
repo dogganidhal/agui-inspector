@@ -51,7 +51,6 @@ const TOKEN = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 // The proxy sets these itself, so a header of the same name from the command line would fight it.
 const SET_BY_PROXY = new Set(['host', 'content-length', 'transfer-encoding', 'connection']);
 
-const HEADER_AFTER_TARGET = '--header must come after the --target it belongs to';
 const HEADER_FORM = '--header must be "Name: value" with a nonempty value';
 const HEADER_RESERVED = '--header must not set Host, Content-Length, Transfer-Encoding or Connection';
 const TARGET_FORM = '--target must be an absolute http or https URL';
@@ -156,7 +155,7 @@ export function parseCli(argv: readonly string[]): Cli {
     if (token.name === 'target') groups.push({ raw: token.value ?? '', headers: [] });
     else if (token.name === 'header') {
       const group = groups.at(-1);
-      if (group === undefined) return { kind: 'error', message: HEADER_AFTER_TARGET };
+      if (group === undefined) return { kind: 'error', message: '--header must come after the --target it belongs to' };
       group.headers.push(token.value ?? '');
     }
   }

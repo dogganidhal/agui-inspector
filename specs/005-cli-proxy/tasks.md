@@ -75,21 +75,21 @@ rebased on it.
 **Independent test**: the shipped command against the reference agent in Chromium: the agent is listed, a run is
 recorded, and every request the page made went to its own origin.
 
-- [ ] T006 [P] [US1] Write the first part of `packages/inspector/tests/cli/proxy.test.ts` with a scripted `node:http`
+- [x] T006 [P] [US1] Write the first part of `packages/inspector/tests/cli/proxy.test.ts` with a scripted `node:http`
   target on port 0 that records method, path, headers and body. Cover `relay(request, response, target, path)`: the method,
   path and query reach the target as given (`/agent?x=1&y=%20`); a POST body is delivered unchanged; the status, status
   message and headers come back; `Host` is the target's own authority; the page's `Connection`, `Keep-Alive`, `TE`,
   `Upgrade`, `Proxy-Authorization` headers and any name `Connection` lists do not reach the target; the response's
   `Transfer-Encoding` and `Connection` are Node's own for the page's hop. Drive `relay` through a small in-test
   `http.createServer` that calls it with `target` built by hand.
-- [ ] T007 [US1] Implement `packages/inspector/src/cli/proxy.ts`: `relay(request, response, target, path)` as written in
+- [x] T007 [US1] Implement `packages/inspector/src/cli/proxy.ts`: `relay(request, response, target, path)` as written in
   the Design section of [plan.md](plan.md) and [contracts/proxy.md](contracts/proxy.md): `http.request` or
   `https.request` with `{ host, port, path, method, headers, agent: false }`, hop-by-hop and `Host`, `Cookie`, `Origin`,
   `Referer` removed from the outbound headers, `setNoDelay(true)` on the outbound request, `stream.pipeline` for the
   request body, and for the response `writeHead(statusCode, statusMessage, rawHeadersWithoutHopByHopAndSetCookie)`,
   `flushHeaders()`, then `pipeline`. Error and abort handling and held headers come in T014 and T023. Depends on T005,
   T006.
-- [ ] T008 [P] [US1] Write `packages/inspector/tests/cli/server.test.ts`, first part, with a temporary directory as the
+- [x] T008 [P] [US1] Write `packages/inspector/tests/cli/server.test.ts`, first part, with a temporary directory as the
   page (`index.html`, `hosting-config.json` with `{"version":0,"mode":"embedded","allowedOrigins":[]}`, `app.js`) passed as
   `assetsDir`, and `listen({ port: 0, targets, assetsDir })`. Cover: the server's bound address is `127.0.0.1` and the
   returned port is the bound one; `GET /` is the page, `GET /app.js` the file, `GET /hosting-config.json` unchanged;
@@ -100,7 +100,7 @@ recorded, and every request the page made went to its own origin.
   escape) is 404; `GET /proxy/1/agent?x=1` and `POST /proxy/1/agent` reach the scripted target with the same path, query
   and body; `/proxy/1` reaches the target as `/`. Send requests with `Host`, `Origin` and `Sec-Fetch-Site` that a browser
   sends for the same origin (the guards come in T020).
-- [ ] T009 [US1] Implement `packages/inspector/src/cli/server.ts`: `listen({ port, targets, assetsDir? })` returns
+- [x] T009 [US1] Implement `packages/inspector/src/cli/server.ts`: `listen({ port, targets, assetsDir? })` returns
   `{ port, close() }`. Create the handler once with `createInspectorHandler({ agents, assetsDir })` where each agent is
   `{ id: 'target-<n>', name: <target href>, url: '/proxy/<n>' + target.path }`; create the `node:http` server; for a
   request whose path starts with `/proxy/` take the number segment (plain digits, 1 to the number of targets, otherwise
@@ -109,7 +109,7 @@ recorded, and every request the page made went to its own origin.
   where the asset is the path without its first `/`, with `/` as `index.html`, decoded once (a failed decode is 404).
   The core answers 405 itself (research 2), so add none. Bind with `server.listen(port, '127.0.0.1')`,
   never another address. `close()` ends the listener and calls `closeAllConnections()`. Depends on T007, T008.
-- [ ] T010 [US1] Implement `packages/inspector/src/cli/run.ts` and `packages/inspector/src/cli/main.ts`.
+- [x] T010 [US1] Implement `packages/inspector/src/cli/run.ts` and `packages/inspector/src/cli/main.ts`.
   `run(argv, io)` with `io = { out(text), err(text), stop: AbortSignal }` returns the exit code: parse; for `help` and
   `version` print and return 0 (version from `package.json` read next to `lib/cli` or `src/cli`, two levels up); for
   `error` print the message and `Run agui-inspector --help for the options.` to `err` and return 2; for `serve` call
@@ -119,14 +119,14 @@ recorded, and every request the page made went to its own origin.
   Nothing else in `main.ts`. In `scripts/build.mjs` make `buildServer()` also throw when the `bin` target of
   `packages/inspector/package.json` does not exist in `lib`. Exit codes 1 and the self-target check come in T029.
   Depends on T009.
-- [ ] T011 [P] [US1] Write `tests/e2e/cli/support.ts`: `startCommand(args, env?)` spawns
+- [x] T011 [P] [US1] Write `tests/e2e/cli/support.ts`: `startCommand(args, env?)` spawns
   `node packages/inspector/lib/cli/main.js` with `stdio: pipe`, waits for the line starting with
   `agui-inspector listening on `, returns `{ origin, port, stdout(), stderr(), stop() }` and kills the child on `stop`;
   `startTarget(options)` starts a scripted `node:http` target on `127.0.0.1` that records every request (method, path,
   headers, body) and answers `POST /agent` with `referenceRunResponse` from `examples/reference-agent/scenarios.ts`, and
   can instead write a given list of `{ bytes, delayMs }` chunks; it sends no CORS header. Fail fast with a message that
   names `npm run build` when `lib/cli/main.js` does not exist. Self-contained, like `tests/e2e/hosted/support.ts`.
-- [ ] T012 [US1] Write `tests/e2e/cli/browser.spec.ts`, first test. Start the target and the command (`--port 0`), open
+- [x] T012 [US1] Write `tests/e2e/cli/browser.spec.ts`, first test. Start the target and the command (`--port 0`), open
   the printed address in Chromium, and check: the agent list shows `http://127.0.0.1:<target port>/agent`; sending a
   message shows the reply "Hello from the reference agent." and one exchange with its frames and no finding; the target saw
   exactly one `POST /agent`; `config.json` fetched by the page has the agent's `url` `/proxy/1/agent` and no target
@@ -144,7 +144,7 @@ recorded, and every request the page made went to its own origin.
 **Independent test**: scripted targets with split frames, invalid bytes, pauses, cuts and aborts, read through the relay by
 a plain client and by the page.
 
-- [ ] T013 [P] [US2] Extend `packages/inspector/tests/cli/proxy.test.ts` with the fidelity cases, each against a
+- [x] T013 [P] [US2] Extend `packages/inspector/tests/cli/proxy.test.ts` with the fidelity cases, each against a
   scripted target and a plain `http.get` client that records the arrival time of every `data` event: ten chunks written
   100 ms apart, where chunk 3 is the bytes `ff fe 0a` and chunk 5 splits one SSE event across two chunks, arrive as ten
   chunks in order with equal bytes and each (but the last) before the target writes the next; a non-JSON `data:` frame; a
@@ -159,15 +159,15 @@ a plain client and by the page.
   `agui-inspector could not reach http://127.0.0.1:<port> (ECONNREFUSED)` and the same text on standard error through
   an injected logger; an unknown name (`http://nohost.invalid`) gives 502 with `ENOTFOUND` or `EAI_AGAIN`; the 502 body
   and the log line contain no path, query or header (use a synthetic query and header value and search both).
-- [ ] T014 [US2] Complete `packages/inspector/src/cli/proxy.ts` to make T013 pass: the error path before the response
+- [x] T014 [US2] Complete `packages/inspector/src/cli/proxy.ts` to make T013 pass: the error path before the response
   (502 with the one-line body and the log line via an injected `log` function that `server.ts` sets to `io.err`), the
   error path after the headers (destroy the page's socket), `response.on('close')` with `writableFinished` false
   destroying the outbound request, and an `error` listener on the outbound request that never throws. Depends on T013.
-- [ ] T015 [US2] Add to `tests/e2e/cli/browser.spec.ts`: a scripted target writes a stream of chunks with pauses
+- [x] T015 [US2] Add to `tests/e2e/cli/browser.spec.ts`: a scripted target writes a stream of chunks with pauses
   (a frame split across two chunks, a non-JSON frame, invalid UTF-8) and the page records it through the command. Read
   the recorded frames the way `tests/e2e/inspection/support.ts` (`snapshot`) does and compare their raw text with the
-  bytes the target wrote, in order, and the findings with the findings the same scripted stream gives against a direct
-  hosted page (reuse the hosted `openSite` pattern, or compare to the findings the spec fixtures name). A second test:
+  bytes the target wrote, in order, with the frame count and the JSON findings the scripted bytes call for, and check that
+  frames written 150 ms apart are recorded about 150 ms apart (a relay that buffered would fail this). A second test:
   the target holds a run open, the test clicks Stop, and the target's request emits `close` within 2 s. A third: the
   target cuts the stream mid-frame and the page shows a transport error with the bytes that arrived. Depends on T014.
 
@@ -180,7 +180,7 @@ a plain client and by the page.
 **Independent test**: raw sockets and a plain client against one target, with a counting second server that must see
 nothing.
 
-- [ ] T016 [P] [US3] Extend `packages/inspector/tests/cli/server.test.ts` with the refusal set. Start the command's server
+- [x] T016 [P] [US3] Extend `packages/inspector/tests/cli/server.test.ts` with the refusal set. Start the command's server
   with one target and a second `node:http` server (the "other host") that counts connections. With raw `net` sockets and
   `http.request`, send: `GET /proxy/2/x`, `GET /proxy/0/x`, `GET /proxy/01/x`, `GET /proxy/+1/x`, `GET /proxy/%31/x`,
   `GET /proxy/1x/x`, `GET /proxy//x`, `GET /proxy/-1/x` (403 each); `GET http://<other host:port>/ HTTP/1.1`,
@@ -190,13 +190,13 @@ nothing.
   `/..%2f..%2f`, `/%2e%2e/`, `/a/../../b`, `/x%00y` and `/x y` (encoded). For these, assert the scripted target (not the
   other host) received the exact raw path or the request was answered 400, and the other host's counter stayed 0. After
   every case assert the other host's connection count is 0.
-- [ ] T017 [US3] Make T016 pass in `packages/inspector/src/cli/server.ts`: refuse a request target that does not start
+- [x] T017 [US3] Make T016 pass in `packages/inspector/src/cli/server.ts`: refuse a request target that does not start
   with `/` with 403 before anything else; keep the number rule from T009 strict (`/^[1-9][0-9]*$/` on the raw segment, at
   most the number of targets); register `connect` and `upgrade` listeners on the server that write `HTTP/1.1 403 Forbidden`
   with `Connection: close` and end the socket (current Node.js serves an unlistened upgrade request as an ordinary
   request, see research 5); return 400 when `http.request` rejects the path (`ERR_UNESCAPED_CHARACTERS`) instead of throwing. The relay's `path` stays the raw
   text after the proxy number. Depends on T016.
-- [ ] T018 [US3] Add to `tests/e2e/cli/browser.spec.ts`: with the command running, type the target's real address
+- [x] T018 [US3] Add to `tests/e2e/cli/browser.spec.ts`: with the command running, type the target's real address
   (`http://127.0.0.1:<target port>/agent`) into the endpoint field and use it. The page refuses before any request, shows a
   message that names the command's origin as the destination it may reach, and the target saw no request. Typing
   `/proxy/1/agent` works. Depends on T012.
@@ -210,7 +210,7 @@ nothing.
 **Independent test**: read the bound address, connect to another address, send foreign `Host`, `Origin` and
 `Sec-Fetch-Site`.
 
-- [ ] T019 [P] [US4] Extend `packages/inspector/tests/cli/server.test.ts` with the guard cases against a counting target:
+- [x] T019 [P] [US4] Extend `packages/inspector/tests/cli/server.test.ts` with the guard cases against a counting target:
   `Host` of `127.0.0.1:<port>` and `localhost:<port>` (any case) pass; `127.0.0.1` without a port, `127.0.0.1:1`,
   `evil.example`, `evil.example:<port>`, `localhost.evil.example:<port>` and a missing `Host` get 403 on `/`, `/config.json`
   and a proxy path; on a proxy path `Origin: http://evil.example`, `Origin: null`, `Origin: http://127.0.0.1:<other port>`
@@ -218,12 +218,12 @@ nothing.
   403 on a proxy path, `same-origin` and `none` pass; a request with none of these headers (like `curl`) passes; on `/` and
   `/config.json` a cross-site `Sec-Fetch-Site` or foreign `Origin` is served (a link from another site opens the page);
   the bound address from `server.address()` is `127.0.0.1` and the family IPv4, and no second listener exists.
-- [ ] T020 [US4] Add the guards to `packages/inspector/src/cli/server.ts` in the order of the Design section: after the
+- [x] T020 [US4] Add the guards to `packages/inspector/src/cli/server.ts` in the order of the Design section: after the
   absolute-path check, refuse a `Host` that is not `127.0.0.1:<port>` or `localhost:<port>` (compare lowercase, with the
   port read from `server.address()` per request); for proxy paths only, refuse an `Origin` that is present and not
   `http://127.0.0.1:<port>` or `http://localhost:<port>`, and a `Sec-Fetch-Site` that is present and neither `same-origin`
   nor `none`. Refusals are 403 with a plain text body of one fixed line and no outbound connection. Depends on T017, T019.
-- [ ] T021 [US4] Write `tests/e2e/cli/command.spec.ts`, first tests, with the shipped command: the printed address is
+- [x] T021 [US4] Write `tests/e2e/cli/command.spec.ts`, first tests, with the shipped command: the printed address is
   `http://127.0.0.1:<port>/`; a connection to the machine's first non-loopback IPv4 address (from `os.networkInterfaces()`)
   on that port is refused (`ECONNREFUSED`), and the test is skipped with a visible reason when there is none; a request
   to `http://localhost:<port>/config.json` is served; a request with `Host: other.example` is 403. Depends on T011, T020.
@@ -236,21 +236,21 @@ nothing.
 
 **Independent test**: a unique synthetic header value is searched for in every output, served file and export.
 
-- [ ] T022 [P] [US5] Extend `packages/inspector/tests/cli/proxy.test.ts` with the header cases: a held header is sent on
+- [x] T022 [P] [US5] Extend `packages/inspector/tests/cli/proxy.test.ts` with the header cases: a held header is sent on
   every request to its target (GET and POST); when the page's request carries the same name in another case, the target
   receives the page's value and not the held one; the page's `Cookie` is not forwarded and the target's `Set-Cookie` does
   not reach the page; `Origin` and `Referer` are not forwarded; a held `Cookie: a=b` header is sent; held header names keep
   their written case on the wire (compare the raw header line from a raw socket target); a held header is not sent to a
   second target of another `relay` call with other held headers.
-- [ ] T023 [US5] Make T022 pass in `packages/inspector/src/cli/proxy.ts`: after the outbound headers are built, add each
+- [x] T023 [US5] Make T022 pass in `packages/inspector/src/cli/proxy.ts`: after the outbound headers are built, add each
   held header of the target whose lowercase name the page's request did not carry. Depends on T022.
-- [ ] T024 [US5] Add to `tests/e2e/cli/command.spec.ts` the secret search: start the command with
+- [x] T024 [US5] Add to `tests/e2e/cli/command.spec.ts` the secret search: start the command with
   `--header "X-Synthetic: <random uuid>"`. Fetch `/`, `/config.json`, `/hosting-config.json`, `app.js`, `app.css`
   (and every file in `packages/inspector/dist`) and a refused request (403) and a 404, and assert none contains the value.
   Assert the standard output (startup lines name `X-Synthetic`, not the value) and standard error are free of it on a normal
   run, after a 502 (target down), after a refused request, and for each usage error of T004 run as a separate process with
   the value in the offending option. A target that records headers confirms it received the value on every request.
-- [ ] T025 [US5] Add to `tests/e2e/cli/browser.spec.ts`: with `--header "X-Synthetic: <uuid>"`, run through the page,
+- [x] T025 [US5] Add to `tests/e2e/cli/browser.spec.ts`: with `--header "X-Synthetic: <uuid>"`, run through the page,
   export the session (`Export session`, as `tests/e2e/inspection/session.spec.ts` does) and assert the file does not
   contain the value; the target received it. Then enter a token with the same header name in the page and assert the target
   received the page's token. Add a cookie for `127.0.0.1` to the browser context first and assert the target received no
@@ -265,12 +265,12 @@ nothing.
 
 **Independent test**: two scripted targets with different headers, one run to each.
 
-- [ ] T026 [P] [US6] Extend `packages/inspector/tests/cli/server.test.ts`: two targets on different origins with
+- [x] T026 [P] [US6] Extend `packages/inspector/tests/cli/server.test.ts`: two targets on different origins with
   `--header` pairs built through `parseCli`; `config.json` lists `target-1` and `target-2` in order with `/proxy/1/...` and
   `/proxy/2/...`; a run to each reaches its own target; A receives only A's header and B only B's, with the same header
   name and different values; two targets with the same origin and different headers get separate proxy paths and their own
   headers.
-- [ ] T027 [US6] Add to `tests/e2e/cli/browser.spec.ts`: two targets in the agent picker in the order given, a run to each
+- [x] T027 [US6] Add to `tests/e2e/cli/browser.spec.ts`: two targets in the agent picker in the order given, a run to each
   records on its own target, and each target saw only its own header value. Depends on T012, T026.
 
 **Checkpoint**: story 6 passes. No source change is expected, since T005 and T009 build for many targets.
@@ -281,7 +281,7 @@ nothing.
 
 **Independent test**: run `run()` in process and the shipped command as a process.
 
-- [ ] T028 [P] [US7] Add `run()` tests to `packages/inspector/tests/cli/server.test.ts` with injected `out`, `err` and a
+- [x] T028 [P] [US7] Add `run()` tests in `packages/inspector/tests/cli/run.test.ts` with injected `out`, `err` and a
   `stop` signal: `--help` prints the usage to `out` and returns 0 and listens on nothing; `--version` prints the version
   from `package.json`; a usage error prints one message and the pointer to `err` and returns 2 and listens on nothing;
   `unknown command "replay"` returns 2; the port already taken (listen first on a port, then run with it) returns 1 with
@@ -289,11 +289,11 @@ nothing.
   returns 1 with the core's message; a target on `127.0.0.1` with the command's own port returns 2 with
   `--target points at this command's own address`, after the listener closed; a normal run prints the address line to `out`,
   keeps running until `stop` aborts, then returns 0 and has closed a relay that was still open.
-- [ ] T029 [US7] Finish `packages/inspector/src/cli/run.ts` to make T028 pass: exit code 1 for listen errors (message for
+- [x] T029 [US7] Finish `packages/inspector/src/cli/run.ts` to make T028 pass: exit code 1 for listen errors (message for
   `EADDRINUSE`, otherwise the error message) and for the core's missing-files error, exit code 2 for the self-target check
   made after the bind (`host` is `127.0.0.1`, `localhost` or `[::1]` and the port equals the bound port), close the
   listener first. Print failures to reach a target to `err` through the logger passed to `listen`. Depends on T028.
-- [ ] T030 [US7] Add to `tests/e2e/cli/command.spec.ts`: the shipped command's `--help` (exit 0, usage on stdout, nothing
+- [x] T030 [US7] Add to `tests/e2e/cli/command.spec.ts`: the shipped command's `--help` (exit 0, usage on stdout, nothing
   on stderr), `--version` equals `packages/inspector/package.json` version, no arguments (exit 2, stderr names `--target`),
   `replay` (exit 2, `unknown command "replay"`), `--port 99999` (exit 2), a port in use (exit 1, names the port), `SIGTERM`
   while a relay is in progress (exit 0 and the in-flight request ends), and an HTTPS target: make a self-signed certificate
@@ -307,7 +307,7 @@ nothing.
 
 ## Phase 10: Docs and polish
 
-- [ ] T031 [P] Write `website/content/docs/cli.mdx` (title `Run it locally with the CLI`, description of one sentence).
+- [x] T031 [P] Write `website/content/docs/cli.mdx` (title `Run it locally with the CLI`, description of one sentence).
   Cover: when to use it (a server that does not allow the page's origin, any language), the one command and its output,
   every option with an example (`--target`, `--header` and how it binds to the target before it, `--port`, `--help`,
   `--version`), what the page lists and the proxy paths (`/proxy/<n>`), typing an endpoint in the page, what the proxy
@@ -316,7 +316,7 @@ nothing.
   certificates and `NODE_EXTRA_CA_CERTS`, arguments visible in the process list and shell history, other programs of the
   same user, browsers without `Sec-Fetch-Site`), Node.js 22.12 or newer, and troubleshooting (403, 502, port in use,
   `replay` not available yet). Short plain sentences, no em dashes, no bold labels.
-- [ ] T032 [P] Update the pages that list the ways to run the inspector. In `website/content/docs/meta.json` add `cli`
+- [x] T032 [P] Update the pages that list the ways to run the inspector. In `website/content/docs/meta.json` add `cli`
   to "Set it up" before `hosted`. In `website/content/docs/index.mdx` add a Cards entry and a row to the modes table. In
   `website/content/docs/status.mdx` change the CLI row of the mode table, and add one sentence to "Where your data goes"
   that in CLI mode the browser's run goes through the local proxy to the target, unchanged. In
@@ -325,21 +325,21 @@ nothing.
   `website/content/docs/development.mdx` add `packages/inspector/src/cli` to "Where things are", and the unit and
   browser test commands for it. No root script is added, so the script table stays as it is. Keep the pages' existing
   claims true: search them for "no proxy" and "directly" and fix each.
-- [ ] T033 [P] Update `README.md` and `packages/inspector/README.md`: add the command to the list of ways to run it with a
+- [x] T033 [P] Update `README.md` and `packages/inspector/README.md`: add the command to the list of ways to run it with a
   link to the new page, and remove any statement that the package has no command.
-- [ ] T034 [P] Add `.changeset/add-cli-proxy.md` with `'agui-inspector': minor` and a short plain summary (no Python
+- [x] T034 [P] Add `.changeset/add-cli-proxy.md` with `'agui-inspector': minor` and a short plain summary (no Python
   package entry). Run `npm run test:unit -- tests/release` to check the changeset test.
-- [ ] T035 [P] Extend the bundle test of feature 006 (`packages/inspector/tests/server/bundle.test.ts`) so that no input of
+- [x] T035 [P] Extend the bundle test of feature 006 (`packages/inspector/tests/server/bundle.test.ts`) so that no input of
   the page bundle lies under `packages/inspector/src/cli` and the output has no `unknown command` or `listening on` text
   from the command. Add `packages/inspector/tests/cli/outbound.test.ts`, a source scan for FR-016: no file under
   `packages/inspector/src/cli` mentions `fetch(`, `XMLHttpRequest`, `node:dns`, `node:child_process`, a `net.connect`, a file
   write (`writeFile`, `appendFile`, `createWriteStream`) or an update check, and `http.request` and `https.request` appear
   only in `proxy.ts`. Depends on T010.
-- [ ] T036 Run `npm run typecheck`, `npm run test:unit` and the full gate `npm run check:ci`. Fix what fails. Build the docs
+- [x] T036 Run `npm run typecheck`, `npm run test:unit` and the full gate `npm run check:ci`. Fix what fails. Build the docs
   site to check that the new page renders (`cd website && npm ci --ignore-scripts && npm run build`; if it cannot install in
   this environment, say so in the PR). Run the quickstart's step 4 by hand and write the result (what was seen, the commands) at the end of `quickstart.md` under
   "Result of the run".
-- [ ] T037 Run `/speckit-converge` if the code and the spec disagree anywhere. Run `/ponytail:ponytail-review` on the
+- [x] T037 Run `/speckit-converge` if the code and the spec disagree anywhere. Run `/ponytail:ponytail-review` on the
   diff and fix what it finds. Run the humanizer skill on the new docs text and on the PR body.
 
 ## Dependencies and order

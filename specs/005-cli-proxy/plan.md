@@ -57,8 +57,8 @@ arrives.
 runtime dependencies. The listener binds `127.0.0.1` only. No outbound connection except to a configured target. Header
 values never leave the target's requests.
 
-**Scale/Scope**: Four source files of about 250 lines in all, one `bin` entry, one `package.json` change, 3 unit test
-files, 2 Playwright specs, one docs page and a handful of one-line docs fixes.
+**Scale/Scope**: Four source files of about 400 lines in all with their comments, one `bin` entry, one `package.json`
+change, 5 unit test files, 2 Playwright specs, one docs page and a handful of one-line docs fixes.
 
 ## Constitution Check
 
@@ -119,8 +119,11 @@ packages/inspector/
 │   └── proxy.ts             # relay(request, response, target, path)
 └── tests/cli/
     ├── args.test.ts         # options, rules, messages never echo a value
-    ├── proxy.test.ts        # bytes, chunks, headers, cookies, errors, aborts, refused spellings
-    └── server.test.ts       # guards, loopback bind, config.json, routes, self target, exit codes of run()
+    ├── proxy.test.ts        # bytes, chunks, headers, cookies, errors, aborts
+    ├── server.test.ts       # routes, config.json, refused spellings, guards, loopback bind, several targets
+    ├── run.test.ts          # run(): output, streams, exit codes, self target, stop
+    ├── outbound.test.ts     # source scan: the command makes no request of its own (FR-016)
+    └── support.ts           # scripted servers, a plain client with chunk timing, a stand-in page
 tests/e2e/cli/
 ├── command.spec.ts          # the shipped bin: help, errors, exit codes, port in use, signals, loopback, secrets
 ├── browser.spec.ts          # real browser against the reference agent through the command
@@ -191,9 +194,9 @@ stay valid without a command. Nothing in this feature builds the table.
 | Requirement | Tests |
 | --- | --- |
 | FR-001, FR-020 | `command.spec.ts` runs the packed `lib/cli/main.js` (`--version`, `--help`). A manifest test checks `bin`, the lack of runtime dependencies and that the page bundle has no command code (the bundle test of feature 006 gains command markers). |
-| FR-002, FR-003, FR-019 | `args.test.ts`: every option, the first-argument rule, stray arguments, exit codes through `run()`, and that no message echoes a header value, a target's query or credentials. |
+| FR-002, FR-003, FR-019 | `args.test.ts`: every option, the first-argument rule, stray arguments, and that no message echoes a header value, a target's query or credentials. `run.test.ts`: the exit codes and the streams. |
 | FR-004, FR-005 | `args.test.ts`: target and header rules, positional binding, a header before any target, a repeated header name. |
-| FR-006, FR-017 | `server.test.ts`: the bound address is `127.0.0.1`, port in use gives exit code 1, a target at the command's own port gives exit code 2. `command.spec.ts`: a connection to the machine's other IPv4 address is refused. |
+| FR-006, FR-017 | `server.test.ts`: a connection to `127.0.0.1` works and `::1` does not. `run.test.ts`: port in use gives exit code 1, a target at the command's own port gives exit code 2. `command.spec.ts`: the same through the shipped command, and a connection to the machine's other IPv4 address does not connect (it is refused, or a host firewall drops it). |
 | FR-007, FR-008 | `server.test.ts`: routes, methods, HEAD, policy header on every core response, `config.json` content and key order, `hosting-config.json` unchanged. |
 | FR-009, FR-013 | `proxy.test.ts` and `server.test.ts`: unknown number, absolute-form target, `*`, `CONNECT`, upgrade, `//host`, `@host`, `\`, encoded and dot forms, foreign `Host`, foreign `Origin`, cross-site fetch, with a counting target that must see nothing. |
 | FR-010, FR-011 | `proxy.test.ts`: bytes with invalid UTF-8, ten chunks 100 ms apart that each arrive before the next write, request body, large body, compressed body, redirect, error statuses, hop-by-hop and cookie removal, page header wins, `Host` set for the target. |

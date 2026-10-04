@@ -88,8 +88,8 @@ chunk order and the arrival times with what the target wrote.
    command, **Then** it receives the same bytes in the same order, and each chunk arrives before the target writes the
    next one. Nothing waits for the end of the response.
 2. **Given** a target that splits one event across two chunks, sends a frame that is not JSON and sends bytes that are
-   not valid UTF-8, **When** the page records the run, **Then** the recorded frames are those bytes, with the same
-   findings the page reports for a direct request to the same server.
+   not valid UTF-8, **When** the page records the run, **Then** the recorded frames are those bytes, with the findings
+   those bytes call for, the ones the page reports for any server.
 3. **Given** a target that closes the connection in the middle of a stream, **When** the page reads it through the
    command, **Then** the page sees a stream that was cut, with the bytes that arrived before the cut. It never sees a
    stream that completed.
@@ -147,7 +147,7 @@ expect a 403 with no outbound connection.
 1. **Given** the command is running, **When** its bound address is read, **Then** it is the IPv4 loopback address and
    the chosen port, and there is no other listener.
 2. **Given** the machine has a non-loopback network address, **When** a client connects to that address and the
-   command's port, **Then** the connection is refused.
+   command's port, **Then** it does not connect. The system refuses it, or a host firewall drops it.
 3. **Given** a request to any path whose `Host` is not `127.0.0.1` or `localhost` with the command's port, **When** it
    arrives, **Then** it is refused with a 403. That stops a page that rebinds a host name to the loopback address.
 4. **Given** a request to a proxy path that carries an `Origin` other than the page's own, or a `Sec-Fetch-Site` other
@@ -393,7 +393,7 @@ that is not an option. Check output and exit codes.
   `//host`, `@host`, `\`, encoded slash and dot forms, a foreign `Host`, a foreign `Origin`, a cross-site fetch), zero make
   the command connect to a host other than a configured target.
 - **SC-006**: The listener's bound address is `127.0.0.1` and no other. A connection to a non-loopback address of the test
-  machine on the command's port is refused.
+  machine on the command's port does not connect: it is refused, or a host firewall drops it.
 - **SC-007**: A unique synthetic header value is found in zero of: `config.json`, every served file, every response the
   command writes itself, its standard output and error on a normal run and on each error case, and an exported session.
   The target receives it on every request.

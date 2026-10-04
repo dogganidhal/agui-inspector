@@ -183,13 +183,13 @@ test('nothing after the proxy path can change the host: odd spellings stay paths
 
 test('Host must be this listener’s own address, on every path', async () => {
   const { target, listening } = await withTarget();
-  const hosts = (listening: Listening) => ({
+  const hosts = {
     good: [`127.0.0.1:${listening.port}`, `localhost:${listening.port}`, `LOCALHOST:${listening.port}`],
     bad: ['127.0.0.1', '127.0.0.1:1', 'evil.example', `evil.example:${listening.port}`, `localhost.evil.example:${listening.port}`, `127.0.0.1:${listening.port}.evil.example`, `[::1]:${listening.port}`],
-  });
+  };
   for (const path of ['/', '/config.json', '/proxy/1/agent']) {
-    for (const host of hosts(listening).good) assert.equal((await ask({ port: listening.port, path, headers: { host } })).status, 200, `${host} ${path}`);
-    for (const host of hosts(listening).bad) assert.equal((await ask({ port: listening.port, path, headers: { host } })).status, 403, `${host} ${path}`);
+    for (const host of hosts.good) assert.equal((await ask({ port: listening.port, path, headers: { host } })).status, 200, `${host} ${path}`);
+    for (const host of hosts.bad) assert.equal((await ask({ port: listening.port, path, headers: { host } })).status, 403, `${host} ${path}`);
     assert.equal(statusOf(await raw(listening.port, `GET ${path} HTTP/1.0\r\n\r\n`)), '403', `no Host on ${path}`);
   }
   assert.equal(target.seen.length, 3, 'only the three good hosts reached the target');

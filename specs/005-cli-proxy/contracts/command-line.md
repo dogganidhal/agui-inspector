@@ -55,9 +55,9 @@ agui-inspector: could not reach http://127.0.0.1:8787 (ECONNREFUSED)
 
 ## Messages
 
-Each usage error is one line on standard error, then a pointer: `Run agui-inspector --help for the options.` Messages
-are fixed text with at most an option name, a number or an origin. None contains a header value, or a target's query or
-credentials.
+Each usage error is printed on standard error as `agui-inspector: <message>`, then a pointer on the next line:
+`Run agui-inspector --help for the options.` Messages are fixed text with at most an option name, a number or an origin.
+None contains a header value, or a target's query or credentials. The table lists the `<message>`.
 
 | Cause | Message starts with |
 | --- | --- |
@@ -71,10 +71,11 @@ credentials.
 | Port not a number from 0 to 65535 | `--port must be a whole number from 0 to 65535` |
 | First argument is not an option | `unknown command "<name>"` |
 | Stray argument | `unexpected argument; quote a --header value that has spaces` |
-| Unknown option, missing value | the message of `parseArgs`, which names only the option |
+| Unknown option | `unknown option "<name>"`, with the name of the option and nothing after it |
+| Missing value, value given to a flag | `<option> needs a value`, `<option> takes no value` |
 | Target is the command's own listener | `--target points at this command's own address` |
-| Port in use (exit code 1) | `port <n> is already in use; choose another with --port` |
-| Page files missing (exit code 1) | the core's message, which names `npm run build` |
+| Port in use (exit code 1) | `port <n> is already in use; choose another with --port`, with no pointer |
+| Page files missing (exit code 1) | the core's message, which names `npm run build`, with no pointer |
 
 ## Stop
 

@@ -1,10 +1,22 @@
 # agui-inspector
 
-The static files of the AG-UI inspector, and helpers that serve them from Express, Hono and Next.js. The inspector
-records every request and server-sent event (SSE) frame of an AG-UI server, checks them against the protocol and lets
-you drive runs from the browser.
+The static files of the AG-UI inspector, helpers that serve them from Express, Hono and Next.js, and a command that
+serves them on your machine. The inspector records every request and server-sent event (SSE) frame of an AG-UI server,
+checks them against the protocol and lets you drive runs from the browser.
 
-This package has no CLI.
+## Command line
+
+From version 0.2.0, one command serves the inspector on `127.0.0.1` and relays its requests to your server, in any
+language. Your server needs no CORS setup and no helper. Node.js 22.12 or newer.
+
+```sh
+npx agui-inspector --target http://127.0.0.1:8787/agent --header "Authorization: Bearer <token>"
+```
+
+A `--header` is sent to the `--target` before it, and to no other. The command listens on `127.0.0.1` only, relays to the
+targets you name and refuses every other host. Command-line arguments are visible in the process list and your shell
+history, so keep long-lived secrets out of them. The [docs](https://dogganidhal.github.io/agui-inspector/docs/cli/) cover
+the options and the limits.
 
 ## Express, Hono and Next.js
 

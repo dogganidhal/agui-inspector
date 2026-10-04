@@ -79,10 +79,23 @@ In Next.js, a route file exports `inspectorRoute({ agents, enabled })`.
 [Embed in your server](https://dogganidhal.github.io/agui-inspector/docs/embedding/#javascript-servers) covers the
 arguments, authentication and routes.
 
+### With the command line
+
+One command serves the inspector on your machine and relays its requests to your server, in any language. The server
+needs no CORS setup and no helper (in the next release, [0.2.0](ROADMAP.md#020)):
+
+```sh
+npx agui-inspector --target http://127.0.0.1:8787/agent
+```
+
+It listens on `127.0.0.1` only and relays to the targets you name. A `--header "Name: value"` after a target is sent to it.
+Command-line arguments are visible in the process list and your shell history, so keep long-lived secrets out of them.
+[Run it locally with the CLI](https://dogganidhal.github.io/agui-inspector/docs/cli/) covers the options and the limits.
+
 ### With any other server
 
-A server in any other language can use the hosted page: deploy it on any static host, or point the public demo at
-your server. Your server must allow the page's origin through CORS.
+A server in any other language can use the command above, or the hosted page: deploy it on any static host, or point the
+public demo at your server. For the hosted page, your server must allow the page's origin through CORS.
 [Host the static page](https://dogganidhal.github.io/agui-inspector/docs/hosted/) explains both.
 
 ## What it does

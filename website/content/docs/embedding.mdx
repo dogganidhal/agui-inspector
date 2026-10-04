@@ -290,7 +290,7 @@ npm pack --workspace packages/inspector
 
 ## Serving the assets from another server
 
-Any static file server can host the same inspector. The npm package exports `staticAssetsPath` from [`static-path.js`](https://github.com/dogganidhal/agui-inspector/blob/main/packages/inspector/src/static-path.js). Serve the directory it points at, put a `config.json` next to its `index.html`, and open the page. For Express, Hono and Next.js, use the [JavaScript helpers](#javascript-servers) instead. The npm package has no CLI. Install it with `npm install agui-inspector`. See also [Host the static page](./hosted.mdx).
+Any static file server can host the same inspector. The npm package exports `staticAssetsPath` from [`static-path.js`](https://github.com/dogganidhal/agui-inspector/blob/main/packages/inspector/src/static-path.js). Serve the directory it points at, put a `config.json` next to its `index.html`, and open the page. For Express, Hono and Next.js, use the [JavaScript helpers](#javascript-servers) instead. Install the package with `npm install agui-inspector`. The package also has a command, `agui-inspector`, that serves the page and relays to your server: see [Run it locally with the CLI](./cli.mdx). See also [Host the static page](./hosted.mdx).
 
 ## Working from a source checkout
 

@@ -76,3 +76,20 @@ Stop the command with Ctrl+C. It exits with 0.
 
 Open `website/content/docs/cli.mdx` in the docs site (`npm run dev` in `website`, see the development page). It covers the
 command, every option, the proxy paths, the headers, the guards, the limits and troubleshooting.
+
+## Result of the run
+
+Run on 2026-10-04 on macOS with Node.js 26.9, and the CLI tests again on Node.js 24.11 (the version CI uses). All of it
+passed.
+
+- `npm run check:ci` passed every step: type check, 1157 unit tests, build, bundle budget, demo build, 351 end-to-end
+  tests and the Python tests.
+- Step 4 by hand: the reference agent on port 18787 and `node packages/inspector/lib/cli/main.js --target
+  http://127.0.0.1:18787/agent --header "X-Api-Key: demo-123" --port 14747`. The command printed the address and
+  `/proxy/1 -> http://127.0.0.1:18787 (headers: X-Api-Key)`. `curl` got `config.json` with the policy header and no
+  header value, a POST to `/proxy/1/agent` returned the five frames of the reference run, and a request with
+  `Host: other.example` got a 403. In Chromium the agent list showed the target, `/proxy/1/agent` was the endpoint, and one
+  run recorded five frames.
+- The docs site builds with the new page (`cd website && npm ci --ignore-scripts && npm run build`).
+- On this machine a connection to the non-loopback IPv4 address times out instead of being refused. A host firewall
+  drops it. The tests accept either outcome, and the spec says so.

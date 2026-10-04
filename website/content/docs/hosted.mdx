@@ -3,7 +3,7 @@ title: Host the static page
 description: Serve the inspector as a static site that sends requests directly to the agent a developer names.
 ---
 
-A hosted inspector is a static site. A developer opens it in a browser, and the page sends requests directly to the agent they name. It works with an AG-UI server in any language. To serve the same files from a Starlette or FastAPI application, see [Embed in Starlette or FastAPI](./embedding.mdx).
+A hosted inspector is a static site. A developer opens it in a browser, and the page sends requests directly to the agent they name. It works with an AG-UI server in any language. To serve the same files from a Starlette or FastAPI application, see [Embed in Starlette or FastAPI](./embedding.mdx). If your server does not allow the page's origin and you cannot change that, [the CLI](./cli.mdx) serves the page on your machine and relays its requests to your server.
 
 ## Quick start
 
@@ -193,7 +193,7 @@ Firefox has not been checked. To fill its column, serve a page with the policy a
 
 ## Direct browser requests
 
-A hosted run is a request from the user's browser to the agent, with no proxy and no bypass. The browser's rules apply:
+A hosted run is a request from the user's browser to the agent, with no proxy and no bypass. The [CLI](./cli.mdx) is the way around these rules: it serves the page itself and relays to the target from your machine. The browser's rules apply to a hosted page:
 
 - CORS. The agent must answer with `Access-Control-Allow-Origin` set to the page's origin, `Access-Control-Allow-Methods: POST, OPTIONS`, and `Access-Control-Allow-Headers` naming `Content-Type`, `Accept` and the token's header. A reply without these is blocked.
 - Local network access. When a page on a public address calls a loopback or private address, the browser checks this separately from CORS. Depending on the browser, the visitor sees a permission prompt, or the browser sends a preflight with `Access-Control-Request-Private-Network: true` and the target must answer `Access-Control-Allow-Private-Network: true`. See [the browser's permission](#the-browsers-permission-for-local-servers).

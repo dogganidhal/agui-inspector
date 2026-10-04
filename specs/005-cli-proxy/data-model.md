@@ -26,7 +26,7 @@ order with its headers, at least one target. Nothing listens before all of them 
 | `origin` | `url.origin`. The allowlist is the set of these. |
 | `host`, `port`, `tls` | What the relay connects to: the host without brackets, the port (80 or 443 by default) and whether the scheme is `https`. |
 | `path` | `url.pathname`, at least `/`. It is the tail of the agent's `url` in `config.json`. |
-| `headers` | The held headers, keyed by lowercase name. A repeated name replaces the earlier value. |
+| `headers` | The held headers, a map from the lowercase name to `{ name, value }`, where `name` keeps the case it was written in. A repeated name replaces the earlier value. |
 
 A target never holds credentials in its URL, so `href` can go into `config.json` and into the startup line.
 
