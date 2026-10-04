@@ -31,6 +31,7 @@ import './app.css';
 import { Brand, type LogoField } from './brand';
 import { PaneBoundary, describeError } from './boundary';
 import { startPage, type StartupEnvironment, type Started } from './startup';
+import { saveThemeChoice } from './theme-choice';
 
 // ---------------------------------------------------------------------------------------------
 // Layout
@@ -57,6 +58,8 @@ export interface AppExtras {
   readonly warnings?: readonly string[];
   /** The adopter's name and logos for the top bar; the default mark and name without one. */
   readonly brand?: BrandConfig;
+  /** Where the theme switch remembers its choice. Without it the choice lasts until a reload. */
+  readonly storage?: StorageLike;
 }
 
 type Pane = 'conversation' | 'inspection';
@@ -86,14 +89,20 @@ function Footer({ store, mode, allowedOrigins, allowVisitorTargets, recording }:
   );
 }
 
-function ThemeSwitch(): ReactElement {
-  const [dark, setDark] = useState(() => globalThis.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false);
+function ThemeSwitch({ storage }: { storage?: StorageLike }): ReactElement {
+  // Startup has already put a stored choice on the root; without one the system preference decides.
+  const [dark, setDark] = useState(() => {
+    const chosen = globalThis.document?.documentElement.dataset.theme;
+    return chosen === 'light' || chosen === 'dark' ? chosen === 'dark' : (globalThis.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false);
+  });
   return (
     <Button
       iconOnly
       aria-label={dark ? 'Switch to light theme' : 'Switch to dark theme'}
       onClick={() => {
-        document.documentElement.dataset.theme = dark ? 'light' : 'dark';
+        const choice = dark ? 'light' : 'dark';
+        document.documentElement.dataset.theme = choice;
+        if (storage !== undefined) saveThemeChoice(storage, choice);
         setDark(!dark);
       }}
     >
@@ -106,7 +115,7 @@ function ThemeSwitch(): ReactElement {
  * The app shell: a fixed top bar above two panes that scroll on their own, conversation left and
  * inspection right. Under 960 px one pane shows and a segmented control switches between them.
  */
-export function App({ settings, connection, conversation, inspection, mode, allowedOrigins = [], allowVisitorTargets = false, brand, capabilities, capturing, notice, onPaneError, recording, renderActivity, warnings: configWarnings = [] }: AppProps & AppExtras): ReactElement {
+export function App({ settings, connection, conversation, inspection, mode, allowedOrigins = [], allowVisitorTargets = false, brand, capabilities, capturing, notice, onPaneError, recording, renderActivity, storage, warnings: configWarnings = [] }: AppProps & AppExtras): ReactElement {
   const [pane, setPane] = useState<Pane>('conversation');
   // A logo that does not load shows the default mark and a warning, so a missing file is not a silent no-op.
   const [failedLogos, setFailedLogos] = useState<readonly LogoField[]>([]);
@@ -135,7 +144,7 @@ export function App({ settings, connection, conversation, inspection, mode, allo
             {...(settings.agents.length > 0 && { agentPicker: <AgentPicker inBar agents={settings.agents} selectedId={settings.selectedAgentId} onSelect={settings.onSelectAgent} /> })}
           />
         </div>
-        <ThemeSwitch />
+        <ThemeSwitch {...(storage !== undefined && { storage })} />
       </header>
 
       {warnings.length > 0 && (
@@ -321,6 +330,7 @@ function Root({ started, storage }: { started: Started; storage?: StorageLike })
     capturing: state.capturing,
     onPaneError: paneFailed,
     warnings: started.warnings,
+    ...(storage !== undefined && { storage }),
     ...(started.brand !== undefined && { brand: started.brand }),
     renderActivity: (entry) => a2uiActivity(entry, { renderEnabled: profile.renderA2ui, onAction }),
     ...(recording ? { notice: RECORDING_NOTICE } : state.notice !== undefined && { notice: state.notice }),

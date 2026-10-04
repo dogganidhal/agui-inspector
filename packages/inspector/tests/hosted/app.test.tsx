@@ -69,6 +69,25 @@ test('the shell has one h1, the four fixed views, the composer and the footer, a
   assert.deepEqual(calls, []);
 });
 
+test('the theme switch starts from the theme on the root, and from the system preference when the root has none', () => {
+  const scope = globalThis as unknown as Record<string, unknown>;
+  const label = (theme: string | undefined, systemDark: boolean) => {
+    scope.document = { documentElement: { dataset: theme === undefined ? {} : { theme } } };
+    scope.matchMedia = () => ({ matches: systemDark });
+    try {
+      return /aria-label="(Switch to (?:light|dark) theme)"/.exec(build().markup)?.[1];
+    } finally {
+      delete scope.document;
+      delete scope.matchMedia;
+    }
+  };
+  assert.equal(label('dark', false), 'Switch to light theme', 'a stored dark choice beats a light system');
+  assert.equal(label('light', true), 'Switch to dark theme', 'a stored light choice beats a dark system');
+  assert.equal(label(undefined, true), 'Switch to light theme');
+  assert.equal(label(undefined, false), 'Switch to dark theme');
+  assert.equal(label('sepia', true), 'Switch to light theme', 'an unknown value on the root is not a choice');
+});
+
 test('the layout is two panes under a top bar, with a pane switch and the inspection tabs', () => {
   const { markup } = build({ mode: 'hosted' });
   assert.ok(markup.indexOf('agui-app-bar') < markup.indexOf('agui-app-switch') && markup.indexOf('agui-app-switch') < markup.indexOf('agui-app-panes'));

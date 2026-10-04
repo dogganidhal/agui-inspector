@@ -695,3 +695,66 @@ test('the shell follows the theme tokens: an override stylesheet after the inspe
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   expect((await paint()).mark, 'the accent override holds in dark').toBe('rgb(0, 80, 200)');
 });
+
+// ---------------------------------------------------------------------------------------------
+// The light or dark choice survives a reload (issue #101)
+// ---------------------------------------------------------------------------------------------
+
+test('the theme switch is remembered across a reload, beats the system preference and writes one value', async ({ page, openSite }) => {
+  const site = await openSite({ config: agentConfig((o) => `${o.agent.origin}/agent`) });
+  const stored = () => page.evaluate(() => ({ ...localStorage }));
+  await page.emulateMedia({ colorScheme: 'light' });
+  await open(page, site);
+  await expect(page.locator('html')).not.toHaveAttribute('data-theme', /.*/);
+
+  await page.getByRole('button', { name: 'Switch to dark theme' }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await expect(page.getByRole('button', { name: 'Switch to light theme' }), 'the switch starts from the stored theme').toBeVisible();
+  expect(await stored()).toEqual({ 'agui-inspector.theme': 'dark' });
+
+  // The other way, against a system that prefers dark.
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.getByRole('button', { name: 'Switch to light theme' }).click();
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+  await expect(page.getByRole('button', { name: 'Switch to dark theme' })).toBeVisible();
+  expect(await stored()).toEqual({ 'agui-inspector.theme': 'light' });
+});
+
+test('the stored theme is on the page before it mounts, so there is no flash of the other theme', async ({ page, openSite }) => {
+  const site = await openSite({ config: agentConfig((o) => `${o.agent.origin}/agent`) });
+  await page.addInitScript(() => {
+    localStorage.setItem('agui-inspector.theme', 'dark');
+    const seen = window as unknown as { __themeSeen?: { theme: string | undefined; mounted: number } };
+    new MutationObserver(() => {
+      seen.__themeSeen ??= { theme: document.documentElement.dataset.theme, mounted: document.getElementById('root')?.childElementCount ?? -1 };
+    }).observe(document, { attributes: true, subtree: true, attributeFilter: ['data-theme'] });
+  });
+  await page.emulateMedia({ colorScheme: 'light' });
+  await open(page, site);
+  expect(await page.evaluate(() => (window as unknown as { __themeSeen?: unknown }).__themeSeen)).toEqual({ theme: 'dark', mounted: 0 });
+});
+
+test('a stored value that is not light or dark is ignored, and storage that throws does not stop the page', async ({ page, openSite }) => {
+  const site = await openSite({ config: agentConfig((o) => `${o.agent.origin}/agent`) });
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.addInitScript(() => localStorage.setItem('agui-inspector.theme', 'blue'));
+  await open(page, site);
+  await expect(page.locator('html')).not.toHaveAttribute('data-theme', /.*/);
+  await expect(page.getByRole('button', { name: 'Switch to light theme' }), 'the system preference decides').toBeVisible();
+
+  const blocked = await page.context().newPage();
+  await blocked.emulateMedia({ colorScheme: 'light' });
+  await blocked.addInitScript(() => {
+    const fail = () => {
+      throw new DOMException('blocked', 'SecurityError');
+    };
+    Storage.prototype.getItem = fail;
+    Storage.prototype.setItem = fail;
+  });
+  await open(blocked, site);
+  await blocked.getByRole('button', { name: 'Switch to dark theme' }).click();
+  await expect(blocked.locator('html'), 'the switch still works for this page').toHaveAttribute('data-theme', 'dark');
+});
