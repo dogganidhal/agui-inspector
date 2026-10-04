@@ -342,6 +342,7 @@
 .agui-finding--warn { background: var(--warn-soft); color: color-mix(in oklab, var(--warn) 60%, var(--fg)); }
 .agui-finding--err { background: var(--err-soft); color: color-mix(in oklab, var(--err) 80%, var(--fg)); }
 .agui-finding b { font-weight: 600; }
+.agui-finding code { font: 500 11px var(--agui-font-mono); overflow-wrap: anywhere; }
 
 /* Label */
 .agui-label {

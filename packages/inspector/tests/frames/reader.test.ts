@@ -100,6 +100,8 @@ for (const [name, expected] of Object.entries(invalidCases)) {
 
     assert.equal(findings.length, 1);
     assert.equal(findings[0]!.kind, expected.jsonVerdict === 'invalid' ? 'json' : 'schema');
+    assert.equal(findings[0]!.rule, expected.jsonVerdict === 'invalid' ? 'json.invalid' : expected.schemaVerdict === 'unknown-type' ? 'schema.unknown-event-type' : 'schema.invalid-event');
+    assert.equal(findings[0]!.id, `${frame.id}:finding`, 'the first finding of a frame keeps its 0.1.0 id');
     assert.deepEqual(findings[0]!.subject, { type: 'frame', id: frame.id });
     assert.ok(findings[0]!.message.length > 0);
   });
@@ -131,7 +133,7 @@ test('a validator that throws leaves the frame retained and marked, and the next
   assert.deepEqual(frames[0]!.parsed, eventFixtures.RUN_STARTED, 'the parsed companion survives the validator failure');
   assert.equal(frames[0]!.schemaVerdict, 'invalid');
   assert.equal(frames[1]!.schemaVerdict, 'valid');
-  assert.deepEqual(findings.map((finding) => finding.kind), ['schema']);
+  assert.deepEqual(findings.map((finding) => [finding.kind, finding.rule]), [['schema', 'schema.check-failed']]);
   assert.match(findings[0]!.message, /validation failed/i);
 });
 
@@ -396,8 +398,14 @@ test('invalid frames amid a valid run are all kept and flagged; the valid ending
     ['valid', 'not-applicable', 'unknown-type', 'invalid', 'valid', 'not-applicable', 'invalid', 'valid'],
   );
   assert.deepEqual(
-    findings.map((finding) => [finding.kind, (finding.subject as { id: string }).id]),
-    [['json', 'exchange-1:frame-1'], ['schema', 'exchange-1:frame-2'], ['schema', 'exchange-1:frame-3'], ['json', 'exchange-1:frame-5'], ['schema', 'exchange-1:frame-6']],
+    findings.map((finding) => [finding.kind, finding.rule, (finding.subject as { id: string }).id]),
+    [
+      ['json', 'json.invalid', 'exchange-1:frame-1'],
+      ['schema', 'schema.unknown-event-type', 'exchange-1:frame-2'],
+      ['schema', 'schema.invalid-event', 'exchange-1:frame-3'],
+      ['json', 'json.invalid', 'exchange-1:frame-5'],
+      ['schema', 'schema.invalid-event', 'exchange-1:frame-6'],
+    ],
   );
 });
 
@@ -408,6 +416,7 @@ for (const [name, scenario] of missing) {
     const terminals = findings.filter((finding) => finding.kind === 'terminal');
     assert.equal(terminals.length, 1);
     assert.deepEqual(terminals[0]!.subject, { type: 'exchange', id: EXCHANGE });
+    assert.equal(terminals[0]!.rule, 'terminal.missing');
     assert.match(terminals[0]!.message, /RUN_FINISHED|RUN_ERROR/);
     assert.ok(
       !frames.some((frame) => frame.eventType === 'RUN_FINISHED' && frame.schemaVerdict === 'valid'),
@@ -421,7 +430,7 @@ for (const [name, scenario] of missing) {
 test('the terminal finding attaches to the subject the caller names, once', () => {
   const run: FindingSubject = { type: 'run', id: 'run-1' };
   const { reader, findings } = read(scenarioChunks(missingTerminalScenarios.closedAfterContent), { end: run });
-  assert.deepEqual(findings.map((finding) => [finding.kind, finding.subject]), [['terminal', run]]);
+  assert.deepEqual(findings.map((finding) => [finding.kind, finding.rule, finding.subject]), [['terminal', 'terminal.missing', run]]);
   reader.end(run);
   assert.equal(findings.length, 1);
 });

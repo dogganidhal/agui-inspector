@@ -98,7 +98,7 @@ export async function richSession(): Promise<InspectionSession> {
     endedAt: baseline.startedAt + 120,
     outcome: { kind: 'success', pendingToolCallIds: [] },
   });
-  store.addFinding({ id: 'run-rec-1:sequence', kind: 'sequence', message: 'Message m2 was not started', subject: { type: 'run', id: 'run-rec-1' } });
+  store.addFinding({ id: 'run-rec-1:sequence', kind: 'sequence', rule: 'sequence.text-message-not-open', message: 'Message m2 was not started', subject: { type: 'run', id: 'run-rec-1' } });
   store.appendDerived({
     id: 'derived-1',
     provenance: 'derived',

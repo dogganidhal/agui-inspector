@@ -15,7 +15,6 @@ import { EventType } from '@ag-ui/core';
 import { EventSchemas } from '@ag-ui/core/schemas';
 import type {
   ExchangeId,
-  Finding,
   FindingSubject,
   JsonValue,
   JsonVerdict,
@@ -24,6 +23,7 @@ import type {
   SessionStore,
 } from '../../contracts.ts';
 import type { RecorderSink } from '../recorder/index.ts';
+import { kindOf, type CatalogueRuleId } from '../rules/catalogue.ts';
 
 export type FrameOutput = Pick<SessionStore, 'appendFrame' | 'addFinding'>;
 
@@ -191,11 +191,16 @@ export function createFrameReader(output: FrameOutput, exchangeId: ExchangeId, o
     if (schemaVerdict === 'valid' && eventType !== undefined && TERMINAL_TYPES.has(eventType)) terminalSeen = true;
     output.appendFrame(frame);
 
+    // A frame can have several findings. The first keeps the id it had in 0.1.0; later ones count up from 2.
     const subject = { type: 'frame', id: frame.id } as const;
-    const finding = (kind: Finding['kind'], message: string) => output.addFinding({ id: `${frame.id}:finding`, kind, message, subject });
-    if (jsonVerdict === 'invalid') finding('json', 'Data is not valid JSON');
-    else if (schemaVerdict === 'unknown-type') finding('schema', `${problems[0]}; it is not in the supported baseline`);
-    else if (schemaVerdict === 'invalid') finding('schema', unexpected ? (problems[0] as string) : `Does not match the AG-UI event schema: ${problems.join('; ')}`);
+    let findings = 0;
+    const finding = (rule: CatalogueRuleId, message: string) => {
+      findings += 1;
+      output.addFinding({ id: `${frame.id}:finding${findings === 1 ? '' : `-${findings}`}`, kind: kindOf(rule), rule, message, subject });
+    };
+    if (jsonVerdict === 'invalid') finding('json.invalid', 'Data is not valid JSON');
+    else if (schemaVerdict === 'unknown-type') finding('schema.unknown-event-type', `${problems[0]}; it is not in the supported baseline`);
+    else if (schemaVerdict === 'invalid') finding(unexpected ? 'schema.check-failed' : 'schema.invalid-event', unexpected ? (problems[0] as string) : `Does not match the AG-UI event schema: ${problems.join('; ')}`);
   }
 
   function readLine(line: string) {
@@ -252,6 +257,7 @@ export function createFrameReader(output: FrameOutput, exchangeId: ExchangeId, o
         output.addFinding({
           id: `${exchangeId}:terminal`,
           kind: 'terminal',
+          rule: 'terminal.missing',
           message: 'The stream ended without a valid RUN_FINISHED or RUN_ERROR event',
           subject,
         });

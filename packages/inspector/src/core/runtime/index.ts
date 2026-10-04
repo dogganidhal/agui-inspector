@@ -28,7 +28,6 @@ import type {
   AgentConfig,
   AutomaticReplies,
   ClientProfileSettings,
-  FindingKind,
   InterruptAnswer,
   JsonValue,
   ObservedOutcome,
@@ -47,6 +46,8 @@ import { createFrameSink } from '../frames/index.ts';
 import { preparePreset } from '../presets/index.ts';
 import { composeRunInput } from '../profiles/index.ts';
 import { createRecorder, type CaptureRecorder, type RecorderClock } from '../recorder/index.ts';
+import { kindOf, type CatalogueRuleId } from '../rules/catalogue.ts';
+import { sequenceRuleOf } from '../rules/sequence.ts';
 import { canonicalizeLineEndings } from './line-endings.ts';
 import { runPreparations } from './prepare.ts';
 import {
@@ -172,13 +173,13 @@ const clip = (text: string) => (text.length > MAX_MESSAGE ? `${text.slice(0, MAX
 const PAUSED_NOTICE = `Automatic replies paused after ${AUTOMATIC_REPLY_LIMIT} in a row. Answer by hand to continue the run.`;
 
 /** The client's own words for a rejected stream, kept short and free of the received values. */
-function clientFailure(error: unknown): { kind: FindingKind; message: string } | undefined {
-  if (error instanceof AGUIError) return { kind: 'sequence', message: clip(error.message) };
-  if (error instanceof SyntaxError) return { kind: 'json', message: `The protocol client could not read a frame as JSON: ${clip(error.message)}` };
+function clientFailure(error: unknown): { rule: CatalogueRuleId; message: string } | undefined {
+  if (error instanceof AGUIError) return { rule: sequenceRuleOf(error.message), message: clip(error.message) };
+  if (error instanceof SyntaxError) return { rule: 'json.invalid', message: `The protocol client could not read a frame as JSON: ${clip(error.message)}` };
   if (error instanceof Error && error.name === 'ZodError') {
     const issues = (error as Error & { issues?: ReadonlyArray<{ path: PropertyKey[]; message: string }> }).issues ?? [];
     const first = issues[0];
-    return { kind: 'schema', message: `The protocol client rejected a frame: ${first ? `${first.path.map(String).join('.') || '(root)'}: ${first.message}` : 'invalid event'}${issues.length > 1 ? ` and ${issues.length - 1} more` : ''}` };
+    return { rule: 'schema.invalid-event', message: `The protocol client rejected a frame: ${first ? `${first.path.map(String).join('.') || '(root)'}: ${first.message}` : 'invalid event'}${issues.length > 1 ? ` and ${issues.length - 1} more` : ''}` };
   }
   return undefined;
 }
@@ -441,9 +442,9 @@ export function createRuntime(options: RuntimeOptions): Runtime {
         // The recorder reports capture problems on the exchange; the client's run carries on.
       }
     };
-    const addRunFinding = (kind: FindingKind, message: string) => {
+    const addRunFinding = (rule: CatalogueRuleId, message: string) => {
       try {
-        store.addFinding({ id: `${recordId}:finding-${(findings += 1)}`, kind, message, subject: { type: 'run', id: recordId } });
+        store.addFinding({ id: `${recordId}:finding-${(findings += 1)}`, kind: kindOf(rule), rule, message, subject: { type: 'run', id: recordId } });
       } catch {
         // No run record to point at (the exchange was never captured).
       }
@@ -492,7 +493,7 @@ export function createRuntime(options: RuntimeOptions): Runtime {
       },
       onRunFailed({ error: failure }) {
         const finding = clientFailure(failure);
-        if (finding) addRunFinding(finding.kind, finding.message);
+        if (finding) addRunFinding(finding.rule, finding.message);
       },
     };
 

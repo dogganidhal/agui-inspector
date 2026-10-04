@@ -257,8 +257,8 @@ test('a transport failure before any response is recorded, shown, and rethrown u
   assert.equal(exchange.status, undefined);
   assert.equal(exchange.requestBody, scenario.request.body, 'the request is still inspectable');
   assert.ok(exchange.elapsedMs! > 0);
-  assert.deepEqual(memory.findings.map((finding) => [finding.kind, finding.subject]), [
-    ['transport', { type: 'exchange', id: exchange.id }],
+  assert.deepEqual(memory.findings.map((finding) => [finding.kind, finding.rule, finding.subject]), [
+    ['transport', 'transport.failed', { type: 'exchange', id: exchange.id }],
   ]);
 });
 
@@ -274,7 +274,7 @@ test('a failure mid-stream keeps what arrived, reports the failure, and invents 
   assert.equal(exchange.transportError, 'TypeError: network error');
   assert.deepEqual(memory.bytesOf(exchange.id), scenarioBytes(scenario), 'the half event is kept as received bytes');
   assert.ok(!decoder.decode(memory.bytesOf(exchange.id)).includes('RUN_FINISHED'));
-  assert.deepEqual(memory.findings.map((finding) => finding.kind), ['transport']);
+  assert.deepEqual(memory.findings.map((finding) => [finding.kind, finding.rule]), [['transport', 'transport.failed']]);
 });
 
 test('a slow client does not slow or lose the recording', async () => {
@@ -579,8 +579,8 @@ test('a sink that throws is reported as a capture failure and never reaches the 
 
   assert.deepEqual(clientBytes, scenarioBytes(scenario), 'the client branch is unaffected');
   assert.equal(exchange.transport, 'completed', 'the wire itself finished');
-  assert.deepEqual(memory.findings.map((finding) => [finding.kind, finding.subject]), [
-    ['capture', { type: 'exchange', id: exchange.id }],
+  assert.deepEqual(memory.findings.map((finding) => [finding.kind, finding.rule, finding.subject]), [
+    ['capture', 'capture.failed', { type: 'exchange', id: exchange.id }],
   ]);
   assert.match(memory.findings[0]!.message, /reader exploded/);
 });

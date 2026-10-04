@@ -307,7 +307,10 @@ export interface RawFrame {
   readonly provenance: 'raw';
 }
 
-export type FindingKind = 'json' | 'schema' | 'sequence' | 'terminal' | 'transport' | 'capture' | 'projection';
+export type FindingKind = 'json' | 'schema' | 'sequence' | 'terminal' | 'transport' | 'capture' | 'projection' | 'compat' | 'capability';
+
+/** `<family>.<problem>`, for example `sequence.text-message-not-open`. The catalogue is core/rules/catalogue.ts. */
+export type RuleId = string;
 
 export type FindingSubject =
   | { readonly type: 'frame'; readonly id: FrameId }
@@ -317,6 +320,8 @@ export type FindingSubject =
 export interface Finding {
   readonly id: FindingId;
   readonly kind: FindingKind;
+  /** Absent only in a finding read from a 0.1.0 session file. Its family is always `kind`. */
+  readonly rule?: RuleId;
   readonly message: string;
   readonly subject: FindingSubject;
 }

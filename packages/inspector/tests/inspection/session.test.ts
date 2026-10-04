@@ -136,6 +136,41 @@ test('import allows header-like words inside payloads, which are evidence and no
   assert.ok(result.ok, 'payload text is not a header field');
 });
 
+test('a finding keeps its rule through export and import, and a 0.1.0 file without rules still opens', async () => {
+  const session = await richSession();
+  assert.ok(session.findings.length > 0 && session.findings.every((finding) => finding.rule !== undefined), 'every finding the inspector created has a rule');
+  const file = JSON.parse(serializeSession(session)) as { session: { findings: Array<Record<string, unknown>> } };
+  assert.deepEqual(Object.keys(file.session.findings[0]!), ['id', 'kind', 'rule', 'message', 'subject']);
+  const again = parseSession(JSON.stringify(file));
+  assert.ok(again.ok);
+  assert.deepEqual(again.session.findings.map((finding) => finding.rule), session.findings.map((finding) => finding.rule));
+
+  // What 0.1.0 wrote: the same findings with no `rule`.
+  for (const finding of file.session.findings) delete finding.rule;
+  const old = parseSession(JSON.stringify(file));
+  assert.ok(old.ok, 'a 0.1.0 session opens');
+  assert.ok(old.session.findings.length > 0 && old.session.findings.every((finding) => !('rule' in finding)), 'nothing is invented for an old finding');
+  assert.equal(serializeSession(old.session).includes('"rule"'), false, 'and nothing is written for it');
+});
+
+test('import accepts a well-formed rule that this version does not know and the compat and capability kinds, and rejects a bad rule', async () => {
+  const withRule = async (patch: Record<string, unknown>) => {
+    const file = await fileOf();
+    Object.assign(file.session.findings![0]!, patch);
+    return file;
+  };
+  const kind = (await fileOf()).session.findings![0]!.kind as string;
+  assert.ok(parseSession(JSON.stringify(await withRule({ rule: `${kind}.from-a-newer-version` }))).ok, 'unknown but well formed');
+  for (const family of ['compat', 'capability']) {
+    const result = parseSession(JSON.stringify(await withRule({ kind: family, rule: `${family}.something` })));
+    assert.ok(result.ok, `${family} findings open`);
+  }
+  rejects(await withRule({ rule: 'Not A Rule' }), /findings\[0\].*rule must be <family>\.<problem>/);
+  rejects(await withRule({ rule: 7 }), /findings\[0\].*rule must be <family>\.<problem>/);
+  rejects(await withRule({ rule: `${kind === 'json' ? 'schema' : 'json'}.invalid` }), /findings\[0\].*rule family must match kind/);
+  rejects(await withRule({ severity: 'high' }), /findings\[0\].*unknown field.*severity/i);
+});
+
 test('import rejects invalid references', async () => {
   const frameRef = await fileOf();
   frameRef.session.exchanges![1]!.frameIds![0] = 'no-such-frame';

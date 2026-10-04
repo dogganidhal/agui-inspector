@@ -335,6 +335,38 @@ test('an expanded frame shows its findings and its raw text as received', async 
   assert.match(html, /unparsed/);
 });
 
+test('a finding shows its rule id after its label in the frame detail and on the exchange, and one without a rule shows as before', async () => {
+  const session = await richSession();
+  const invalid = session.exchanges[2]!;
+  const bad = session.frames.find((frame) => frame.exchangeId === invalid.id && frame.jsonVerdict === 'invalid')!;
+  const runExchange = session.runs.find((run) => run.id === 'run-rec-1')!.exchangeId;
+  const html = render(session, { openExchanges: new Map([[invalid.id, true], [runExchange, true]]), openFrames: new Set([bad.id]) });
+  assert.match(html, /<code>json\.invalid<\/code>/, 'the frame detail names the rule');
+  assert.match(html, /<code>sequence\.text-message-not-open<\/code>/, 'the run finding on the exchange names the rule');
+  assert.match(html, /<span class="agui-fr-ver"><span[^>]*>json<\/span>/, 'the frame row keeps its short kind tag');
+
+  const old: InspectionSession = {
+    ...session,
+    findings: session.findings.map(({ rule: _rule, ...rest }) => rest),
+  };
+  const before = render(old, { openExchanges: new Map([[invalid.id, true]]), openFrames: new Set([bad.id]) });
+  assert.doesNotMatch(before, /<code>/, 'a 0.1.0 finding has no rule to show');
+  assert.match(before, /Data is not valid JSON/);
+});
+
+test('compat and capability findings use the warning styling of sequence findings, the other kinds the error styling', async () => {
+  const session = await richSession();
+  const subject = { type: 'frame', id: session.frames.find((frame) => frame.classification === 'data')!.id } as const;
+  const kinds = { compat: 'compat.null-optional-field', capability: 'capability.state-delta-unsupported', sequence: 'sequence.first-event', json: 'json.invalid', capture: 'capture.failed' } as const;
+  const findings = Object.entries(kinds).map(([kind, rule]) => ({ id: `x-${kind}`, kind: kind as keyof typeof kinds, rule, message: `message of ${kind}`, subject }));
+  const html = render({ ...session, findings: [...session.findings, ...findings] }, { openExchanges: new Map([[session.frames.find((frame) => frame.id === subject.id)!.exchangeId, true]]), openFrames: new Set([subject.id]) });
+  const variantOf = (kind: string) => html.match(new RegExp(`agui-finding--(\\w+)[^>]*>(?:(?!</div>)[\\s\\S])*message of ${kind}`))?.[1];
+  assert.deepEqual(
+    Object.keys(kinds).map((kind) => [kind, variantOf(kind)]),
+    [['compat', 'warn'], ['capability', 'warn'], ['sequence', 'warn'], ['json', 'err'], ['capture', 'err']],
+  );
+});
+
 test('filters show counts and shown/total on every exchange header', async () => {
   const session = await richSession();
   assert.doesNotMatch(render(session), /\d+\/\d+ frames/);

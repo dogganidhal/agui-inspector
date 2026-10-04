@@ -302,6 +302,7 @@ test('a sequence violation becomes a finding on the run while every later frame 
   const sequence = session.findings.filter((finding) => finding.kind === 'sequence');
   assert.equal(sequence.length, 1);
   assert.deepEqual(sequence[0]?.subject, { type: 'run', id: 'run-1' });
+  assert.equal(sequence[0]?.rule, 'sequence.text-message-not-open');
   assert.match(sequence[0]?.message ?? '', /No active text message found/);
   assert.equal(session.findings.some((finding) => finding.kind === 'terminal'), false, 'the stream did end with a valid RUN_FINISHED');
   assert.equal(runtime.getState().error, undefined, 'stream problems are findings, not a connection banner');
@@ -316,8 +317,8 @@ test('a frame that is not JSON ends the client run but not the recording; later 
   const session = await settle();
   assert.deepEqual(session.frames.map((frame) => [frame.eventType, frame.jsonVerdict]), [['RUN_STARTED', 'valid'], [undefined, 'invalid'], ['TEXT_MESSAGE_START', 'valid'], ['RUN_FINISHED', 'valid']]);
   assert.equal(session.frames[1]?.data, '{not json at all', 'the received text is untouched');
-  assert.ok(session.findings.some((finding) => finding.kind === 'json' && finding.subject.type === 'frame'));
-  assert.ok(session.findings.some((finding) => finding.kind === 'json' && finding.subject.type === 'run'), 'the client rejection is on the run too');
+  assert.ok(session.findings.some((finding) => finding.rule === 'json.invalid' && finding.subject.type === 'frame'));
+  assert.ok(session.findings.some((finding) => finding.rule === 'json.invalid' && finding.subject.type === 'run'), 'the client rejection is on the run too');
   assert.equal(session.exchanges[0]?.transport, 'completed');
 });
 
@@ -327,7 +328,8 @@ test('a schema-invalid or unknown-type frame stays inspectable and capture reach
   await runtime.send('invalid');
   const session = await settle();
   assert.deepEqual(session.frames.map((frame) => [frame.eventType, frame.schemaVerdict]), [['RUN_STARTED', 'valid'], ['TEXT_MESSAGE_START', 'invalid'], ['NOT_A_REAL_EVENT', 'unknown-type'], ['RUN_FINISHED', 'valid']]);
-  assert.ok(session.findings.some((finding) => finding.kind === 'schema' && finding.subject.type === 'run'));
+  assert.ok(session.findings.some((finding) => finding.rule === 'schema.invalid-event' && finding.subject.type === 'run'));
+  assert.ok(session.findings.some((finding) => finding.rule === 'schema.unknown-event-type' && finding.subject.type === 'frame'));
 });
 
 test('a stream that ends without a terminal event gets a terminal finding on the run, and the outcome is unknown, not made up', async () => {
@@ -338,6 +340,7 @@ test('a stream that ends without a terminal event gets a terminal finding on the
   assert.deepEqual(session.runs[0]?.outcome, { kind: 'unknown' });
   const terminal = session.findings.filter((finding) => finding.kind === 'terminal');
   assert.deepEqual(terminal.map((finding) => finding.subject), [{ type: 'run', id: 'run-1' }]);
+  assert.equal(terminal[0]?.rule, 'terminal.missing');
   assert.equal(session.frames.length, 2);
 });
 
