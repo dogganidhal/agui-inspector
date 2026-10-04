@@ -76,7 +76,7 @@ does not touch it.
 
 1. `contracts.ts`: `ClientProfileSettings.interruptReply?`, `.interruptPayloads?`, `.toolResults?`; `InterruptAnswer.automatic?`,
    `ToolResultDraft.automatic?`; `AutomaticReplies`; `Run.automaticReplies?`.
-2. `core/profiles/index.ts`: validate and copy the three fields in `parseProfileSettings`, plus four small edit helpers for the panel (`setInterruptReply`, `setInterruptPayload`, `setToolResult`, `removeTool`) that leave no empty map and remove a tool together with its script, carry them in `envelope`, update
+2. `core/profiles/index.ts`: validate and copy the three fields in `parseProfileSettings`, plus three small edit helpers for the panel (`setInterruptPayload`, `setToolResult`, `removeTool`) that leave no empty map and remove a tool together with its script, carry them in `envelope`, update
    the comments that count seven settings.
 3. `core/runtime/replies.ts`: `AUTOMATIC_REPLY_LIMIT`, `automate` (which also picks the payload for an interrupt's
    reason), `automaticReplies`.

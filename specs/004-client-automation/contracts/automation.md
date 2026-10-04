@@ -98,18 +98,17 @@ export function automaticReplies(replies: PendingReplies): AutomaticReplies | un
 
 ## Profile edits (`core/profiles/index.ts`)
 
-The settings panel builds the next profile with four small pure functions, each returning a new profile that then goes
+The settings panel builds the next profile with three small pure functions, each returning a new profile that then goes
 through `parseProfileSettings`. They exist so that one change can touch two settings and so that no map is left empty.
 
 ```ts
-export function setInterruptReply(settings, reply: InterruptReply | undefined): ClientProfileSettings;
 export function setInterruptPayload(settings, reason: string, payload: JsonValue | undefined): ClientProfileSettings;
 export function setToolResult(settings, name: string, text: string | undefined): ClientProfileSettings;
 /** Removes the tool and its scripted result together, so the profile stays valid. */
 export function removeTool(settings, name: string): ClientProfileSettings;
 ```
 
-An unset setting is a missing key. Setting the last entry of a map to `undefined` removes the map. An edit keeps the
+An unset setting is a missing key. The interrupt reply control drops or sets its key inline, as the message mode control does. Setting the last entry of a map to `undefined` removes the map. An edit keeps the
 order of the other entries, and `__proto__` is an ordinary own key.
 
 ## Runtime behavior (`core/runtime/index.ts`)

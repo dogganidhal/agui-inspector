@@ -12,7 +12,7 @@ import { useId, useRef, useState, type ReactElement, type ReactNode } from 'reac
 import type { AgentConfig, ClientProfileSettings, InterruptReply, JsonValue, SettingsViewProps } from '../../contracts';
 import { describeCapabilities, type CapabilityGroupView, type LoadedCapabilities } from '../../core/config/index';
 import { isJsonObject } from '../../core/config/validation';
-import { parseProfileSettings, removeTool, setInterruptPayload, setInterruptReply, setToolResult } from '../../core/profiles/index';
+import { parseProfileSettings, removeTool, setInterruptPayload, setToolResult } from '../../core/profiles/index';
 import { Button, CodeBlock, Editor, Field, Finding, Icon, Label, Popover, SegmentedControl, Switch, Tag } from '../theme/primitives';
 
 /** What the caller has learned about the selected agent's declared capabilities. */
@@ -472,7 +472,10 @@ function ProfilePanel({ props, agent }: { props: SettingsViewProps; agent?: Agen
                 { value: 'resolve', label: 'Resolve' },
                 { value: 'cancel', label: 'Cancel' },
               ]}
-              onChange={(choice) => commit(setInterruptReply(profile, choice === 'manual' ? undefined : (choice as InterruptReply)))}
+              onChange={(choice) => {
+                const { interruptReply: _previous, ...rest } = profile;
+                commit(choice === 'manual' ? rest : { ...rest, interruptReply: choice as InterruptReply });
+              }}
             />
           </Row>
         </div>

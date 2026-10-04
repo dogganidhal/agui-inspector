@@ -22,7 +22,6 @@ import {
   FORMAT_VERSION,
   type A2uiAction,
   type ClientProfileSettings,
-  type InterruptReply,
   type JsonObject,
   type JsonValue,
   type ProfileEnvelope,
@@ -163,11 +162,6 @@ function withEntry<T>(map: Readonly<Record<string, T>> | undefined, key: string,
   } else if (at >= 0) entries[at] = [key, value];
   else entries.push([key, value]);
   return entries.length === 0 ? undefined : Object.fromEntries(entries);
-}
-
-export function setInterruptReply(settings: ClientProfileSettings, interruptReply: InterruptReply | undefined): ClientProfileSettings {
-  const { interruptReply: _previous, ...rest } = settings;
-  return interruptReply === undefined ? rest : { ...rest, interruptReply };
 }
 
 /** Sets the payload for an interrupt reason, or removes it when `payload` is undefined. */

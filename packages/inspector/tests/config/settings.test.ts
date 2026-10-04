@@ -20,7 +20,6 @@ import {
   removeTool,
   saveProfile,
   setInterruptPayload,
-  setInterruptReply,
   setToolResult,
 } from '../../src/core/profiles/index.ts';
 
@@ -438,13 +437,8 @@ test('the automation keys are not run input: tools, context and properties are t
   assert.deepEqual(automatic, plain);
 });
 
-test('the panel\'s edits set and clear each automation setting, keep the order, and never leave an empty map or a "by hand" value', () => {
+test('the panel\'s edits set and clear the payloads and results, keep the order, and never leave an empty map', () => {
   let settings = profile({ tools: [tool('pick_color'), tool('pick_size')] });
-  settings = setInterruptReply(settings, 'resolve');
-  assert.equal(settings.interruptReply, 'resolve');
-  settings = setInterruptReply(settings, undefined);
-  assert.equal('interruptReply' in settings, false);
-
   settings = setInterruptPayload(settings, 'approval', { approved: true });
   settings = setInterruptPayload(settings, 'input', 'text');
   settings = setInterruptPayload(settings, 'approval', { approved: false });
@@ -463,7 +457,7 @@ test('the panel\'s edits set and clear each automation setting, keep the order, 
 
   // Every edit stays valid for the profile checks.
   assert.equal(parseProfileSettings(settings).ok, true);
-  assert.equal(parseProfileSettings(setInterruptPayload(setInterruptReply(settings, 'cancel'), '__proto__', { x: 1 })).ok, true);
+  assert.equal(parseProfileSettings(setInterruptPayload(settings, '__proto__', { x: 1 })).ok, true);
 });
 
 test('removing a tool removes its scripted result in the same edit, and the profile stays valid', () => {
