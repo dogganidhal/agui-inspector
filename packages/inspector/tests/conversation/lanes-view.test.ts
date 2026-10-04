@@ -292,6 +292,12 @@ test('the timeline has one chart for each run that has lanes, with a row for eac
   assert.match(run, /style="left:10\.000%;width:70\.000%"/, 'the run from 10 to 80 ms');
 });
 
+test('the last whole-second tick of a 6.82 s axis is left out, so it does not run into the end label', () => {
+  const html = render(played([RUN_STARTED, started('a'), finished('a'), RUN_FINISHED], { elapsed: 6820 }));
+  const axis = /class="agui-tl-axis">([\s\S]*?)<\/div>/.exec(html)![1]!;
+  assert.deepEqual([...axis.matchAll(/<span[^>]*>([^<]*)<\/span>/g)].map((match) => match[1]), ['0', '1s', '2s', '3s', '4s', '5s', '6.82 s']);
+});
+
 test('nested rows indent by their depth and come after their parent', () => {
   const html = render(played([RUN_STARTED, started('a'), started('b', { parentSubagentRunId: 'a' }), started('c', { parentSubagentRunId: 'b' }), finished('c'), finished('b'), finished('a'), RUN_FINISHED]));
   const indents = [...html.matchAll(/margin-left:calc\(var\(--u\) \* (\d+)\)/g)].map((match) => Number(match[1]));

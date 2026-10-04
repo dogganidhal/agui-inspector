@@ -18,11 +18,15 @@ export const ROW_LIMIT = 100;
 
 const pct = (ms: number, axis: number) => Math.min(Math.max((ms / axis) * 100, 0), 100);
 
-/** The frames list's tick rule: about ten whole-second labels, none in the last tenth. */
+/** Characters of the axis font (10.5 px mono) across the narrowest track, 60 units. */
+const AXIS_CHARS = 38;
+
+/** About ten whole-second labels, none that would touch the end label: it is right-aligned and rarely a whole second. */
 function ticksOf(axisMs: number): number[] {
   const step = Math.max(1, Math.ceil(axisMs / 1000 / 10));
+  const end = formatMs(axisMs).length;
   const seconds: number[] = [];
-  for (let second = step; second * 1000 < axisMs * 0.9; second += step) seconds.push(second);
+  for (let second = step; (1 - (second * 1000) / axisMs) * AXIS_CHARS >= `${second}s`.length / 2 + end + 1; second += step) seconds.push(second);
   return seconds;
 }
 
