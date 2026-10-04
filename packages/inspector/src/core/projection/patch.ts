@@ -125,3 +125,6 @@ export function applyJsonPatch(document: JsonValue, patch: readonly JsonPatchOpe
   }
   return { ok: true, value: root };
 }
+
+/** The one rule for a state delta: it applies to an empty object when there is no state yet. */
+export const applyStateDelta = (state: JsonValue | undefined, operations: readonly JsonPatchOperation[]): PatchResult => applyJsonPatch(state ?? {}, operations);

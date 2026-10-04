@@ -3,7 +3,7 @@ title: Event reference
 description: What each of the 31 AG-UI event types becomes in the conversation and state views, and which parts are received or derived.
 ---
 
-The conversation and state views turn the 31 AG-UI event types into a transcript and a current state. The frames list in Inspection shows every event exactly as received ([read frames and findings](./inspection.mdx)). Find an event here to see where it appears on screen, or why a frame has no entry in the conversation.
+The conversation and state views turn the 31 AG-UI event types into a transcript and a state history. The frames list in Inspection shows every event exactly as received ([read frames and findings](./inspection.mdx)). Find an event here to see where it appears on screen, or why a frame has no entry in the conversation.
 
 ## Received and derived
 
@@ -12,7 +12,7 @@ The recorder keeps raw frames: the text received, in arrival order, with its off
 - Durations of runs and steps are the closing frame's offset minus the opening frame's offset. A tooltip says "Derived from frame offsets, not received".
 - Parsed tool arguments show once the call completes. Until then the raw fragments show, and stay inspectable.
 - Expanded chunk events are derived entries whose source is the chunk frame. The chunk stays in the frames list, and the entry it opened has a dashed `from …_CHUNK` tag.
-- The current state is the snapshots and deltas applied in order (see [State](#state)).
+- The current state is the snapshots and deltas applied in order (see [State](#state)). The state at an earlier point, and the diff of each change, are derived from the same frames.
 - The transcript is built from events, plus the messages in each run's recorded input.
 
 Frames that are not valid events (not JSON, unknown type, failed schema) add nothing here. Their finding stays in the frames list. A valid event that refers to something that never started, such as `TEXT_MESSAGE_CONTENT` for an unknown message, gets a "Not shown" note linked to its frame. The note sits inside its run, where that frame arrived, so later runs never move it. The projection never invents the missing start.
@@ -59,7 +59,7 @@ In the frames list, run events also mark run boundaries. [Runs](#runs) explains 
 
 ### State
 
-- `STATE_SNAPSHOT` and `STATE_DELTA` add nothing to the conversation. They appear in the state view (see [State](#state)).
+- `STATE_SNAPSHOT` and `STATE_DELTA` add nothing to the conversation. They appear in the state view, as points in its history (see [State history](#state-history)).
 
 ### Messages snapshot
 
@@ -128,9 +128,64 @@ Each expansion is a derived entry (`derivation: chunk-expansion`) whose `sources
 
 ## State
 
-The current state is what the next run carries. It starts from the first run's recorded input state. Then each `STATE_SNAPSHOT` (replace) and `STATE_DELTA` (JSON Patch, RFC 6902) applies in order. The state view lists them newest first, with its run, offset and one line for each operation. A delta that cannot be applied shows as "not applied" with the reason. The state keeps its last valid value, and the frame stays in the frames list.
+The current state is what the next run carries. It starts from the first run's recorded input state. Then each `STATE_SNAPSHOT` (replace) and `STATE_DELTA` (JSON Patch, RFC 6902) applies in order. A delta that cannot be applied shows as "not applied" with the reason. The state keeps its last valid value, and the frame stays in the frames list.
+
+The state view shows the current state at the top. Under it, a history lists every snapshot and delta of the thread, so you can see how the state got there.
 
 A new thread starts from its own state. Earlier exchanges leave the current conversation but stay in the session. Both views show the current thread, even before it has an exchange. An imported recording has no live thread, so the views show the thread of its latest conversation exchange. The views read only raw frames, so a recording shows the same conversation and state as the live capture did.
+
+### State history
+
+The history lists the changes newest first. Each row shows the offset, the event type, the run, the frame number and a short summary. For a delta, the summary is its first operation and how many more it has. For a snapshot, it is "Replaced the state". If the first run sent an input state, the history ends with a row for that starting state. A thread that has a starting state but no state event has no history to show.
+
+Each row is a point. Select a point to see:
+
+- the full state after that change;
+- the diff, which is what the change did to the state;
+- the operations the change carried, for a delta.
+
+The newest point is selected by default. It is the current state and keeps the label "Current state". When you select an older point, a banner says "Past state" and tells you how many newer changes there are. A past state is not what the next run carries. "Back to latest" returns to the current state.
+
+The inspector builds each past state from the recorded frames with the same rules as the current state. It never stores them, and it says that they are derived. The frame number in the label is a button that shows the frame in the frames list.
+
+### Read a diff
+
+The diff compares the state before the change with the state after it. Each line is one path:
+
+- `+ added` is a new path, with its value.
+- `- removed` is a path that is gone, with its value.
+- `~ changed` is a path with a new value. It shows the old value and the new one.
+
+The word and the sign tell you the kind of each line. The colored stripe next to it only repeats it. Paths are JSON Pointers, the same as in the operations. The root of the state shows as `(root)`.
+
+The diff shows the net effect on the state. The operations are listed apart from it. A `move` shows as a removed path and an added path. A `copy` shows as an added path. A `replace` with the same value, and a `test`, change nothing, so the diff says "No net change." Two objects with the same members in a different order are equal. Arrays are compared by position, as JSON Patch counts them. If a delta removes the first item of a list, the items after it show as changed and the last one shows as removed.
+
+A snapshot is compared with the state before it. A first snapshot with no earlier state shows in full as "First state of the thread" and has no diff. A delta that cannot be applied has an empty diff, because the state did not change.
+
+A value longer than 80 characters is shortened. Open it to read the whole value. A diff with more than 100 lines shows the first 100 and a button for the rest.
+
+### Move through the history
+
+The history is one list with one tab stop. Press Tab to move focus to it, then use these keys:
+
+| Key | Action |
+| --- | --- |
+| Down arrow | Select the next older point |
+| Up arrow | Select the next newer point |
+| Home | Select the newest point, which is the current state |
+| End | Select the oldest point |
+
+The selected point scrolls into view, and a screen reader announces each point as you move. Arrow keys act only while the list has focus, so the message box keeps its keys. "Back to latest", the frame number, the operations, the long values and "Show more" are controls that Tab reaches and Enter or Space opens. After "Back to latest", focus goes to the list.
+
+### Live runs and imported recordings
+
+On a live run, the newest point follows the stream. A new change appears at the top, and the state and the diff update without any action. If you select an older point, it stays selected. Its state and diff do not change while new changes arrive. The banner counts the newer changes, and "Back to latest" jumps to the current state.
+
+The selection is not kept when you leave the State tab, start a new thread or import a recording. The history then starts at the newest point again.
+
+An imported recording shows the same history as the live capture did. The history needs no extra field in the file, so recordings from 0.1.0 work too. Browsing the history sends no request, writes nothing to browser storage and does not change the recording. An export is the same before and after.
+
+A past state of a very large state, after thousands of deltas, can take a moment to build, because each delta copies the state.
 
 For how these views are built and tested, see [Architecture and UI internals](./internals.mdx#event-views-wiring).
 

@@ -188,6 +188,24 @@ after every store change, so the frames list shows each expansion under its chun
 only what is new. The projection reads only raw frames, without client callbacks, so it also works on an imported
 [recording](./recordings.mdx).
 
+### State history modules
+
+The [state history](./event-views.mdx#state-history) comes from three framework-free modules in `core/projection` and the view parts in `views/conversation/state-history.tsx`:
+
+```ts
+import { applyStateDelta } from 'core/projection/patch';
+import { diffStates } from 'core/projection/state-diff';
+import { pointAt, pointCount, stateAfter } from 'core/projection/state-history';
+```
+
+The projection keeps its single fold of snapshots and deltas. `StateModel` gains an optional `initial`, the state the first run carried in its input. A `StateChange` can carry a `checkpoint`, the state after that change, on every 64th delta since the last snapshot or checkpoint. A checkpoint is a reference to an object the fold already made, so it costs no copy.
+
+`applyStateDelta(state, operations)` is the one rule for a delta: it applies to an empty object when there is no state yet. The projection and the history both call it, so a past state cannot differ from the current one.
+
+A point is an index into `model.state.changes`, which is newest first. Index 0 is the newest change and `changes.length` is the starting state, when there is one. `stateAfter(model, index)` walks to the nearest older anchor (a snapshot, a checkpoint or the starting state) and replays at most 63 deltas. `pointAt(model, index)` adds the diff against the state before the point. `diffStates(before, after)` returns the added, removed and changed paths.
+
+`StateView` keeps its props. It keeps the selection in component state, as the key of a change or none to follow the latest, and drops it when the store or the thread changes. `StateDetail` and `selectedIndex` are pure, so a test can render any point without state.
+
 ## A2UI view wiring
 
 [A2UI surfaces](./a2ui.mdx) describes what users see. The view behind it works on its own or inside the conversation
