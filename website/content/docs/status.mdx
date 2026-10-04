@@ -16,10 +16,10 @@ Version 0.1.0 (the minimum viable product) is implemented on `main`. The public 
 | --- | --- |
 | Hosted static page with a `hosting-config.json` | Available: the [demo](./demo.mdx) is one, or build the page from a checkout |
 | Embedded in Starlette or FastAPI, through `mount_inspector` | 0.1.0 on PyPI: `pip install "agui-inspector[embedded]"` |
-| Static assets from the npm package's `staticAssetsPath`, served by any other server | Available from a source checkout |
-| CLI: a local command that serves the page and proxies to a target | Planned for 1.0.0 |
-| JS helpers: Express, Hono and Next.js route-handler integrations | Planned for 1.0.0 |
-| In-app: a custom element that watches an `AbstractAgent` your application already runs | Planned for 1.0.0 |
+| Static assets from the npm package's `staticAssetsPath`, served by any other server | 0.1.0 on npm: `npm install agui-inspector` |
+| CLI: a local command that serves the page and proxies to a target | Planned for [0.2.0](https://github.com/dogganidhal/agui-inspector/blob/main/ROADMAP.md#020) |
+| JS helpers: Express, Hono and Next.js route-handler integrations | Planned for [0.2.0](https://github.com/dogganidhal/agui-inspector/blob/main/ROADMAP.md#020) |
+| In-app: a custom element that watches an `AbstractAgent` your application already runs | Not planned. See the [roadmap decisions](https://github.com/dogganidhal/agui-inspector/blob/main/ROADMAP.md#decisions) |
 
 Python is the first language with an embedded helper, not the only one planned. Until the JavaScript helpers ship, a
 server in any language can use the hosted page or serve the static assets.
@@ -27,11 +27,10 @@ server in any language can use the hosted page or serve the static assets.
 ## Release status
 
 The Python package `agui-inspector` 0.1.0 has been on [PyPI](https://pypi.org/project/agui-inspector/) since 2026-10-03, published from CI through
-trusted publishing with attestations. The npm package is not published yet. Its release is in the same workflow and waits for the maintainer's one-time setup. The
-5,000-frame responsiveness certification on the reference machine is still open.
+trusted publishing with attestations. The npm package `agui-inspector` 0.1.0 has been on [npm](https://www.npmjs.com/package/agui-inspector) since 2026-10-04,
+published from the same workflow with provenance.
 [Release process](./releases.mdx) explains how a release happens. The
-[roadmap](https://github.com/dogganidhal/agui-inspector/blob/main/ROADMAP.md) tracks the release, the 1.0.0 plans and
-the open decisions.
+[roadmap](https://github.com/dogganidhal/agui-inspector/blob/main/ROADMAP.md) says what 0.2.0 plans and why there is no 1.0.0 target.
 
 ## Where your data goes
 
@@ -67,7 +66,7 @@ The configuration (including presets), the client profile and recordings are at 
 Until 1.0.0, a release can change them in incompatible ways without changing the version number. One release may
 refuse a recording made by another. [Configuration](./configuration.mdx) lists breaking changes to these files and to
 `hosting-config.json`, with their migration steps, and the changelog announces them. Version 1, with published JSON
-Schemas, is planned for the stable release. [Recordings](./recordings.mdx) describes the recording format.
+Schemas, comes only with a stable release, and the roadmap plans none yet. [Recordings](./recordings.mdx) describes the recording format.
 
 ## Supported versions
 

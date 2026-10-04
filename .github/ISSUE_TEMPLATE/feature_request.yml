@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Check the [roadmap](https://github.com/dogganidhal/agui-inspector/blob/main/ROADMAP.md) first. Many 1.0.0 items are planned but not specified yet, and an issue is the place to shape them.
+        Check the [roadmap](https://github.com/dogganidhal/agui-inspector/blob/main/ROADMAP.md) first. The 0.2.0 items are planned but not specified yet, and an issue is the place to shape them.
   - type: textarea
     id: problem
     attributes:

@@ -64,7 +64,8 @@ routes and an example app.
 
 ### With any other server
 
-Python is the first language with a helper, and JavaScript helpers for Express, Hono and Next.js are planned for 1.0.0.
+Python is the first language with a helper. JavaScript helpers for Express, Hono and Next.js are planned for
+[0.2.0](ROADMAP.md#020).
 A server in any language can already use the hosted page: deploy it on any static host, or point the public demo at
 your server. Your server must allow the page's origin through CORS.
 [Host the static page](https://dogganidhal.github.io/agui-inspector/docs/hosted/) explains both.
@@ -106,9 +107,9 @@ The guides are at <https://dogganidhal.github.io/agui-inspector/docs/>. Good pla
 
 ## Status
 
-Version 0.1.0 is on [PyPI](https://pypi.org/project/agui-inspector/), and the [changelog](packages/python/CHANGELOG.md)
-lists what each release changed. The npm package is not published yet. The [roadmap](ROADMAP.md#current-status) lists
-what is still to verify and what 1.0.0 adds.
+Version 0.1.0 is on [PyPI](https://pypi.org/project/agui-inspector/) and [npm](https://www.npmjs.com/package/agui-inspector).
+The [Python changelog](packages/python/CHANGELOG.md) and the [npm changelog](packages/inspector/CHANGELOG.md) list what
+each release changed. The [roadmap](ROADMAP.md#020) lists what 0.2.0 plans.
 
 ## Contributing
 

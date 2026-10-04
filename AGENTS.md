@@ -6,8 +6,8 @@ Instructions for coding agents working in this repository. Humans should start w
 agui-inspector is a developer tool for AG-UI servers. It records every request and SSE frame as received, validates them
 against the protocol, drives runs like a client (interrupts, client tools, A2UI v0.9 surfaces) and sends raw requests no
 client would. One static bundle serves every mode: a hosted page, a Python helper for Starlette and FastAPI, and npm
-static assets. A public demo runs on GitHub Pages. The Python package is on PyPI (0.1.0). The npm package is not
-published yet.
+static assets. A public demo runs on GitHub Pages. Both packages are on their registries at 0.1.0: the Python package
+on PyPI and the npm package on npm.
 
 ## Development workflow
 

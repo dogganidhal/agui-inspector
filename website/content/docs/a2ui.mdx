@@ -89,7 +89,7 @@ The only catalog is the bundled basic catalog, under exactly two ids with the sa
 | `https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json` | Declared by the renderer package |
 | `https://a2ui.org/specification/v0_9/basic_catalog.json` | Default of `@ag-ui/a2ui-middleware` 0.0.11 when the agent sets none (the one built-in alias) |
 
-One activity can use both. The inspector never rewrites `createSurface`, so the activity JSON and the recording show the id the agent sent. Any other id gives "Catalog not found" with the entry as received. Near misses fail too, for example a trailing slash or a `v0_8` path. Other aliases, and loading catalogs from an address, are left for 1.0.0.
+One activity can use both. The inspector never rewrites `createSurface`, so the activity JSON and the recording show the id the agent sent. Any other id gives "Catalog not found" with the entry as received. Near misses fail too, for example a trailing slash or a `v0_8` path. Catalog aliases in the configuration are planned for [0.2.0](https://github.com/dogganidhal/agui-inspector/blob/main/ROADMAP.md#020). Loading catalogs from an address is not planned.
 
 ## Components
 
@@ -175,7 +175,7 @@ The renderer's `CheckBox` draws its own message, and the button cannot see it. A
 
 Surfaces follow the inspector's theme in light and dark mode, so overriding the [public `--agui-*` properties](./theming.mdx#public-properties) restyles them without a rebuild.
 
-In 0.1.0 the renderer is in the main bundle. Loading it on first use is left for 1.0.0.
+In 0.1.0 the renderer is in the main bundle. Loading it on first use is not planned.
 
 For the view's module wiring, its stylesheet and the tests, see [Architecture and UI internals](./internals.mdx#a2ui-view-wiring).
 
