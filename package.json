@@ -25,10 +25,13 @@
   "devDependencies": {
     "@changesets/cli": "3.0.3",
     "@playwright/test": "1.63.0",
+    "@types/express": "5.0.6",
     "@types/node": "24.19.1",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "esbuild": "0.28.2",
+    "express": "5.2.1",
+    "hono": "4.13.13",
     "typescript": "7.0.2"
   },
   "overrides": {

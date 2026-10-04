@@ -1,5 +1,6 @@
 node_modules/
 packages/inspector/dist/
+packages/inspector/lib/
 .build/
 test-results/
 playwright-report/
