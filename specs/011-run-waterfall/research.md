@@ -191,4 +191,4 @@ calls left pending) and `never finishes` (a held-open stream) are used where the
 
 Baseline on `main`: `app.js` 1,188,612 bytes, `app.css` 37,765, total 1,227,500 minified and 308,758 gzipped, against
 2,000,000 and 600,000. The new code is a builder of a few hundred lines, a view of a few hundred lines and a
-stylesheet. The estimate was under 15 KB minified. Measured on 2026-10-04 against `20eb7c4`: +18,770 bytes minified (4,621 in CSS and 14,149 in JS) and +5,027 gzipped, with the tab and without subagent rows. That is 1.3% of the limit.
+stylesheet. The estimate was under 15 KB minified. Measured on 2026-10-04 against `f1736d3`: +19,981 bytes minified (4,621 in CSS and 15,360 in JS) and +5,420 gzipped, with the tab and the subagent rows. That is 1% of the limit.
