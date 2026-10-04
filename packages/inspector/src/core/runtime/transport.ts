@@ -13,17 +13,23 @@
 // - Cookies: none when hosted. Embedded requests to the page's own origin use the host's same-origin
 //   credentials; every other request omits them.
 // - Token: the volatile credential is turned into one header here and nowhere else. It is never part
-//   of a returned value, an error message or anything the recorder is given.
+//   of a returned value, an error message or anything the recorder is given. Headers that plugin providers made for
+//   one request (spec 014) are held to the same rule: they arrive as an argument, are checked here, and a typed token
+//   replaces one of the same name.
 // - Redirects are not followed. A redirect answer is an error the user sees, never a second request.
 // - A browser-level failure (CORS, private-network or mixed-content rules, an unreachable server) is
 //   reported as such. The inspector has no proxy and no bypass for any of them.
 import { AGUI_MEDIA_TYPE } from '@ag-ui/proto';
-import type { GuardedTransport, TransportPolicy, TransportRequest, VolatileAuth } from '../../contracts.ts';
+import type { GuardedTransport, ProvidedHeaders, TransportPolicy, TransportRequest, VolatileAuth } from '../../contracts.ts';
 import { fail, hasUserinfo, ok, type Result } from '../config/validation.ts';
 
-/** `send` may also take the signal that stops the request; the frozen interface needs no more than two parameters. */
+/**
+ * `send` may also take the signal that stops the request, and the headers that plugin providers made for this one request
+ * (spec 014). Like the token they arrive as an argument and never inside the request, so the recorder, which is not given
+ * either, cannot see them. The frozen interface needs no more than two parameters.
+ */
 export interface AbortableTransport extends GuardedTransport {
-  send(request: TransportRequest, auth?: VolatileAuth, signal?: AbortSignal): Promise<Response>;
+  send(request: TransportRequest, auth?: VolatileAuth, signal?: AbortSignal, headers?: ProvidedHeaders): Promise<Response>;
 }
 
 export interface TransportOptions {
@@ -34,6 +40,14 @@ export interface TransportOptions {
 /** The JSON body headers and the response-kind accept header are the transport's own. */
 const RESERVED_HEADER = /^(?:cookie2?|set-cookie|host|content-length|content-type|accept)$/i;
 const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
+const HEADER_VALUE = /^[\t\x20-\x7e\x80-\xff]*$/;
+
+/** Sets `name` on the record, replacing a key that differs only in case: a header exists once, whatever its spelling. */
+function setHeader(headers: Record<string, string>, name: string, value: string): void {
+  const lower = name.toLowerCase();
+  for (const key of Object.keys(headers)) if (key.toLowerCase() === lower) delete headers[key];
+  headers[name] = value;
+}
 
 // The one place a request's Accept header is chosen: a run, a continuation, a surface action and a raw
 // submission all reach a target through `send`, so the encoding they ask for is decided here and nowhere else.
@@ -47,6 +61,19 @@ const ACCEPT = {
 export function headerNameProblem(name: string): string | undefined {
   if (!HEADER_NAME.test(name)) return 'The header name must be a single HTTP header token such as Authorization or X-Api-Key';
   if (RESERVED_HEADER.test(name)) return `The header name "${name}" is set by the inspector or the browser and cannot carry a token`;
+  return undefined;
+}
+
+/**
+ * Why a header from a plugin provider cannot be sent, or undefined. The name follows the same rules as the token's (a token,
+ * and not one the transport or the browser owns: `Accept` carries the encoding of the request and `Content-Type` the
+ * body's), and the value is a string of tab, space and printable ASCII or Latin-1 characters, which is what `fetch` accepts.
+ * The text names the header and never the value, and reads after "A header from a plugin was refused:".
+ */
+export function providedHeaderProblem(name: string, value: unknown): string | undefined {
+  if (!HEADER_NAME.test(name)) return `the header name (${JSON.stringify(name.length > 40 ? `${name.slice(0, 40)}…` : name)}) is not a single HTTP header token`;
+  if (RESERVED_HEADER.test(name)) return `the header "${name}" is set by the inspector or the browser, so a plugin cannot change it`;
+  if (typeof value !== 'string' || !HEADER_VALUE.test(value)) return `the value of the header "${name}" is not a string of printable characters`;
   return undefined;
 }
 
@@ -122,16 +149,23 @@ const isAbort = (error: unknown): boolean => typeof error === 'object' && error 
 
 export function createGuardedTransport(policy: TransportPolicy, options: TransportOptions = {}): AbortableTransport {
   return {
-    async send(request, auth, signal) {
+    async send(request, auth, signal, provided) {
       const target = resolveTarget(request.url, policy);
       if (!target.ok) throw new Error(target.error);
 
       const headers: Record<string, string> = { accept: ACCEPT[request.responseKind] };
       if (request.body !== undefined) headers['content-type'] = 'application/json';
+      // Headers from the providers come first and the token replaces one of its name, so what the developer typed wins.
+      // `accept` and `content-type` are reserved names, so no provider can change the encoding the request asks for.
+      for (const [name, value] of Object.entries(provided ?? {})) {
+        const problem = providedHeaderProblem(name, value);
+        if (problem) throw new Error(`A header from a plugin was refused: ${problem}`);
+        setHeader(headers, name, value);
+      }
       if (auth !== undefined && auth.token !== '') {
         const problem = headerNameProblem(auth.headerName);
         if (problem) throw new Error(problem);
-        headers[auth.headerName] = auth.token;
+        setHeader(headers, auth.headerName, auth.token);
       }
 
       const init: RequestInit = {

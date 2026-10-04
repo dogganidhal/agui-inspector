@@ -11,6 +11,7 @@ import { declaredOf, describeCapabilities, loadCapabilities, loadConfig, parseCo
 import { parsePreset, preparePreset, selectMessages } from '../../src/core/presets/index.ts';
 import {
   PROFILE_STORAGE_KEY,
+  checkRunInput,
   composeRunInput,
   defaultProfile,
   encodingFor,
@@ -653,6 +654,17 @@ test('an ordinary run carries ids, protocol version, state, messages, tools, con
   assert.equal(RunAgentInputSchema.safeParse(input).success, true);
   assert.equal('parentRunId' in input, false, 'no parent link unless the runtime supplies one');
   assert.equal('resume' in input, false);
+});
+
+test('checkRunInput gives the verdict composeRunInput gives, for an input from anywhere (spec 014)', () => {
+  const input = value(composeRunInput(baseParams()));
+  assert.deepEqual(value(checkRunInput(input)), input);
+  assert.match(failure(checkRunInput({ ...input, messages: undefined } as never)), /^Run input is invalid: messages: /);
+  assert.match(failure(checkRunInput({ ...input, messages: [{ id: 'm', content: 'x' }] } as never)), /^Run input is invalid: messages\.0/);
+  assert.match(failure(checkRunInput({ ...input, threadId: 7 } as never)), /^Run input is invalid: threadId/);
+  assert.match(failure(checkRunInput(null as never)), /^Run input is invalid: /);
+  // The same text from composeRunInput, which uses the same function.
+  assert.equal(failure(composeRunInput(baseParams({ transcript: [{ id: 'm', content: 'x' } as never], turnMessages: [] }))), failure(checkRunInput({ ...input, messages: [{ id: 'm', content: 'x' }] } as never)));
 });
 
 test('every profile switch changes the next run input as described', () => {

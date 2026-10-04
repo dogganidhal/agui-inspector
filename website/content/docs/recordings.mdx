@@ -129,7 +129,8 @@ Export copies `bytes` from the session and does not encode it again, so an impor
 
 ## What a file never contains
 
-- Request or response headers, the authentication header name, or the token you entered. A token repeated inside a received frame is the server's evidence and stays as sent.
+- Request or response headers, the authentication header name, or the token you entered. That includes a header that a [plugin](./plugins.mdx#provideheaders) added to a request. A token repeated inside a received frame is the server's evidence and stays as sent.
+- A plugin's name, its code or what it drew. If a plugin's run hook adjusted a run's input, the file holds the adjusted input, because it is what was sent.
 - The connection's target URL, abort controller or other live connection state.
 - Anything executable. Import only displays a recording.
 

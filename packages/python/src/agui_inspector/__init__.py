@@ -78,6 +78,7 @@ def mount_inspector(
     theme: dict[str, dict[str, str]] | None = None,
     brand: Brand | None = None,
     catalog_aliases: dict[str, str] | None = None,
+    plugins: list[str] | None = None,
 ) -> None:
     """Serve the inspector page, its assets and ``<path>/config.json`` from ``app``.
 
@@ -103,6 +104,11 @@ def mount_inspector(
     ``https://a2ui.org/specification/v0_8/standard_catalog_definition.json``). It goes into
     ``config.json`` as ``catalogAliases``, as given: the page validates it and shows a warning for any
     entry it rejects, never an error.
+
+    ``plugins`` lists plugin modules on the page's own origin (a path or a full URL, for example
+    ``"/static/sign.js"``). It goes into ``config.json`` as given, and is left out when it is not set. The
+    helper checks nothing and serves no module: serve each file from one of the host's own routes, as for a
+    logo. The page loads them from its own origin only and warns about any entry it rejects, never an error.
     """
     if not enabled:
         return
@@ -129,6 +135,7 @@ def mount_inspector(
             **({"theme": theme} if theme is not None else {}),
             **({"brand": _brand_config(brand)} if brand is not None else {}),
             **({"catalogAliases": catalog_aliases} if catalog_aliases is not None else {}),
+            **({"plugins": plugins} if plugins is not None else {}),
         }
     )
     headers = {"content-security-policy": _CSP}

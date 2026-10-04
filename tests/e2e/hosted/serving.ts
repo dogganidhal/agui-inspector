@@ -18,7 +18,7 @@ async function freePort(): Promise<number> {
 // A Starlette host that mounts the real helper over the build under test, with a scripted agent. The
 // packaged copy is not touched: other specs stage it, and two stagings must not meet.
 const PYTHON_HOST = `
-import json, pathlib, sys
+import json, mimetypes, pathlib, sys
 import uvicorn
 from starlette.applications import Starlette
 from starlette.responses import Response, StreamingResponse
@@ -42,12 +42,13 @@ async def stream(request):
     return StreamingResponse((f"data: {json.dumps(e)}\\n\\n" for e in events), media_type="text/event-stream")
 
 async def asset(request):
-    # The host's own route for a logo: the helper serves none.
-    return Response(options.get("assets", {}).get(request.path_params["name"], ""), media_type="image/svg+xml")
+    # The host's own route for a logo or a plugin module: the helper serves none.
+    name = request.path_params["name"]
+    return Response(options.get("assets", {}).get(name, ""), media_type=mimetypes.guess_type(name)[0] or "application/octet-stream")
 
 app = Starlette(routes=[Route("/agents/demo/stream", stream, methods=["POST"]), Route("/static/{name}", asset)])
 brand = options.get("brand")
-mount_inspector(app, agents=[Agent(id="demo", name="Demo agent", url="/agents/demo/stream")], enabled=True, theme=options.get("theme"), brand=Brand(**brand) if brand is not None else None)
+mount_inspector(app, agents=[Agent(id="demo", name="Demo agent", url="/agents/demo/stream")], enabled=True, theme=options.get("theme"), brand=Brand(**brand) if brand is not None else None, plugins=options.get("plugins"))
 uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")
 `;
 
@@ -55,8 +56,10 @@ export interface PythonOptions {
   readonly theme?: unknown;
   /** The `Brand` fields in Python's spelling (`logo_dark`). */
   readonly brand?: { name?: unknown; logo?: unknown; logo_dark?: unknown };
-  /** SVG files the host serves from its own `/static/<name>` route. */
+  /** Files the host serves from its own `/static/<name>` route, with the content type of the name: a logo or a plugin module. */
   readonly assets?: Record<string, string>;
+  /** The `plugins` argument of `mount_inspector`: module addresses on the host's origin. */
+  readonly plugins?: readonly string[];
 }
 
 export async function startPython(dist: string, options: PythonOptions = {}): Promise<{ origin: string; stop(): void }> {

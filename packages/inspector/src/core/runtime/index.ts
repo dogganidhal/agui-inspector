@@ -35,6 +35,7 @@ import type {
   InterruptAnswer,
   JsonValue,
   ObservedOutcome,
+  ProvidedHeaders,
   Recorder,
   Run,
   RunRecordId,
@@ -76,7 +77,20 @@ import { createGuardedTransport, headerNameProblem, recordedPath, resolveTarget,
 
 export { waitingNotice } from './replies.ts';
 export { checkAgainstSchema, seedFromSchema } from './schema.ts';
-export { createGuardedTransport, guardedFetchText, headerNameProblem, resolveTarget, type AbortableTransport } from './transport.ts';
+export { createGuardedTransport, guardedFetchText, headerNameProblem, providedHeaderProblem, resolveTarget, type AbortableTransport } from './transport.ts';
+
+/**
+ * What the runtime asks of the plugin host (specs/014-plugin-api): the hooks that may replace a run's input, and the headers
+ * of the providers for one request. A failure is `{ ok: false }` with a message for the line under the composer. A stop by
+ * the user is a failure too, and the runtime tells the two apart by its own signal, so a stop shows no plugin error.
+ */
+export interface RunPlugins {
+  beforeRun(run: { readonly input: RunAgentInput; readonly agentId?: string; readonly url: string }, signal: AbortSignal): Promise<Result<RunAgentInput>>;
+  provideHeaders(request: { readonly method: string; readonly url: string; readonly body?: string }, signal: AbortSignal): Promise<Result<ProvidedHeaders>>;
+}
+
+/** No plugin: the input is the one composed, uncopied, and there are no extra headers. */
+export const NO_PLUGINS: RunPlugins = { beforeRun: async ({ input }) => ok(input), provideHeaders: async () => ok({}) };
 
 /** What the runtime reads from the settings at the moment a run is built; the host owns both. */
 export interface RuntimeSettings {
@@ -94,6 +108,8 @@ export interface RuntimeOptions {
   /** Thread, run, message and uuid identifiers. Defaults to Web Crypto. */
   readonly randomUUID?: () => string;
   readonly clock?: RecorderClock;
+  /** The plugin host. Absent: no hook and no provider. */
+  readonly plugins?: RunPlugins;
 }
 
 export interface RuntimeState {
@@ -179,6 +195,8 @@ const MAX_MESSAGE = 300;
 
 const clip = (text: string) => (text.length > MAX_MESSAGE ? `${text.slice(0, MAX_MESSAGE)}…` : text);
 
+const STOPPED_BEFORE_SEND = 'Stopped before the run was sent';
+
 const PAUSED_NOTICE = `Automatic replies paused after ${AUTOMATIC_REPLY_LIMIT} in a row. Answer by hand to continue the run.`;
 
 /**
@@ -218,6 +236,7 @@ class RunAgent extends HttpAgent {
 
 export function createRuntime(options: RuntimeOptions): Runtime {
   const { store, policy } = options;
+  const plugins = options.plugins ?? NO_PLUGINS;
   const randomUUID = options.randomUUID ?? (() => globalThis.crypto.randomUUID());
   const epoch = () => (options.clock ?? { epoch: () => Date.now() }).epoch();
   const transport = createGuardedTransport(policy, options.fetch ? { fetch: options.fetch } : {});
@@ -406,21 +425,34 @@ export function createRuntime(options: RuntimeOptions): Runtime {
       });
       if (!input.ok) return refuse(input.error);
 
+      // A hook may replace the input. It runs before anything is sent, so a refusal means nothing at all went out. What is
+      // sent, recorded and kept as the run's input is what it returned. The conversation the inspector keeps is not changed.
+      const hooked = await plugins.beforeRun({ input: input.value, ...(agent !== undefined && { agentId: agent.id }), url: target.value.href }, controller.signal);
+      if (!hooked.ok) return refuse(controller.signal.aborted ? STOPPED_BEFORE_SEND : hooked.error);
+      const runInput = hooked.value;
+
       const preparations = await runPreparations(prepared.value.preparations, {
         recorder: recorderFor(controller),
         transport,
         baseUrl: target.value.href,
         signal: controller.signal,
+        provideHeaders: (request, signal) => plugins.provideHeaders(request, signal),
         ...(auth !== undefined && { auth }),
       });
       if (!preparations.ok) return refuse(preparations.error);
+
+      // The run's own headers are asked for before the answers it carries are cleared, so a provider that fails leaves them
+      // for a retry. Nothing is recorded for a request that is not sent.
+      const body = JSON.stringify(runInput);
+      const provided = await plugins.provideHeaders({ method: 'POST', url: target.value.href, body }, controller.signal);
+      if (!provided.ok) return refuse(controller.signal.aborted ? STOPPED_BEFORE_SEND : provided.error);
 
       // Past this point the run is sent; whatever it was waiting for has been carried. A run the developer
       // started starts the count of automatic continuations again, and one the inspector started adds to it.
       replies = NO_REPLIES;
       streak = automatic ? streak + 1 : 0;
       paused = false;
-      await execute(current, target.value, input.value, turnMessages, controller, auth, turn.automatic, encodingFor(settings.profile, prepared.value.encoding));
+      await execute(current, target.value, runInput, body, provided.value, turnMessages, controller, auth, turn.automatic, encodingFor(settings.profile, prepared.value.encoding));
       sent = !controller.signal.aborted;
     } finally {
       running = false;
@@ -435,6 +467,8 @@ export function createRuntime(options: RuntimeOptions): Runtime {
     current: Thread,
     target: URL,
     input: RunAgentInput,
+    body: string,
+    headers: ProvidedHeaders,
     turnMessages: readonly Message[],
     controller: AbortController,
     credentials: VolatileAuth | undefined,
@@ -476,7 +510,6 @@ export function createRuntime(options: RuntimeOptions): Runtime {
       }
     };
 
-    const body = JSON.stringify(input);
     const capture = recorderFor(controller);
     const client = new RunAgent({
       url: target.href,
@@ -491,7 +524,7 @@ export function createRuntime(options: RuntimeOptions): Runtime {
               startedAt = epoch();
               linked = true;
               writeRun({ startedAt });
-              return transport.send({ url, method: init.method ?? 'POST', body, responseKind: encoding }, credentials, init.signal ?? controller.signal);
+              return transport.send({ url, method: init.method ?? 'POST', body, responseKind: encoding }, credentials, init.signal ?? controller.signal, headers);
             },
           )
           // The recorder cloned the response first. Only a server-sent-events branch has its line endings made LF: the
@@ -674,9 +707,15 @@ export function createRuntime(options: RuntimeOptions): Runtime {
       hold(controller);
       emit();
       try {
+        // Headers belong to the connection, so a raw request gets them as every other request does. Its body stays the text typed.
+        const provided = await plugins.provideHeaders({ method: 'POST', url: target.value.href, body: text }, controller.signal);
+        if (!provided.ok) {
+          if (!controller.signal.aborted) error = provided.error;
+          return;
+        }
         const response = await recorderFor(controller).record(
           { kind: 'raw', method: 'POST', path: recordedPath(target.value), body: text, responseKind: encoding },
-          () => transport.send({ url: target.value.href, method: 'POST', body: text, responseKind: encoding }, auth, controller.signal),
+          () => transport.send({ url: target.value.href, method: 'POST', body: text, responseKind: encoding }, auth, controller.signal, provided.value),
         );
         void response.body?.cancel().catch(() => undefined);
       } catch (failure) {

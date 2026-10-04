@@ -21,7 +21,7 @@ import { deliver, pace, sleepOn, type PaceProfile } from './pacing.ts';
 import { acceptsProtobuf, toProtobuf } from './protobuf.ts';
 import { interactiveResponse, type RunInput } from './scenarios.ts';
 
-export { INTERRUPT_FOREVER, INTERRUPTS, SCENARIOS, SUBAGENTS } from './scenarios.ts';
+export { INTERRUPT_FOREVER, INTERRUPTS, PLUGINS, SCENARIOS, SUBAGENTS } from './scenarios.ts';
 
 /** A route that only answers with a redirect to the agent, to show that the page refuses to follow one. */
 export const REDIRECT_PATH = '/redirect';

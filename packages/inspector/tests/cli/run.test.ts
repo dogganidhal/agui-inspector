@@ -1,6 +1,9 @@
 // The command as a function (FR-006, FR-015 to FR-019): what it prints and where, its exit codes, and how it stops.
 import assert from 'node:assert/strict';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { connect } from 'node:net';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { after, test } from 'node:test';
 import { run } from '../../src/cli/run.ts';
 import { USAGE } from '../../src/cli/args.ts';
@@ -142,4 +145,38 @@ test('stopping while a relay is in progress closes it and returns 0', { timeout:
   const answer = await reading;
   assert.equal(answer.complete, false, 'the page sees the stream end as a failure');
   assert.equal(await within(targetClosed, 1000), true, 'the target saw its connection end');
+});
+
+// --plugin (spec 014, FR-021): checked before the command listens, served at /plugins/<n>.js, and never printed.
+
+test('a --plugin that is missing, a directory or unreadable stops the command before it listens with 2 and a message that names --plugin', async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'agui-cli-plugin-'));
+  closers.push(async () => rmSync(dir, { recursive: true, force: true }));
+  mkdirSync(path.join(dir, 'folder'));
+  for (const file of [path.join(dir, 'missing.js'), path.join(dir, 'folder'), dir]) {
+    const result = await finished(['--target', 'http://127.0.0.1:1/agent', '--plugin', file, '--port', '0']);
+    assert.equal(result.code, 2, file);
+    assert.equal(result.out, '', 'nothing was printed, so nothing listened');
+    assert.equal(result.err, 'agui-inspector: --plugin must name a file that can be read\nRun agui-inspector --help for the options.\n', file);
+    assert.ok(!result.err.includes(dir), 'the message does not echo the value');
+  }
+});
+
+test('a plugin file is served at /plugins/<n>.js and listed in config.json, and the startup output names no plugin', async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'agui-cli-plugin-'));
+  closers.push(async () => rmSync(dir, { recursive: true, force: true }));
+  writeFileSync(path.join(dir, 'sign.js'), 'export default () => {};');
+  const target = await recordingTarget();
+  closers.push(target.close);
+  const session = begin(['--plugin', path.join(dir, 'sign.js'), '--target', `${target.origin}/agent`, '--port', '0']);
+  const port = await listening(session);
+  assert.equal(session.out(), `agui-inspector listening on http://127.0.0.1:${port}/\n  /proxy/1 -> ${target.origin}\n`);
+  const config = JSON.parse((await ask({ port, path: '/config.json' })).body.toString()) as { plugins: string[] };
+  assert.deepEqual(config.plugins, ['/plugins/1.js']);
+  const file = await ask({ port, path: '/plugins/1.js' });
+  assert.equal(file.status, 200);
+  assert.equal(file.body.toString(), 'export default () => {};');
+  assert.match(file.headers['content-type'] ?? '', /^text\/javascript/);
+  session.stop();
+  assert.equal(await session.done, 0);
 });

@@ -66,6 +66,7 @@ FastAPI uses the same call because it is a Starlette application. The package it
 | `theme` | Optional `{"light": {...}, "dark": {...}}`. Each map is optional and maps the ten public `--agui-*` names to CSS values, for example `{"light": {"--agui-accent": "#2563eb"}}`. The helper writes it into `config.json` as given. |
 | `brand` | Optional `Brand(name=..., logo=..., logo_dark=...)`. Every field is optional. The helper writes the set fields into `config.json` as given, with `logo_dark` written as `logoDark`. See [Branding the embedded page](#branding-the-embedded-page). |
 | `catalog_aliases` | Optional `{"<former id>": "<bundled catalog id>"}`. The helper writes it into `config.json` as `catalogAliases`, as given. See [Catalog aliases](#catalog-aliases). |
+| `plugins` | Optional list of plugin module addresses on the page's origin, such as `["/static/plugins/sign.js"]`. The helper writes it into `config.json` as given and serves no module. See [Plugins in the embedded page](#plugins-in-the-embedded-page). |
 
 ## Debug guard
 
@@ -128,6 +129,26 @@ The helper does not check it. The page checks it when it loads `config.json` and
 
 `catalog_aliases` changes nothing else: same routes, same content security policy header, no extra request. A host that serves the assets itself puts the same `catalogAliases` field in its own `config.json`.
 
+## Plugins in the embedded page
+
+`plugins` lists plugin modules for the page to load: a run hook, header providers or renderers. [Plugins](./plugins.mdx) describes the API.
+
+```python
+from fastapi.staticfiles import StaticFiles
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
+mount_inspector(
+    app,
+    agents=[Agent(id="support", url="/agents/support/stream")],
+    enabled=True,
+    plugins=["/static/plugins/sign.js"],
+)
+```
+
+The helper does not check the list and does not serve a module. Serve each file from a route of your own, the way you serve a logo, with a JavaScript content type. `StaticFiles` does that for a `.js` file. An address must be on the page's own origin. The page checks the list when it loads `config.json` and shows a "Configuration" warning for each entry it rejects. A rejected entry never stops the page or the agents from loading. The rules are in [configuration](./configuration.mdx#plugins).
+
+`plugins` changes nothing else: same routes, same content security policy header, no extra request. With no `plugins`, `config.json` is the same text as before. A host that serves the assets itself puts the same `plugins` field in its own `config.json`.
+
 ## Routes
 
 With the default path the helper adds:
@@ -136,7 +157,7 @@ With the default path the helper adds:
 | --- | --- |
 | `GET /agui-inspector` | A 307 redirect to `/agui-inspector/` that keeps the query string, so the page's relative script URL resolves. The `Location` includes the ASGI (Asynchronous Server Gateway Interface) `root_path`, which holds the prefix of every outer mount. Under `outer.mount("/api", app)` it is `/api/agui-inspector/`. |
 | `GET /agui-inspector/` | The inspector page. |
-| `GET /agui-inspector/config.json` | The version-0 configuration built from `agents`, `theme`, `brand` and `catalog_aliases`: `{"version": 0, "agents": [...], "theme": {...}, "brand": {...}, "catalogAliases": {...}}`. Fields left as `None` are left out, and so are `theme`, `brand` and `catalogAliases` when you pass none. The page reads it from its own directory, so a custom `path` works the same way. |
+| `GET /agui-inspector/config.json` | The version-0 configuration built from `agents`, `theme`, `brand`, `catalog_aliases` and `plugins`: `{"version": 0, "agents": [...], "theme": {...}, "brand": {...}, "catalogAliases": {...}, "plugins": [...]}`. Fields left as `None` are left out, and so are `theme`, `brand`, `catalogAliases` and `plugins` when you pass none. The page reads it from its own directory, so a custom `path` works the same way. |
 | `GET /agui-inspector/<file>` | A packaged asset, including nested ones. Anything else is a 404. |
 
 The helper rejects other methods. It adds no session endpoints, no storage and no proxy for the agent. The page calls your agent URL directly, and a captured session never reaches the server.
@@ -253,6 +274,7 @@ Next.js: Next.js has no application object, so the helper returns the `GET` and 
 | `path` | Express and Hono only. The page's path, default `/agui-inspector`. It must start with `/` and cannot be `/` alone. A trailing `/` is ignored. Next.js has no `path`, because the folder of the route file sets it. |
 | `theme` | Optional `{ light: {...}, dark: {...} }`. Each map is optional and maps the ten public `--agui-*` names to CSS values. The helper writes it into `config.json` as given. The page checks it, as described in [Theming the embedded page](#theming-the-embedded-page). |
 | `brand` | Optional `{ name, logo, logoDark }`. Every field is optional. The helper writes the set fields into `config.json` as given and serves no logo file. See [Branding the embedded page](#branding-the-embedded-page). |
+| `plugins` | Optional array of plugin module addresses on the page's origin, such as `['/static/plugins/sign.js']`. The helper writes it into `config.json` as given and serves no module: serve each file from a route of your own, with a JavaScript content type. See [Plugins in the embedded page](#plugins-in-the-embedded-page). |
 
 A call with a bad argument stops startup and names the problem, for example `every agent needs a unique nonempty id and a url`. Nothing is mounted then. The checks run only when `enabled` is `true`.
 
@@ -273,7 +295,7 @@ With the default path the helpers add:
 | `GET /agui-inspector` | A 307 redirect to `agui-inspector/index.html` that keeps the query string. The `Location` is relative, so it holds under any outer prefix, such as `/api`. |
 | `GET /agui-inspector/index.html` | The inspector page. |
 | `GET /agui-inspector/` | The inspector page, where your framework passes the slash form through. |
-| `GET /agui-inspector/config.json` | The version 0 configuration built from `agents`, `theme` and `brand`: `{"version": 0, "agents": [...], "theme": {...}, "brand": {...}}`. Fields you leave out are left out, and so are `theme` and `brand` when you pass none. |
+| `GET /agui-inspector/config.json` | The version 0 configuration built from `agents`, `theme`, `brand` and `plugins`: `{"version": 0, "agents": [...], "theme": {...}, "brand": {...}, "plugins": [...]}`. Fields you leave out are left out, and so are `theme`, `brand` and `plugins` when you pass none. |
 | `GET /agui-inspector/<file>` | A packaged file, including nested ones. Anything else under the path is a 404. |
 
 The page's scripts, styles and `config.json` are relative to its own address, so it must load from a URL inside the mount. The helpers redirect to `index.html`, not to the slash form, because Next.js redirects `/agui-inspector/` back to `/agui-inspector` by default and a redirect to the slash form would loop.

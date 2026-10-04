@@ -81,8 +81,16 @@ The [waterfall](./inspection.mdx#waterfall) shows each subagent run as a row of 
 
 ### Custom and raw
 
-- `CUSTOM` shows a marker with its name and value.
+- `CUSTOM` shows a marker with its name and value. When a [plugin](./plugins.mdx#renderers) draws that name, it shows a card instead. See [Plugin renderers](#plugin-renderers).
 - `RAW` shows a marker with its source and value.
+
+## Plugin renderers
+
+A [plugin](./plugins.mdx) can draw a custom event by its name and an activity by its type. The conversation then shows a card for the event or the activity. The card has the same header as before: the name or the type, a reference to the frame, and a switch between Rendered and JSON. The JSON view is the content as received, so the plugin's drawing is never the only way to read it.
+
+An event or activity with no renderer looks as it always did. The activity type `a2ui-surface` is drawn by the A2UI view, and a plugin cannot take it. A renderer that throws leaves the JSON view in its card and gives one "Plugin" warning.
+
+A renderer changes how the conversation shows a value. It never changes the frames list, the state view, the raw view, the derived entries or an exported session, and it receives a copy of the value. An imported recording is drawn with the same renderers.
 
 ## Replies the inspector answered
 

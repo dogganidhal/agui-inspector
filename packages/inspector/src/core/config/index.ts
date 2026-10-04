@@ -12,7 +12,7 @@ import { AgentCapabilitiesSchema } from '@ag-ui/core/schemas';
 import { CAPABILITY_GROUPS, FORMAT_VERSION, THEME_PROPERTIES, type AgentConfig, type BrandConfig, type CatalogAliases, type ConfigFile, type JsonValue, type ThemeConfig, type ThemeMap } from '../../contracts.ts';
 import { KNOWN_CATALOGS, isBuiltIn } from '../a2ui/catalogs.ts';
 import { parsePreset } from '../presets/index.ts';
-import { describeError, fail, isJsonObject, isRecord, logoSource, NO_PAGE, ok, themeValueProblem, unexpectedKey, urlProblem, type PageLocation, type Result } from './validation.ts';
+import { describeError, fail, isJsonObject, isRecord, logoSource, NO_PAGE, ok, pluginSource, themeValueProblem, unexpectedKey, urlProblem, type PageLocation, type Result } from './validation.ts';
 
 export type { PageLocation, Result } from './validation.ts';
 
@@ -152,6 +152,25 @@ function parseCatalogAliases(value: unknown, warnings: string[]): CatalogAliases
   return accepted.length > 0 ? Object.fromEntries(accepted) : undefined;
 }
 
+/**
+ * The optional `plugins` field: module addresses on the page's own origin. Each bad entry is a warning and is dropped, so the
+ * file still loads. A warning names the field and the position and never repeats the value.
+ */
+function parsePlugins(value: unknown, page: PageLocation, warnings: string[]): readonly string[] | undefined {
+  if (!Array.isArray(value)) {
+    warnings.push("plugins must be a list of module addresses on this page's origin; it was ignored");
+    return undefined;
+  }
+  const accepted: string[] = [];
+  for (const [index, entry] of value.entries()) {
+    const address = pluginSource(entry, page);
+    if (!address.ok) warnings.push(`plugins[${index}] ${address.error}; it was ignored`);
+    else if (accepted.includes(address.value)) warnings.push(`plugins[${index}] repeats an earlier entry; it was ignored`);
+    else accepted.push(address.value);
+  }
+  return accepted.length > 0 ? accepted : undefined;
+}
+
 /** Version 0 only; a file without a version is the historical form and reads as version 0. `page` is where logos must stay. */
 export function parseConfig(text: string, page: PageLocation = NO_PAGE): Result<ParsedConfig> {
   let json: unknown;
@@ -161,7 +180,7 @@ export function parseConfig(text: string, page: PageLocation = NO_PAGE): Result<
     return fail(`Configuration is not valid JSON: ${describeError(error)}`);
   }
   if (!isRecord(json)) return fail('Configuration must be a JSON object with an "agents" list');
-  const extra = unexpectedKey(json, ['version', 'agents', 'theme', 'brand', 'catalogAliases'], 'configuration', 'configuration');
+  const extra = unexpectedKey(json, ['version', 'agents', 'theme', 'brand', 'catalogAliases', 'plugins'], 'configuration', 'configuration');
   if (extra) return fail(extra);
   if ('version' in json && json.version !== FORMAT_VERSION) {
     return fail(`Unsupported configuration version ${JSON.stringify(json.version)}; this inspector reads version ${FORMAT_VERSION}`);
@@ -179,7 +198,8 @@ export function parseConfig(text: string, page: PageLocation = NO_PAGE): Result<
   const theme = json.theme === undefined ? undefined : parseTheme(json.theme, warnings);
   const brand = json.brand === undefined ? undefined : parseBrand(json.brand, page, warnings);
   const catalogAliases = json.catalogAliases === undefined ? undefined : parseCatalogAliases(json.catalogAliases, warnings);
-  return ok({ version: FORMAT_VERSION, agents, ...(theme !== undefined && { theme }), ...(brand !== undefined && { brand }), ...(catalogAliases !== undefined && { catalogAliases }), warnings });
+  const plugins = json.plugins === undefined ? undefined : parsePlugins(json.plugins, page, warnings);
+  return ok({ version: FORMAT_VERSION, agents, ...(theme !== undefined && { theme }), ...(brand !== undefined && { brand }), ...(catalogAliases !== undefined && { catalogAliases }), ...(plugins !== undefined && { plugins }), warnings });
 }
 
 /** Fetches `url` through the callback and parses it. This is the only request made. */

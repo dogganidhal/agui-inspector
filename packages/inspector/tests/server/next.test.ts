@@ -28,6 +28,12 @@ test('the page, its files and the configuration are served for the catch-all par
   assert.deepEqual(await config.json(), { version: 0, agents: AGENTS });
 });
 
+test('plugins reach config.json as given, and the route serves no module', async () => {
+  const { GET } = route({ plugins: ['/static/sign.js'] });
+  assert.deepEqual(await (await quiet(() => call(GET, '/agui-inspector/config.json', ['config.json']))).json(), { version: 0, agents: AGENTS, plugins: ['/static/sign.js'] });
+  assert.equal((await call(GET, '/agui-inspector/static/sign.js', ['static', 'sign.js'])).status, 404);
+});
+
 test('params may be a promise, as in Next.js 15 and later, or a plain object, as before, with path undefined, missing or empty', async () => {
   const { GET } = route();
   quiet(() => undefined);

@@ -13,6 +13,7 @@ Serves the AG-UI inspector on this machine and relays its requests to the target
 Options:
   --target <url>              An AG-UI endpoint to inspect. Repeat it for more than one.
   --header "<Name>: <value>"  A header to send to the target before it. Repeat it for more.
+  --plugin <file>             A plugin module to serve and load in the page. Repeat it for more.
   --port <number>             Port to listen on. Default ${DEFAULT_PORT}. Use 0 for any free port.
   --help                      Show this text.
   --version                   Show the version.
@@ -42,7 +43,7 @@ export interface Target {
 export type Cli =
   | { readonly kind: 'help' }
   | { readonly kind: 'version' }
-  | { readonly kind: 'serve'; readonly port: number; readonly targets: readonly Target[] }
+  | { readonly kind: 'serve'; readonly port: number; readonly targets: readonly Target[]; readonly plugins: readonly string[] }
   | { readonly kind: 'error'; readonly message: string };
 
 type Result<T> = { readonly ok: true; readonly value: T } | { readonly ok: false; readonly message: string };
@@ -120,6 +121,7 @@ export function parseCli(argv: readonly string[]): Cli {
       options: {
         target: { type: 'string', multiple: true },
         header: { type: 'string', multiple: true },
+        plugin: { type: 'string', multiple: true },
         port: { type: 'string' },
         help: { type: 'boolean' },
         version: { type: 'boolean' },
@@ -167,5 +169,9 @@ export function parseCli(argv: readonly string[]): Cli {
     if (!target.ok) return { kind: 'error', message: target.message };
     targets.push(target.value);
   }
-  return { kind: 'serve', port, targets };
+  // A plugin belongs to the command, not to a target, so it may stand anywhere. The value is a path, not a secret, but a
+  // message still names the option only.
+  const plugins = parsed.values.plugin ?? [];
+  if (plugins.some((file) => file === '')) return { kind: 'error', message: '--plugin must name a file' };
+  return { kind: 'serve', port, targets, plugins };
 }

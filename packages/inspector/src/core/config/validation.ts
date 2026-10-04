@@ -107,3 +107,27 @@ export function logoSource(value: unknown, page: PageLocation): Result<string> {
   if (url.username !== '' || url.password !== '') return fail('must not contain credentials (user:password@)');
   return ok(url.href);
 }
+
+// A backslash and C0 controls are how a value hides a different address from a reader of the text. They are refused as
+// written, on top of the check on the parsed URL below.
+const BACKSLASH_OR_CONTROL = /[\\\u0000-\u001f\u007f]/;
+
+/**
+ * The resolved address of a plugin module, or why it cannot be one. A plugin is code, so the rule is the strictest of the
+ * page's address rules: http(s) on the page's own origin and no credentials. The check runs on the parsed URL, so a
+ * scheme-relative form or a spelling a URL parser rewrites cannot reach another origin. `data:` is not a plugin source.
+ * The page's policy (`script-src 'self'`) is the second line.
+ */
+export function pluginSource(value: unknown, page: PageLocation): Result<string> {
+  if (typeof value !== 'string' || value.trim() === '') return fail('must be a nonempty string');
+  if (BACKSLASH_OR_CONTROL.test(value)) return fail('must not contain a backslash or a control character');
+  let url: URL;
+  try {
+    url = new URL(value, page.baseUrl);
+  } catch {
+    return fail('is not a valid URL');
+  }
+  if ((url.protocol !== 'http:' && url.protocol !== 'https:') || url.origin !== page.origin) return fail('must be a path on this origin');
+  if (url.username !== '' || url.password !== '') return fail('must not contain credentials (user:password@)');
+  return ok(url.href);
+}

@@ -2,7 +2,10 @@
 // refused request spellings, the guards against the network and against other sites, and several targets. The page is a
 // stand-in directory, so these tests run before the build.
 import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { connect } from 'node:net';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { networkInterfaces } from 'node:os';
 import { after, test } from 'node:test';
 import { parseCli, type Target } from '../../src/cli/args.ts';
@@ -250,4 +253,115 @@ test('listen() rejects when the port is taken and when the page files are missin
   const { listening } = await withTarget();
   await assert.rejects(listen({ port: listening.port, targets: targetsOf('--target', 'http://127.0.0.1:1'), assetsDir: page.dir }), { code: 'EADDRINUSE' });
   await assert.rejects(listen({ port: 0, targets: targetsOf('--target', 'http://127.0.0.1:1'), assetsDir: '/nonexistent/agui-inspector-page' }), /packaged inspector files are missing.*npm run build/);
+});
+
+// ---------------------------------------------------------------------------------------------
+// Plugin files (spec 014, FR-021): served from the command's own address, behind the same guards as the relay
+// ---------------------------------------------------------------------------------------------
+
+const pluginDir = mkdtempSync(path.join(tmpdir(), 'agui-cli-plugins-'));
+after(() => rmSync(pluginDir, { recursive: true, force: true }));
+const pluginFile = (name: string, text: string) => {
+  writeFileSync(path.join(pluginDir, name), text);
+  return path.join(pluginDir, name);
+};
+
+async function withPlugins(...files: string[]): Promise<{ target: Recorded; listening: Listening }> {
+  const target = await recordingTarget();
+  closers.push(target.close);
+  const listening = await listen({ port: 0, targets: targetsOf('--target', `${target.origin}/agent`), assetsDir: page.dir, plugins: files });
+  closers.push(listening.close);
+  return { target, listening };
+}
+
+test('config.json lists the plugin files in the order given and nothing else is new; without them it is the text it was', async () => {
+  const { target, listening } = await withPlugins(pluginFile('a.js', 'a'), pluginFile('b.js', 'b'));
+  const config = (await ask({ port: listening.port, path: '/config.json' })).body.toString();
+  assert.equal(config, JSON.stringify({ version: 0, agents: [{ id: 'target-1', name: `${target.origin}/agent`, url: '/proxy/1/agent' }], plugins: ['/plugins/1.js', '/plugins/2.js'] }));
+  const bare = await withTarget();
+  assert.equal(
+    (await ask({ port: bare.listening.port, path: '/config.json' })).body.toString(),
+    JSON.stringify({ version: 0, agents: [{ id: 'target-1', name: `${bare.target.origin}/agent`, url: '/proxy/1/agent' }] }),
+  );
+});
+
+test('GET and HEAD return the file with a JavaScript type and the policy, reading it at request time; other methods are refused', async () => {
+  const file = pluginFile('live.js', 'export const v = 1;');
+  const { listening } = await withPlugins(file);
+  const first = await ask({ port: listening.port, path: '/plugins/1.js' });
+  assert.equal(first.status, 200);
+  assert.equal(first.body.toString(), 'export const v = 1;');
+  assert.match(first.headers['content-type'] ?? '', /^text\/javascript/);
+  assert.equal(first.headers['content-security-policy'], POLICY);
+  writeFileSync(file, 'export const v = 2;');
+  assert.equal((await ask({ port: listening.port, path: '/plugins/1.js' })).body.toString(), 'export const v = 2;', 'an edit shows without a restart');
+  const head = await ask({ port: listening.port, path: '/plugins/1.js', method: 'HEAD' });
+  assert.equal(head.status, 200);
+  assert.equal(head.body.length, 0);
+  assert.equal(head.headers['content-length'], String('export const v = 2;'.length));
+  for (const method of ['POST', 'PUT', 'DELETE']) {
+    const refused = await ask({ port: listening.port, path: '/plugins/1.js', method, ...(method !== 'DELETE' && { body: '{}' }) });
+    assert.equal(refused.status, 405, method);
+    assert.equal(refused.headers.allow, 'GET, HEAD', method);
+  }
+});
+
+test('a file that was removed after the start is a 404, and no name but the listed ones reads a file', async () => {
+  const gone = pluginFile('gone.js', 'x');
+  const { listening } = await withPlugins(gone, pluginFile('other.js', 'y'));
+  rmSync(gone);
+  assert.equal((await ask({ port: listening.port, path: '/plugins/1.js' })).status, 404);
+  for (const spelling of ['/plugins/0.js', '/plugins/3.js', '/plugins/01.js', '/plugins/1.js/', '/plugins/1.js/../x', '/plugins/%2e%2e/x', '/plugins/..%2fplugins/2.js', '/plugins/2.js%00', '/plugins//2.js', '/plugins/2', '/plugins/2.JS', '/plugins\\2.js', '/plugins/other.js', `/plugins/${path.join(pluginDir, 'other.js')}`]) {
+    const answer = await ask({ port: listening.port, path: spelling });
+    assert.notEqual(answer.status, 200, `${spelling} answered ${answer.status}`);
+    assert.notEqual(answer.body.toString(), 'y', `${spelling} read the other file by a path`);
+  }
+  assert.equal((await ask({ port: listening.port, path: '/plugins/2.js?x=1' })).body.toString(), 'y', 'a query is not part of the name');
+});
+
+test('a plugin file passes the relay\'s guards: a foreign Host, a foreign Origin and a cross-site fetch get 403 and the file is not read', async () => {
+  const file = pluginFile('guarded.js', 'secret signing key');
+  const { listening } = await withPlugins(file);
+  const own = [`http://127.0.0.1:${listening.port}`, `http://localhost:${listening.port}`];
+  const refused = async (headers: Record<string, string>, label: string) => {
+    const answer = await ask({ port: listening.port, path: '/plugins/1.js', headers });
+    assert.equal(answer.status, 403, label);
+    assert.ok(!answer.body.toString().includes('signing key'), label);
+  };
+  for (const host of ['evil.example', `evil.example:${listening.port}`, `127.0.0.1:${listening.port + 1}`]) await refused({ host }, host);
+  for (const origin of ['http://evil.example', 'null', `https://127.0.0.1:${listening.port}`]) await refused({ origin }, origin);
+  for (const site of ['cross-site', 'same-site', '']) await refused({ 'sec-fetch-site': site }, `sec-fetch-site ${site}`);
+  for (const origin of own) assert.equal((await ask({ port: listening.port, path: '/plugins/1.js', headers: { origin } })).status, 200, origin);
+  for (const site of ['same-origin', 'none']) assert.equal((await ask({ port: listening.port, path: '/plugins/1.js', headers: { 'sec-fetch-site': site } })).status, 200, site);
+  assert.equal((await ask({ port: listening.port, path: '/plugins/1.js' })).status, 200, 'no browser headers, like curl');
+  // The page itself is still a link another site may open.
+  assert.equal((await ask({ port: listening.port, path: '/', headers: { 'sec-fetch-site': 'cross-site' } })).status, 200);
+});
+
+test('a header that a provider adds on the page reaches the target through the relay, and the page\'s value wins over the command line', async () => {
+  const target = await recordingTarget();
+  closers.push(target.close);
+  const listening = await listen({ port: 0, targets: targetsOf('--target', `${target.origin}/agent`, '--header', 'X-Signature: from-the-command-line', '--header', 'X-Other: held'), assetsDir: page.dir, plugins: [pluginFile('p.js', 'p')] });
+  closers.push(listening.close);
+  await ask({ port: listening.port, path: '/proxy/1/agent', method: 'POST', body: '{}', headers: { 'x-signature': 'from-the-plugin' } });
+  assert.equal(target.seen[0]?.headers['x-signature'], 'from-the-plugin');
+  assert.equal(target.seen[0]?.headers['x-other'], 'held');
+});
+
+test('the listener is still on 127.0.0.1 only with plugins, and plugins open no other listener', async () => {
+  const { listening } = await withPlugins(pluginFile('l.js', 'l'));
+  const bound = await new Promise<string>((resolve) => {
+    const socket = connect({ host: '127.0.0.1', port: listening.port }, () => {
+      socket.destroy();
+      resolve('connected');
+    });
+    socket.on('error', (error: NodeJS.ErrnoException) => resolve(error.code ?? 'error'));
+  });
+  assert.equal(bound, 'connected');
+  const notBound = await new Promise<string>((resolve) => {
+    const socket = connect({ host: '::1', port: listening.port, timeout: 1000 }, () => (socket.destroy(), resolve('connected')));
+    socket.on('timeout', () => (socket.destroy(), resolve('timeout')));
+    socket.on('error', (error: NodeJS.ErrnoException) => resolve(error.code ?? 'error'));
+  });
+  assert.notEqual(notBound, 'connected');
 });

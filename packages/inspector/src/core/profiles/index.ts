@@ -302,6 +302,14 @@ export function composeRunInput(params: RunInputParams): Result<RunAgentInput> {
     ...(params.resume !== undefined && params.resume.length > 0 && { resume: [...params.resume] }),
   };
 
+  return checkRunInput(input);
+}
+
+/**
+ * The protocol's verdict on a run input, from wherever it came: composed here, or returned by a plugin's `beforeRun`
+ * (spec 014). One function, so the two cannot judge differently.
+ */
+export function checkRunInput(input: RunAgentInput): Result<RunAgentInput> {
   const checked = RunAgentInputSchema.safeParse(input);
   return checked.success ? ok(input) : fail(`Run input is invalid: ${issueText(checked.error.issues[0])}`);
 }

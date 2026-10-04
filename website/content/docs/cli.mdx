@@ -55,6 +55,7 @@ In a source checkout, run `npm run build` once and use `node packages/inspector/
 | --- | --- |
 | `--target <url>` | An AG-UI endpoint to inspect. Repeat it for more than one. At least one is required. |
 | `--header "<Name>: <value>"` | A header to send to the target before it. Repeat it for more. See [headers](#headers). |
+| `--plugin <file>` | A plugin module to serve and load in the page. Repeat it for more. It belongs to the command, not to a target, so it can stand anywhere. See [plugins](#plugins). |
 | `--port <number>` | The port to listen on. The default is 4747. `0` picks any free port. |
 | `--help` | Prints the usage and stops. |
 | `--version` | Prints the version and stops. |
@@ -108,13 +109,27 @@ The command holds headers in memory. They go to their own target, and nowhere el
 A header on the command line is visible in the process list and in your shell history. Anyone who can read them on this machine can read the value. Use `--header` for development servers and short-lived tokens. For a long-lived credential, type the token in the page's Authentication field instead: it stays in memory and is cleared when you reload.
 </Callout>
 
+## Plugins
+
+`--plugin <file>` makes the command serve a [plugin](./plugins.mdx) and list it in the page's configuration. Use it when your server needs code that a fixed `--header` cannot give, such as a signature of each request.
+
+```sh
+npx agui-inspector --target https://agent.example/run --plugin ./sign-requests.js
+```
+
+Each file must exist and be readable when the command starts. If not, the command stops before it listens, with exit code 2 and a message that names `--plugin`. The command serves the files at `/plugins/1.js`, `/plugins/2.js` and so on, in the order given, with a JavaScript content type and the same content security policy as its other files. It reads a file when the page asks for it, so an edit shows after a reload. It serves no other local file. The `config.json` it serves lists the addresses, and the startup lines do not show a path.
+
+A header that a plugin adds goes to the target through the relay like any header of the page, and it wins over a `--header` of the same name, as a token typed in the page does.
+
+A plugin file can hold a signing key, so a request for it passes the same checks as the proxy paths: a foreign `Host`, a foreign `Origin` and a cross-site `Sec-Fetch-Site` get a 403. See [who can use the proxy](#who-can-use-the-proxy).
+
 ## Who can use the proxy
 
 The proxy can add your headers to a request, so it answers only your browser on this machine.
 
 - It listens on the IPv4 loopback address `127.0.0.1` and on nothing else, so another machine cannot connect. `http://localhost:4747/` reaches it too. An IPv6 address such as `[::1]` is not served and is not claimed.
 - It refuses a request whose `Host` is not `127.0.0.1` or `localhost` with its port. That stops a web page that points its own host name at your machine.
-- On proxy paths, it refuses a request with another `Origin` and a request that the browser marks as cross-site (`Sec-Fetch-Site`). A web page on another site cannot reach your target through it. A link from another site to the printed address still opens the page. Current browsers send these headers: Chrome from 76, Firefox from 90 and Safari from 16.4.
+- On proxy paths and for plugin files, it refuses a request with another `Origin` and a request that the browser marks as cross-site (`Sec-Fetch-Site`). A web page on another site cannot reach your target through it, and cannot load your plugin. A link from another site to the printed address still opens the page. Current browsers send these headers: Chrome from 76, Firefox from 90 and Safari from 16.4.
 - It connects only to the origins of the targets you gave. A request that names any other host is refused with a 403 and no connection is made. That covers an unknown proxy number, a full URL as the request target, `CONNECT`, upgrade requests, and path text such as `//host`, `@host` or `..`. After the proxy number, the text is only a path on the target's host.
 - Other programs of your own user can open the printed address, like any local server. The command does not defend against them. A request with no browser headers, such as one from `curl`, is served.
 
@@ -125,7 +140,7 @@ The command sends no telemetry, checks for no update and makes no request except
 - The command speaks HTTP/1.1 to targets. HTTP/2-only servers, WebSocket and other transports are not supported.
 - Certificates of `https` targets are checked against the certificates Node.js trusts. There is no option to skip the check. To trust a development certificate or a private CA, set `NODE_EXTRA_CA_CERTS` to its file.
 - It does not open a browser. It prints the address.
-- It sets no theme, brand, preset or capability for the agents it lists. For those, use a [helper](./embedding.mdx) or the [static assets](./hosted.mdx).
+- It sets no theme, brand, preset or capability for the agents it lists. For those, use a [helper](./embedding.mdx) or the [static assets](./hosted.mdx). The one file it can serve for the page is a plugin.
 - A first argument that is not an option is reserved for commands that come later, such as `replay`. Today it stops the command with `unknown command "<name>"`.
 
 ## Exit codes and output
@@ -134,7 +149,7 @@ The command sends no telemetry, checks for no update and makes no request except
 | --- | --- |
 | 0 | `--help`, `--version`, and a stop with Ctrl+C or `SIGTERM`. |
 | 1 | Startup failed for a reason that is not the arguments: the port is in use, or the page files are missing. |
-| 2 | The arguments are wrong, or a target points at the command's own address. |
+| 2 | The arguments are wrong, a `--plugin` is not a readable file, or a target points at the command's own address. |
 
 `--help`, `--version` and the startup lines go to standard output. A usage error, a startup failure and the failures to reach a target go to standard error. The command logs nothing about requests.
 

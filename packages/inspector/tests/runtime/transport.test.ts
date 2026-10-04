@@ -139,6 +139,93 @@ test('the transport sets the content type and accept header itself from the requ
   assert.equal(seen[2]?.init.body, undefined);
 });
 
+// ---------------------------------------------------------------------------------------------
+// Headers from plugin providers (spec 014): one request's worth, validated here, below the typed token
+// ---------------------------------------------------------------------------------------------
+
+const SIGNATURE = 'synthetic-signature-7f3a91';
+
+test('headers from a provider reach fetch for that request only, and the token replaces a header of its name', async () => {
+  const { seen, fetch } = scripted();
+  const transport = createGuardedTransport(hosted, { fetch });
+  await transport.send(post('https://agent.example/run'), undefined, undefined, { 'X-Signature': SIGNATURE, 'X-Request-Id': 'one' });
+  await transport.send(post('https://agent.example/run'));
+  assert.deepEqual(Object.keys(seen[0]?.headers ?? {}).sort(), ['accept', 'content-type', 'x-request-id', 'x-signature']);
+  assert.equal(seen[0]?.headers['x-signature'], SIGNATURE);
+  assert.deepEqual(Object.keys(seen[1]?.headers ?? {}).sort(), ['accept', 'content-type'], 'nothing is kept for the next request');
+
+  await transport.send(post('https://agent.example/run'), { headerName: 'x-signature', token: TOKEN }, undefined, { 'X-Signature': SIGNATURE, 'X-Other': 'kept' });
+  const typed = seen[2];
+  assert.equal(typed?.headers['x-signature'], TOKEN, 'the typed token wins, compared without case');
+  assert.equal(typed?.headers['x-other'], 'kept');
+  assert.equal(Object.keys(typed?.init.headers as object).filter((name) => name.toLowerCase() === 'x-signature').length, 1, 'one header of that name, not two');
+  assert.ok(!JSON.stringify(typed?.init.headers).includes(SIGNATURE));
+});
+
+test('names that differ only in case are one header', async () => {
+  const { seen, fetch } = scripted();
+  const transport = createGuardedTransport(hosted, { fetch });
+  await transport.send(post('https://agent.example/run'), undefined, undefined, { 'x-a': '1', 'X-A': '2' });
+  assert.equal(Object.keys(seen[0]?.init.headers as object).filter((name) => name.toLowerCase() === 'x-a').length, 1);
+});
+
+test('the encoding owns Accept: a provider cannot change it for any kind of request', async () => {
+  for (const [responseKind, accept] of [['sse', 'text/event-stream'], ['protobuf', 'application/vnd.ag-ui.event+proto'], ['response', 'application/json, text/plain;q=0.9, */*;q=0.1']] as const) {
+    const { seen, fetch } = scripted();
+    const transport = createGuardedTransport(hosted, { fetch });
+    await transport.send(post('https://agent.example/run', { responseKind }), undefined, undefined, { 'X-Signature': SIGNATURE });
+    assert.equal(seen[0]?.headers.accept, accept, responseKind);
+    assert.equal(seen[0]?.headers['x-signature'], SIGNATURE, `${responseKind}: the provider's header rides along`);
+    for (const name of ['Accept', 'accept', 'ACCEPT', 'Content-Type', 'content-type']) {
+      await assert.rejects(transport.send(post('https://agent.example/run', { responseKind }), undefined, undefined, { [name]: 'text/html' }), /header "[Aa][Cc]{2}ept|header "[Cc]ontent-[Tt]ype/i, `${responseKind} ${name}`);
+    }
+    assert.equal(seen.length, 1, 'a refused header sends nothing');
+  }
+});
+
+test('an invalid provider header is refused before fetch, and the message names the header and never the value', async () => {
+  const { seen, fetch } = scripted();
+  const transport = createGuardedTransport(hosted, { fetch });
+  const secret = 'synthetic-secret-value-0001';
+  const invalid: Array<[Record<string, string>, RegExp]> = [
+    [{ Cookie: secret }, /"Cookie"/],
+    [{ 'Set-Cookie': secret }, /"Set-Cookie"/],
+    [{ Host: secret }, /"Host"/],
+    [{ 'Content-Length': secret }, /"Content-Length"/],
+    [{ 'bad name': secret }, /"bad name"/],
+    [{ 'x:y': secret }, /"x:y"/],
+    [{ '': secret }, /header name/],
+    [{ 'X-A': `${secret}\r\nX-Injected: 1` }, /"X-A"/],
+    [{ 'X-A': `${secret}\nmore` }, /"X-A"/],
+    [{ 'X-A': `${secret}\u0000` }, /"X-A"/],
+    [{ 'X-A': `${secret}\u0100` }, /"X-A"/],
+    [{ 'X-A': 7 as unknown as string }, /"X-A"/],
+  ];
+  for (const [headers, named] of invalid) {
+    await assert.rejects(transport.send(post('https://agent.example/run'), undefined, undefined, headers), (error: Error) => {
+      assert.match(error.message, named);
+      assert.ok(!error.message.includes(secret), error.message);
+      return true;
+    }, JSON.stringify(Object.keys(headers)));
+  }
+  assert.equal(seen.length, 0);
+});
+
+test('a provider header may hold a tab, spaces and Latin-1 text', async () => {
+  const { seen, fetch } = scripted();
+  const transport = createGuardedTransport(hosted, { fetch });
+  await transport.send(post('https://agent.example/run'), undefined, undefined, { 'X-A': 'a\tb  c é', 'X-Empty': '' });
+  assert.equal(seen[0]?.headers['x-a'], 'a\tb  c é');
+  assert.equal(seen[0]?.headers['x-empty'], '');
+});
+
+test('provider headers do not change cookies: hosted requests still omit them', async () => {
+  const { seen, fetch } = scripted();
+  const transport = createGuardedTransport(hosted, { fetch });
+  await transport.send(post('https://agent.example/run'), undefined, undefined, { 'X-A': '1' });
+  assert.equal(seen[0]?.init.credentials, 'omit');
+});
+
 test('a protobuf request asks for the protobuf media type and for nothing else, with the same body and headers otherwise', async () => {
   const { seen, fetch } = scripted();
   const transport = createGuardedTransport(hosted, { fetch });

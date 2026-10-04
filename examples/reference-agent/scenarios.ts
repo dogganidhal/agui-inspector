@@ -39,6 +39,14 @@ export const INTERRUPT_FOREVER = 'interrupt forever';
  */
 export const SUBAGENTS = 'subagents';
 
+/**
+ * The message that asks the interactive agent for a custom event and an activity of a type of its own (spec 014): what a
+ * plugin's renderers draw. Like SUBAGENTS it is not a `SCENARIOS` entry, so it is not a quick message of the public demo.
+ */
+export const PLUGINS = 'plugins';
+export const PLUGIN_NOTE = { name: 'example.note', value: { text: 'Synthetic note' } } as const;
+export const PLUGIN_PLAN = { messageId: 'plan-1', activityType: 'example-plan', steps: ['Read', 'Write'], added: 'Review' } as const;
+
 export const INTERRUPTS = [
   {
     id: 'i-approve',
@@ -227,6 +235,15 @@ export function interactiveResponse(input: RunInput): ScenarioResponse {
       return sse([open, ...say(`m-${runId}`, 'This response stays open until you press Stop.').slice(0, 2)], 'hold-until-abort');
     case SUBAGENTS:
       return sse([open, ...subagentsRun(input), done]);
+    case PLUGINS:
+      return sse([
+        open,
+        { type: 'CUSTOM', ...PLUGIN_NOTE },
+        { type: 'ACTIVITY_SNAPSHOT', messageId: PLUGIN_PLAN.messageId, activityType: PLUGIN_PLAN.activityType, content: { steps: PLUGIN_PLAN.steps }, replace: true },
+        { type: 'ACTIVITY_DELTA', messageId: PLUGIN_PLAN.messageId, activityType: PLUGIN_PLAN.activityType, patch: [{ op: 'add', path: '/steps/-', value: PLUGIN_PLAN.added }] },
+        ...say(`m-${runId}`, 'Plan ready.'),
+        done,
+      ]);
     case SCENARIOS.state:
       return sse([
         open,

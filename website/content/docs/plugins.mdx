@@ -1,0 +1,286 @@
+---
+title: Plugins
+description: Load your own code into the inspector from the page's own origin. A run hook, header providers and renderers for custom events and activities.
+---
+
+A preset holds fixed values: variables, setup requests and quick messages. Some servers need code. A plugin is a small JavaScript module that a deployment lists in `config.json`. The page loads it from its own origin and gives it a versioned object with four functions.
+
+A plugin is the deployer's code. It runs in the page with the page's rights, and the inspector does not sandbox it. Read [Trust and limits](#trust-and-limits) before you ship one.
+
+The plugin API is at version 0. A change that can break a plugin comes with a note in the changelog. See [Version](#version).
+
+## When to use a plugin
+
+| You need | Use | Instead, when a fixed value is enough |
+| --- | --- | --- |
+| A header that differs on every request, such as a signature of the body and a timestamp, a request id, or a short-lived token from your own session endpoint | A [header provider](#provideheaders) | The token field in the connection controls, or `--header` of the [command](./cli.mdx), for one fixed value |
+| A run input that only code can make or check, such as a current timestamp, a value from the page's session, a history cut to the last few messages, or a guard that refuses a run | A [run hook](#beforerun) | A [preset](./presets.mdx): variables, `{{uuid}}`, forwarded properties, setup requests |
+| A view for a custom event or an activity type of your own | A [renderer](#renderers) | The JSON view, which every event and activity has |
+
+## Declare plugins
+
+A deployment lists plugin modules in the optional `plugins` field of `config.json`. Each entry is the address of one module on the page's own origin.
+
+```json title="config.json"
+{
+  "version": 0,
+  "agents": [{ "id": "support", "url": "/agents/support/stream" }],
+  "plugins": ["plugins/sign-requests.js", "/static/plugins/citations.js"]
+}
+```
+
+| Mode | Where the list goes | Who serves the module |
+| --- | --- | --- |
+| Hosted, and the npm static assets | `plugins` in the `config.json` beside the page | You, on the page's origin |
+| Embedded, with the Python helper | `plugins=[...]` of `mount_inspector` | Your application, from one of its own routes |
+| Embedded, with the Express, Hono or Next.js helper | The `plugins` option | Your application, from one of its own routes |
+| Embedded, with your own static server | `plugins` in your own `config.json` | You |
+| The command | `--plugin <file>`, repeatable | The command, at `/plugins/<n>.js` |
+
+An entry is a path relative to the page, an absolute path, or a full URL with the page's origin. A query or a fragment is allowed. The page reads it against its own address, never against the address of a configuration file that was read from somewhere else. Everything else is rejected before any request: another origin, a scheme-relative address, `data:`, `blob:` or `javascript:`, a URL with a password, a backslash or a control character, and a value that is not a string.
+
+A rejected entry is one "Configuration" warning that names the field and the position, as in `plugins[1] must be a path on this origin; it was ignored`. The warning never repeats the value. The other entries, the agents, the theme and the brand still work. A file that is not a list is ignored with one warning. The same address twice loads once, with one warning for the second entry.
+
+```python title="app.py"
+from agui_inspector import Agent, mount_inspector
+
+mount_inspector(app, agents=[Agent(id="support", url="/agents/support/stream")], enabled=True, plugins=["/static/plugins/sign.js"])
+```
+
+```js title="server.js"
+mountInspector(app, { agents: [{ id: 'support', url: '/agents/support/stream' }], enabled: true, plugins: ['/static/plugins/sign.js'] });
+```
+
+The helpers write the list into `config.json` as given and check nothing. They serve no module. Serve the file from a route of your own, the way you serve a logo. With no `plugins`, the `config.json` is the same text as before.
+
+Only `config.json`, or the file that `hosting-config.json` names in its place, declares plugins. A profile, a session file, a query string, a typed endpoint and the settings view cannot name one. There is no switch to turn a plugin off in the page: remove it from the configuration and reload.
+
+## Serve the module
+
+The module must come from the page's own origin and must be served with a JavaScript content type, such as `text/javascript`. A server that answers `text/plain`, a missing file, a syntax error and a redirect to another origin all fail to load. The page shows one "Plugin" warning, as in `/plugins/sign.js: could not be loaded`.
+
+The page's content security policy does not change. Scripts stay limited to the page's own origin, and there is no `eval` and no inline script. The module may import other modules from the same origin.
+
+The page loads every module after it reads the configuration and before it accepts a message. Modules are requested together and activated one at a time, in the order written. The page sends no request to a target until every plugin has loaded or failed. A module that does not load within 10 seconds is skipped with a warning.
+
+## The module and the API object
+
+A plugin module default-exports a function. The page calls it once with the API object. The function may return a promise.
+
+```js title="plugin.js"
+export default function activate(api) {
+  if (api.version !== 0) throw new Error(`written for plugin API 0, this page has ${api.version}`);
+  api.beforeRun(...);
+  api.provideHeaders(...);
+  api.renderCustomEvent('my.event', ...);
+  api.renderActivity('my-activity', ...);
+}
+```
+
+The API object is frozen and has five members.
+
+| Member | What it does |
+| --- | --- |
+| `version` | The API version, a number. It is 0 in 0.2.0. |
+| `beforeRun(hook)` | Adjust or refuse the input of each run. |
+| `provideHeaders(provider)` | Return headers for one request to the target. |
+| `renderCustomEvent(name, render)` | Draw a custom event with exactly that name. |
+| `renderActivity(type, render)` | Draw an activity with exactly that type. |
+
+Register everything while the function runs. The page keeps what a plugin registered only if the function returns, or its promise resolves, within 10 seconds without an error. A plugin that registers a hook and then throws leaves nothing behind. A registration call after the function has finished does nothing and gives a warning. An argument of the wrong kind, such as a name that is not a string or a function that is not a function, throws a `TypeError`, which is a failed activation.
+
+Everything a plugin receives is a copy. Changing it changes nothing the inspector shows, records or exports.
+
+## beforeRun
+
+```js
+api.beforeRun(async ({ input, agentId, url, signal }) => {
+  return { ...input, forwardedProps: { ...input.forwardedProps, sentAt: Date.now() } };
+});
+```
+
+| Argument | Meaning |
+| --- | --- |
+| `input` | A copy of the run input that the preset and the client profile made. |
+| `agentId` | The selected agent's id. Absent for an endpoint typed in the page. |
+| `url` | The absolute address the run goes to. |
+| `signal` | An `AbortSignal` that ends when the user presses Stop. |
+
+The hook runs for every run the inspector sends: a message, a continuation, a surface action and each automatic continuation. It runs after the input is made and before the first setup request. It does not run for a [raw submission](./inspection.mdx), which sends the text you typed, and not while an imported recording is open.
+
+It returns an adjusted input, or nothing for no change. Changing `input` in place changes nothing, because it is a copy. Hooks run in the order the plugins are written, and each gets what the one before returned.
+
+What a hook returns must pass the protocol's run input check, must be JSON, and must keep the same `threadId` and `runId`. The page copies it after the check, so a plugin that keeps the object cannot change it later.
+
+The run that is sent, the recorded request body and the run's recorded input are the adjusted input. The conversation the inspector keeps is not changed: a hook that cuts the history changes the request and nothing else. A hook that removes tool messages or `resume` entries changes what the server sees, and the conversation still shows what the inspector tracked.
+
+To refuse a run, throw. The message shows under the composer and as a warning. A hook that rejects, or returns an input that is not valid, does the same. Nothing is sent: no setup request, no run, and no recorded exchange. The answers the run was waiting for stay in place, so you can fix the plugin and continue. Pressing Stop while a hook works stops the run without a warning.
+
+## provideHeaders
+
+```js
+api.provideHeaders(async ({ method, url, body, signal }) => {
+  if (new URL(url).origin !== 'https://api.example.com') return undefined;
+  return { 'X-Signature': await sign(method, url, body) };
+});
+```
+
+| Argument | Meaning |
+| --- | --- |
+| `method` | The HTTP method. |
+| `url` | The absolute address, with the query. |
+| `body` | The exact body text that will be sent. Absent when the request has none. |
+| `signal` | An `AbortSignal` that ends when the request is stopped. |
+
+The provider runs before each setup request, each run request and each raw request, once for each. It does not run for the configuration or a capabilities URL. The inspector caches nothing, so a header can change on every request.
+
+It returns an object of header names and values, or nothing. Providers run in the order the plugins are written, and a later one replaces a header of the same name, compared without case. A token you type in the connection controls replaces a provider's header of the same name, so you can still test a wrong token.
+
+A name must be an HTTP header token that the transport does not own. `Accept` and `Content-Type` are the transport's: it sets `Accept` from the encoding of the request, server-sent events or the AG-UI protobuf media type, so no provider can change the encoding. `Content-Length`, `Host`, `Cookie` and `Set-Cookie` are refused too. A value must be a string of tab, space and printable ASCII or Latin-1 characters.
+
+A provider that throws, rejects, returns something that is not a plain object, or returns an invalid header stops that one request. The message names the header and never repeats its value. For a setup request, the run is not sent, as for any failed setup request.
+
+The header lives in memory for that one request. The inspector does not store, record, export, show or log it. The [recorder](./inspection.mdx) never receives it, and a [session export](./recordings.mdx) holds no header. The footer keeps saying "headers never recorded".
+
+Check `url` before you return a credential. The page cannot tell which origin a credential belongs to. A hosted page that opted in to visitor targets can be pointed at any HTTPS server, and a provider that returns a secret for every address sends it there. A browser also sends a custom header only if the target allows it with `Access-Control-Allow-Headers`, as for a typed token.
+
+## Renderers
+
+```js
+api.renderCustomEvent('example.note', (event, container) => {
+  const note = document.createElement('p');
+  note.textContent = event.value.text;
+  container.append(note);
+  return () => note.remove();
+});
+```
+
+`renderCustomEvent(name, render)` is used for each `CUSTOM` event whose `name` is exactly the one given. `renderActivity(type, render)` is used for each activity whose `activityType` is exactly the one given.
+
+| Call | `render` gets |
+| --- | --- |
+| `renderCustomEvent` | `{ name, value }` and a container |
+| `renderActivity` | `{ messageId, activityType, content }` and a container |
+
+The container is an empty `div` inside the card of the event or activity. The card keeps its header, a reference to its frame and a switch between the rendered view and the JSON. The JSON is the content as received.
+
+`render` may return a cleanup function. The inspector calls it before the next draw and when the card goes away, and then empties the container. When the content of an activity changes, `render` is called again with the new content. A custom event or activity with no renderer looks as it always did. A renderer draws for an imported recording too.
+
+Draw with the DOM. The text of an event is the server's, not yours: use `textContent`, not `innerHTML`. The page's policy forbids inline script and inline `style` attributes, so inline handlers do nothing and a `style` attribute is blocked. Set styles through `element.style.property = value`, use a class and a stylesheet from your own origin, and use the page's own properties such as `var(--agui-accent)`.
+
+The activity type `a2ui-surface` belongs to the A2UI view. A renderer for it is refused with a warning. When two plugins register the same name or type, the first one wins and the second gets a warning.
+
+A renderer that throws shows the JSON view in its card and gives one warning. Renderers never change the frames list, the state view, the raw view or an export.
+
+## Failures
+
+A plugin that fails shows a warning and never stops the page. The warning sits under the top bar, on every tab, with the kind "Plugin". It names the plugin by its path and says what failed. The plugin's message is cut to 200 characters. The same text never shows twice, and at most 20 warnings are kept.
+
+| Failure | Warning text |
+| --- | --- |
+| The module did not load | `<path>: could not be loaded` |
+| The module took too long | `<path>: did not load within 10 seconds` |
+| No default function | `<path>: the default export is not a function` |
+| The function threw or rejected | `<path>: activation failed: <message>` |
+| The function took too long | `<path>: activation did not finish within 10 seconds` |
+| A call after activation | `<path>: <function> was called after activation and was ignored` |
+| A renderer already taken | `<path>: <function>(<name>) is already registered by <path>; ignored` |
+| The A2UI type | `<path>: renderActivity(a2ui-surface) is drawn by the A2UI view; ignored` |
+| A hook threw | `<path>: beforeRun threw: <message>` |
+| A hook returned a bad input | `<path>: beforeRun returned an invalid input: <reason>` |
+| A provider threw | `<path>: provideHeaders threw: <message>` |
+| A provider returned a bad header | `<path>: provideHeaders returned an invalid header: <reason>` |
+| A renderer threw | `<path>: renderActivity(<type>) threw: <message>` |
+
+A failure of a hook or a provider also stops that one request, and the line under the composer says which plugin and why. A hook may redact or guard, so the inspector never sends the request without it. A failing renderer only changes a view, so the JSON view takes its place. One failing plugin never stops another plugin or an agent.
+
+## Version
+
+`api.version` is a number. It is 0 in 0.2.0, like the file formats. A change that can break an existing plugin raises it by one and comes with migration steps in the changelog of each package. A change that cannot break one, such as a new member of the API object or a new optional field in what a function receives, keeps the number. A plugin that supports only some versions checks `api.version` first and throws, which is a warning and nothing more.
+
+## Trust and limits
+
+The safety comes from where the code loads from: your own origin, named in your own file. The inspector does not isolate the code.
+
+- It runs with the page's rights. It can read the page, the token you typed in the connection controls and the frames on screen, and it can call `fetch`.
+- A request that a plugin makes itself is not recorded and not checked by the inspector. The browser's content security policy limits it to the same origins as the page.
+- A plugin's error message is shown on the page. Keep credentials out of messages.
+- Someone who can put a file on the plugin's origin can run code in the inspector. Serve plugins from a place that only you can write to.
+- The inspector sends no telemetry for plugins, and a plugin is not read from a package, a CDN or another origin.
+
+## Example
+
+`examples/plugin/plugin.js` in the repository uses each extension point once, against the scripted reference agent. The end-to-end tests load it from `config.json`.
+
+```js title="examples/plugin/plugin.js"
+// An example plugin for agui-inspector (plugin API version 0). It is plain JavaScript: a browser loads it as it is, so it
+// needs no build. A deployment lists it in `plugins` of config.json and serves it from the page's own origin, with a
+// JavaScript content type. It uses each extension point once, against the reference agent of this repository:
+//
+//   beforeRun         adds a counter to the forwarded properties of every run
+//   provideHeaders    gives each request to the agent a header that changes every time
+//   renderCustomEvent draws the custom event `example.note`
+//   renderActivity    draws the activity type `example-plan`
+//
+// The module is the deployer's code and runs with the page's rights. The page does not sandbox it.
+
+export default function activate(api) {
+  // The plugin was written for version 0 of the API. Throwing is how a plugin refuses a page it does not support: the page
+  // shows the message as a warning and carries on without the plugin.
+  if (api.version !== 0) throw new Error(`written for plugin API 0, this page has ${api.version}`);
+
+  // A hook sees a copy of the input that the preset and the client profile made, and returns the input to send. Returning
+  // nothing keeps it, and throwing refuses the run. The thread id and the run id must stay as they are.
+  let runs = 0;
+  api.beforeRun((run) => ({
+    ...run.input,
+    forwardedProps: { ...run.input.forwardedProps, examplePlugin: { run: (runs += 1) } },
+  }));
+
+  // A provider is called before each preparation, run and raw request, with the method, the address and the body. Check the
+  // address before you return a credential: the page cannot tell which origin the credential belongs to, and a hosted page can
+  // be pointed at any HTTPS server. The headers are kept in memory for that one request.
+  let requests = 0;
+  api.provideHeaders((request) => {
+    if (!new URL(request.url).pathname.startsWith('/interactive')) return undefined;
+    return { 'X-Example-Request': String((requests += 1)) };
+  });
+
+  // A renderer draws into an empty container. Use the DOM, and `textContent` for anything the server sent: the text of an
+  // event is not yours. The page's policy forbids inline script and inline style attributes, so set styles through
+  // `element.style` and use the page's own properties, such as `var(--agui-accent)`. The function it returns is called
+  // before the next draw and when the card goes away.
+  api.renderCustomEvent('example.note', (event, container) => {
+    const note = document.createElement('p');
+    note.textContent = `Note: ${event.value.text}`;
+    note.dataset.testid = 'example-note';
+    note.style.borderLeft = '3px solid var(--agui-accent)';
+    note.style.paddingLeft = '8px';
+    container.append(note);
+  });
+
+  api.renderActivity('example-plan', (activity, container) => {
+    const list = document.createElement('ol');
+    list.dataset.testid = 'example-plan';
+    for (const step of activity.content.steps) {
+      const item = document.createElement('li');
+      item.textContent = step;
+      list.append(item);
+    }
+    container.append(list);
+    return () => list.remove();
+  });
+}
+```
+
+## Write your own
+
+1. Serve the module from your origin with a JavaScript content type, and list it in `plugins`.
+2. Check `api.version` first, and throw if you do not support it.
+3. Register what you need inside the function. Do not register later.
+4. Treat everything from the server as text. Use `textContent`.
+5. Check `url` before a provider returns a credential.
+6. Throw when a hook must refuse a run. The message is for the developer.
+7. Reload the page after each change. The page loads plugins once, at the start.
+
+Next, see [Configuration](./configuration.mdx#plugins) for the field and its warnings, and [Embedding](./embedding.mdx) for the helper arguments.

@@ -30,6 +30,14 @@ function hosted(options: Partial<Parameters<typeof mountInspector>[1]> = {}, set
   return app;
 }
 
+test('plugins reach config.json as given, and the host serves the module from its own route', async () => {
+  const app = hosted({ plugins: ['/static/sign.js'] }, (outer) => outer.get('/static/sign.js', (_request, response) => void response.type('text/javascript').send('export default () => {}')));
+  const origin = await listen(app);
+  assert.deepEqual(await (await fetch(`${origin}/agui-inspector/config.json`)).json(), { version: 0, agents: AGENTS, plugins: ['/static/sign.js'] });
+  assert.equal((await fetch(`${origin}/agui-inspector/static/sign.js`)).status, 404, 'the helper serves no module');
+  assert.equal(await (await fetch(`${origin}/static/sign.js`)).text(), 'export default () => {}');
+});
+
 test('the bare path redirects to the page, which loads with its files and configuration', async () => {
   const origin = await listen(hosted());
   const page = await fetch(`${origin}/agui-inspector`);

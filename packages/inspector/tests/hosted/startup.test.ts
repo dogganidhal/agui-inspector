@@ -705,3 +705,123 @@ test('without the opt-in the override meets the fixed allowlist, so it cannot wi
   assert.match(result.error ?? '', /https:\/\/other\.example is not an allowed destination/);
   assert.ok(!site.seen.some((request) => request.url.startsWith(OTHER)));
 });
+
+// ---------------------------------------------------------------------------------------------
+// Plugins (spec 014): named by config.json, loaded from the page's own origin after the policy, before the first render
+// ---------------------------------------------------------------------------------------------
+
+const pluginsFile = (plugins: unknown) => JSON.stringify({ version: 0, agents: [{ id: 'support', url: `${AGENT}/run` }], plugins });
+
+/** A stub for `import()` that logs into the page's own log, so the order of work can be read. */
+function importing(site: ReturnType<typeof page>, modules: Record<string, unknown> = {}) {
+  const imported: string[] = [];
+  const importModule = async (address: string) => {
+    imported.push(address);
+    site.log.push(`import ${address}`);
+    const module = modules[address];
+    if (module instanceof Error) throw module;
+    return module ?? { default: () => {} };
+  };
+  return { imported, env: { ...site.env, importModule } };
+}
+
+test('plugins are imported after the policy and the configuration, from the resolved address, and counted', async () => {
+  for (const [name, files] of [
+    ['hosted', { [`${PAGE}/hosting-config.json`]: hostedFile(), [`${PAGE}/config.json`]: pluginsFile(['plugins/a.js', '/static/b.js']) }],
+    ['embedded', { [`${PAGE}/config.json`]: pluginsFile(['plugins/a.js', '/static/b.js']) }],
+  ] as const) {
+    const site = page(files);
+    const { imported, env } = importing(site);
+    const result = started(await startPage(env));
+    assert.deepEqual(imported, [`${PAGE}/plugins/a.js`, `${PAGE}/static/b.js`], name);
+    assert.equal(result.plugins.count(), 2, name);
+    assert.deepEqual(result.plugins.warnings(), [], name);
+    assert.deepEqual(result.warnings, [], name);
+    const first = site.log.findIndex((line) => line.startsWith('import '));
+    assert.ok(site.log.indexOf('policy') < site.log.indexOf(`fetch ${PAGE}/config.json`) && site.log.indexOf(`fetch ${PAGE}/config.json`) < first, `${name}: ${site.log.join(' | ')}`);
+    assert.deepEqual(site.seen.map((request) => request.url).filter((url) => !url.endsWith('hosting-config.json')), [`${PAGE}/config.json`], `${name}: no request but the configuration`);
+  }
+});
+
+test('with no plugins nothing is imported, the count is 0 and the policy is the same', async () => {
+  const withNone = page({ [`${PAGE}/hosting-config.json`]: hostedFile(), [`${PAGE}/config.json`]: agentsFile({ id: 'support', url: `${AGENT}/run` }) });
+  const empty = page({ [`${PAGE}/hosting-config.json`]: hostedFile(), [`${PAGE}/config.json`]: pluginsFile([]) });
+  const loaded = page({ [`${PAGE}/hosting-config.json`]: hostedFile(), [`${PAGE}/config.json`]: pluginsFile(['plugins/a.js']) });
+  const a = importing(withNone);
+  const b = importing(empty);
+  const c = importing(loaded);
+  for (const run of [a, b, c]) started(await startPage(run.env));
+  assert.deepEqual(a.imported, []);
+  assert.deepEqual(b.imported, []);
+  assert.deepEqual(loaded.policies, withNone.policies, 'the content security policy is the same with and without plugins');
+  assert.equal(started(await startPage(importing(withNone).env)).plugins.count(), 0);
+});
+
+test('a plugin that cannot be loaded is one warning of the host and does not stop the start', async () => {
+  const site = page({ [`${PAGE}/config.json`]: pluginsFile(['plugins/missing.js', 'plugins/ok.js']) });
+  const { env } = importing(site, { [`${PAGE}/plugins/missing.js`]: new Error('Failed to fetch dynamically imported module') });
+  const result = started(await startPage(env));
+  assert.equal(result.agents.length, 1);
+  assert.equal(result.error, undefined);
+  assert.deepEqual(result.plugins.warnings(), ['/plugins/missing.js: could not be loaded']);
+  assert.equal(result.plugins.count(), 1);
+});
+
+test('a rejected address is a configuration warning and is never imported', async () => {
+  const site = page({ [`${PAGE}/config.json`]: pluginsFile([`${OTHER}/a.js`, 'data:text/javascript,export default 1', '//other.example/a.js', 'plugins/ok.js']) });
+  const { imported, env } = importing(site);
+  const result = started(await startPage(env));
+  assert.deepEqual(imported, [`${PAGE}/plugins/ok.js`]);
+  assert.equal(result.warnings.length, 3);
+  for (const warning of result.warnings) assert.match(warning, /^plugins\[[012]\] must be a path on this origin; it was ignored$/);
+  assert.ok(!result.warnings.join('').includes('other.example'));
+  assert.deepEqual(site.seen.map((request) => request.url), [`${PAGE}/hosting-config.json`, `${PAGE}/config.json`]);
+});
+
+test('addresses are read against the page also when the configuration comes from another allowed origin', async () => {
+  const site = page({
+    [`${PAGE}/hosting-config.json`]: hostedFile({ config: `${AGENT}/inspector/config.json` }),
+    [`${AGENT}/inspector/config.json`]: pluginsFile(['plugins/a.js', `${AGENT}/inspector/b.js`]),
+  });
+  const { imported, env } = importing(site);
+  const result = started(await startPage(env));
+  assert.deepEqual(imported, [`${PAGE}/plugins/a.js`]);
+  assert.equal(result.warnings.length, 1, 'the file beside the configuration is on the other origin');
+  assert.match(result.warnings[0] ?? '', /^plugins\[1\] /);
+});
+
+test('the start waits for every plugin to load or fail', async () => {
+  const site = page({ [`${PAGE}/config.json`]: pluginsFile(['plugins/slow.js']) });
+  let release: () => void = () => {};
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  const env = { ...site.env, importModule: async () => (await gate, { default: () => {} }) };
+  let done = false;
+  const pending = startPage(env).then((result) => ((done = true), result));
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.equal(done, false, 'startPage has not resolved while a module is still loading');
+  release();
+  assert.equal(started(await pending).plugins.count(), 1);
+});
+
+test('the plugins are never stored or exported', async () => {
+  const storage = { items: {} as Record<string, string> };
+  const site = page({ [`${PAGE}/config.json`]: pluginsFile(['plugins/sign.js']) }, storage);
+  const result = started(await startPage(importing(site).env));
+  assert.deepEqual(storage.items, {});
+  assert.ok(!serializeSession(result.store.snapshot()).includes('sign.js'));
+});
+
+test('what a plugin registers while the page loads is what the runtime asks: a provider reaches the first request, and the headers are in no recording', async () => {
+  const site = page({ [`${PAGE}/hosting-config.json`]: hostedFile(), [`${PAGE}/config.json`]: pluginsFile(['plugins/sign.js']) });
+  const secret = 'synthetic-signature-7f3a91';
+  const sign = (api: import('../../src/contracts.ts').PluginApi) => api.provideHeaders(() => ({ 'X-Signature': secret }));
+  const { env } = importing(site, { [`${PAGE}/plugins/sign.js`]: { default: sign } });
+  const result = started(await startPage(env));
+  assert.equal(result.plugins.count(), 1);
+  result.runtime.setTarget(`${AGENT}/run`);
+  await result.runtime.sendRaw('{"threadId":"t","runId":"r"}');
+  const sent = site.seen.find((request) => request.url === `${AGENT}/run`);
+  assert.equal((sent?.init.headers as Record<string, string>)['X-Signature'], secret);
+  assert.ok(!serializeSession(result.store.snapshot()).includes(secret));
+  assert.ok(!JSON.stringify(result.runtime.getState()).includes(secret));
+});

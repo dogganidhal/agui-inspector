@@ -29,6 +29,12 @@ test('the bare path redirects to the page, and the page, its files and the confi
   assert.deepEqual(await config.json(), { version: 0, agents: AGENTS });
 });
 
+test('plugins reach config.json as given, and the helper serves no module', async () => {
+  const app = hosted({ plugins: ['/static/sign.js'] });
+  assert.deepEqual(await (await request(app, '/agui-inspector/config.json')).json(), { version: 0, agents: AGENTS, plugins: ['/static/sign.js'] });
+  assert.equal((await request(app, '/agui-inspector/static/sign.js')).status, 404);
+});
+
 test('the slash form serves the page in both of Hono\'s routing modes, never Hono\'s own 404', async () => {
   for (const strict of [true, false]) {
     const app = hosted({}, new Hono({ strict }));

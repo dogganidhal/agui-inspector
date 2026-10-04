@@ -139,6 +139,8 @@ export interface ConfigFile {
   readonly brand?: BrandConfig;
   /** Optional: ids an agent may use for a bundled A2UI catalog, beside the built-in ones. */
   readonly catalogAliases?: CatalogAliases;
+  /** Optional: plugin modules on the page's own origin. After validation these are resolved absolute addresses, in the order written. */
+  readonly plugins?: readonly string[];
 }
 
 /**
@@ -562,4 +564,70 @@ export interface AppProps {
   readonly connection: ConnectionViewProps;
   readonly conversation: ConversationViewProps;
   readonly inspection: InspectionViewProps;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Plugin API (specs/014-plugin-api/contracts/plugin-api.md). A plugin is an ES module on the page's own origin whose
+// default export receives a `PluginApi`. Everything a plugin receives is a copy.
+// ---------------------------------------------------------------------------------------------
+
+/** Rises by one with each change that can break a plugin; the changelog of each package carries the migration steps. */
+export const PLUGIN_API_VERSION = 0 as const;
+
+/** What `beforeRun` receives for each run the inspector sends. `input` is a copy. */
+export interface BeforeRunContext {
+  readonly input: RunAgentInput;
+  /** The selected agent's id. Absent for an endpoint typed in the page. */
+  readonly agentId?: string;
+  /** The absolute address the run goes to. */
+  readonly url: string;
+  /** Ends when the user presses Stop. */
+  readonly signal: AbortSignal;
+}
+
+/** An adjusted input, or nothing for no change. Throwing refuses the run. */
+export type BeforeRunHook = (run: BeforeRunContext) => RunAgentInput | undefined | void | Promise<RunAgentInput | undefined | void>;
+
+/** What a header provider receives for each preparation, run and raw request. */
+export interface HeaderContext {
+  readonly method: string;
+  /** The absolute address, query included. */
+  readonly url: string;
+  /** The exact body text that will be sent. */
+  readonly body?: string;
+  readonly signal: AbortSignal;
+}
+
+/** Headers from the providers for one request. Like the token, they reach the guarded transport as a separate argument, never inside the request. */
+export type ProvidedHeaders = Readonly<Record<string, string>>;
+
+export type HeaderProvider = (request: HeaderContext) => ProvidedHeaders | undefined | void | Promise<ProvidedHeaders | undefined | void>;
+
+/**
+ * The container a renderer draws into: an `HTMLElement` wherever the DOM types are loaded. A project that has none, such as the
+ * demo's worker, gets the one method this file's own code needs, so these types compile everywhere.
+ */
+export type RenderContainer = typeof globalThis extends { HTMLElement: { prototype: infer Element } } ? Element : { replaceChildren(): void };
+
+/** Draws into an empty container and may return a cleanup, called before the next draw and when the card goes away. */
+export type Render<T> = (data: T, container: RenderContainer) => void | (() => void);
+
+export interface CustomEventData {
+  readonly name: string;
+  readonly value: JsonValue;
+}
+
+export interface ActivityData {
+  readonly messageId: string;
+  readonly activityType: string;
+  readonly content: JsonValue;
+}
+
+/** The whole contract between the page and a plugin. Frozen. */
+export interface PluginApi {
+  readonly version: number;
+  beforeRun(hook: BeforeRunHook): void;
+  provideHeaders(provider: HeaderProvider): void;
+  renderCustomEvent(name: string, render: Render<CustomEventData>): void;
+  renderActivity(type: string, render: Render<ActivityData>): void;
 }
