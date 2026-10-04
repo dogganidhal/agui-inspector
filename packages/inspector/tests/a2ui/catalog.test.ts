@@ -10,7 +10,9 @@ import { ComponentContext } from '@a2ui/web_core/v0_9';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { A2uiAction, JsonValue } from '../../src/contracts.ts';
+import { STANDARD_V08 } from '../../src/core/a2ui/catalogs.ts';
 import { createSurfaceSession } from '../../src/core/a2ui/index.ts';
+import { parseConfig } from '../../src/core/config/index.ts';
 import { createBundledCatalog, createBundledCatalogs } from '../../src/views/a2ui/catalog.tsx';
 import {
   BASIC_CATALOG_ID,
@@ -29,11 +31,12 @@ const withCatalog = (operations: readonly Record<string, unknown>[], catalogId: 
     return createSurface === undefined ? operation : { ...operation, createSurface: { ...createSurface, catalogId } };
   });
 
-function session() {
+function session(aliases?: Record<string, string>) {
   const actions: A2uiAction[] = [];
   const host = createSurfaceSession<ReactComponentImplementation>({
     catalog: createBundledCatalogs,
     onAction: (action) => void actions.push(action),
+    ...(aliases !== undefined && { aliases }),
   });
   return { host, actions };
 }
@@ -145,4 +148,80 @@ test('an unlisted component type resolves to an error stand-in with the entry as
   assert.match(markup, /Received component root/);
   assert.match(markup, /depth/);
   assert.doesNotMatch(markup, /color:\s*red/);
+});
+
+// ---- configured aliases (spec 008, FR-012 to FR-017) ---------------------------------------------------
+
+const FORMER = 'https://catalog.invalid/old/basic.json';
+const FORMER_V08 = 'https://catalog.invalid/old/standard.json';
+
+/** What a page does with a config file: parse it, and give its aliases to the session. */
+function fromConfig(catalogAliases: unknown) {
+  const text = JSON.stringify({ agents: [{ id: 'a', url: '/a' }], catalogAliases });
+  const parsed = parseConfig(text);
+  assert.equal(parsed.ok, true);
+  return session(parsed.ok ? parsed.value.catalogAliases : undefined);
+}
+
+test('createBundledCatalogs builds one catalog per alias id, all sharing the guarded components and functions', () => {
+  const reports: Array<{ kind: string; url: string }> = [];
+  const [basic, ...aliases] = createBundledCatalogs((blocked) => void reports.push(blocked), [MIDDLEWARE_CATALOG_ID, FORMER]);
+  assert.deepEqual(aliases.map((catalog) => catalog.id), [MIDDLEWARE_CATALOG_ID, FORMER]);
+  for (const alias of aliases) {
+    for (const [name, component] of basic!.components) assert.equal(alias.components.get(name), component, `${name} is shared`);
+    alias.functions.get('openUrl')!.execute({ url: `http://${THIRD_PARTY_HOST}/page` }, undefined as never);
+  }
+  assert.equal(reports.length, 2, 'the guard sits on every alias');
+  assert.deepEqual(createBundledCatalogs(() => undefined, []).map((catalog) => catalog.id), [basicCatalog.id], 'no alias ids, no alias catalogs');
+});
+
+test('a configured alias renders, round-trips an action and rewrites nothing', async () => {
+  const operations = json(withCatalog(formSurface, FORMER));
+  const received = JSON.stringify(operations);
+  const { host, actions } = fromConfig({ [FORMER]: BASIC_CATALOG_ID });
+  noFetch(() => host.apply(operations));
+  const { surfaces, issues } = host.snapshot();
+  assert.deepEqual(issues, []);
+  assert.deepEqual(surfaces.map((surface) => surface.id), ['form']);
+  assert.equal(surfaces[0]!.defaultCatalog.id, FORMER, 'the surface answers to the id the agent sent');
+  assert.equal(JSON.stringify(operations), received);
+  await surfaces[0]!.dispatchAction({ event: { name: 'send_note', context: { note: { path: '/note' } } } }, 'send');
+  assert.equal(actions.length, 1);
+});
+
+test('without the alias the same id is "Catalog not found" with the entry as received', () => {
+  const operations = json(withCatalog(formSurface, FORMER)) as JsonValue[];
+  const { host } = fromConfig(undefined);
+  host.apply(operations);
+  const { surfaces, issues } = host.snapshot();
+  assert.deepEqual(surfaces, []);
+  const refusal = issues.find((issue) => issue.index === 0);
+  assert.equal(refusal?.message, `Catalog not found: ${FORMER}`);
+  assert.deepEqual(refusal?.operation, operations[0]);
+});
+
+test('near misses of a configured alias, and an alias of the other version, are still errors', () => {
+  const aliases = { [FORMER]: BASIC_CATALOG_ID, [FORMER_V08]: STANDARD_V08 };
+  for (const near of [`${FORMER}/`, FORMER.replace('https', 'http'), FORMER.toUpperCase(), FORMER_V08]) {
+    const { host } = fromConfig(aliases);
+    noFetch(() => host.apply(json(withCatalog(formSurface, near))));
+    assert.deepEqual(host.snapshot().surfaces, [], near);
+    assert.equal(host.snapshot().issues.find((issue) => issue.index === 0)?.message, `Catalog not found: ${near}`, near);
+  }
+});
+
+test('an alias that names another alias does not chain, and a bad entry does not take the good one with it', () => {
+  const { host } = fromConfig({ first: 'second', second: BASIC_CATALOG_ID, [FORMER]: BASIC_CATALOG_ID });
+  host.apply(json(withCatalog(formSurface, 'first')));
+  assert.deepEqual(host.snapshot().surfaces, []);
+  const other = fromConfig({ first: 'second', second: BASIC_CATALOG_ID, [FORMER]: BASIC_CATALOG_ID });
+  other.host.apply(json(withCatalog(formSurface, FORMER)));
+  assert.deepEqual(other.host.snapshot().surfaces.map((surface) => surface.id), ['form']);
+});
+
+test('the middleware default still resolves with no config and is not replaced by a config alias', () => {
+  const { host } = fromConfig({ [MIDDLEWARE_CATALOG_ID]: STANDARD_V08 });
+  host.apply(json(withCatalog(formSurface, MIDDLEWARE_CATALOG_ID)));
+  assert.deepEqual(host.snapshot().issues, []);
+  assert.deepEqual(host.snapshot().surfaces.map((surface) => surface.id), ['form']);
 });

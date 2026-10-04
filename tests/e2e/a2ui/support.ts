@@ -20,6 +20,8 @@ declare global {
       control(operations: unknown): void;
       /** An `a2ui-surface` activity's whole content, so a lifecycle snapshot (`status`, no operations) can be shown. */
       activity(content: unknown): void;
+      /** The config's `catalogAliases`. Starts a new view, so call it before `set`. */
+      aliases(map: Record<string, string> | undefined): void;
     };
   }
 }
@@ -41,19 +43,22 @@ export const test = base.extend<object, { site: Site }>({
         entryPoints: { fixture: path.join(root, 'packages', 'inspector', 'tests', 'a2ui', 'fixture.tsx') },
       });
       // No img-src, media-src or connect-src: the page's CSP must not be what stops a third-party request.
-      const page = `<!doctype html>
+      // `/strict` is the same page with the real page's `style-src 'self'`, so a renderer that injects a <style>
+      // raises a policy violation there as it would in the app.
+      const page = (policy: string) => `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta http-equiv="Content-Security-Policy" content="script-src 'self'; object-src 'none'; base-uri 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="${policy}" />
     <title>a2ui fixture</title>
     <link rel="stylesheet" href="/fixture.css" />
   </head>
   <body><div id="root"></div><script type="module" src="/fixture.js"></script></body>
 </html>`;
       const files: Record<string, [string, string]> = {
-        '/': ['text/html', page],
+        '/': ['text/html', page("script-src 'self'; object-src 'none'; base-uri 'none'")],
+        '/strict': ['text/html', page("script-src 'self'; style-src 'self'; object-src 'none'; base-uri 'none'")],
         '/fixture.js': ['text/javascript', readFileSync(path.join(outdir, 'fixture.js'), 'utf8')],
         '/fixture.css': ['text/css', readFileSync(path.join(outdir, 'fixture.css'), 'utf8')],
         '/override.css': ['text/css', OVERRIDE],
@@ -75,8 +80,9 @@ export const test = base.extend<object, { site: Site }>({
   ],
 });
 
-export async function open(page: Page, site: Site): Promise<void> {
-  await page.goto(site.origin);
+/** `strict` opens the page that also carries the real page's `style-src 'self'`. */
+export async function open(page: Page, site: Site, { strict = false }: { strict?: boolean } = {}): Promise<void> {
+  await page.goto(strict ? `${site.origin}/strict` : site.origin);
   await page.waitForFunction(() => '__a2ui' in window);
 }
 

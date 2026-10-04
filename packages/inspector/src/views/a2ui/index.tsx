@@ -1,12 +1,13 @@
 import { useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactElement, type ReactNode } from 'react';
 import { A2uiSurface } from '@a2ui/react/v0_9';
 import type { ReactComponentImplementation } from '@a2ui/react/v0_9';
-import type { A2uiAction, A2uiViewProps, JsonValue } from '../../contracts';
+import type { A2uiAction, A2uiViewProps, CatalogAliases, JsonValue } from '../../contracts';
 import { A2UI_ACTIVITY_TYPE, createSurfaceSession, type SurfaceIssue, type SurfaceSession } from '../../core/a2ui/index';
 import { readLifecycle, type Lifecycle } from '../../core/a2ui/lifecycle';
 import { CodeBlock, Finding, Tag } from '../theme/primitives';
 import { createBundledCatalogs } from './catalog';
 import { FieldMessagesProvider } from './components';
+import { V08Host, V08Surface } from './v08';
 
 export { A2UI_ACTIVITY_TYPE };
 
@@ -97,7 +98,7 @@ function Shell({ activityId, status, children }: { activityId: string; status: s
   );
 }
 
-function Rendered({ activityId, operations, onAction }: Pick<A2uiViewProps, 'activityId' | 'operations' | 'onAction'>): ReactElement {
+function Rendered({ activityId, operations, catalogAliases, onAction }: Pick<A2uiViewProps, 'activityId' | 'operations' | 'catalogAliases' | 'onAction'>): ReactElement {
   const latest = useRef(onAction);
   useLayoutEffect(() => {
     latest.current = onAction;
@@ -106,24 +107,50 @@ function Rendered({ activityId, operations, onAction }: Pick<A2uiViewProps, 'act
     const created = createSurfaceSession<ReactComponentImplementation>({
       catalog: createBundledCatalogs,
       onAction: (action: A2uiAction) => latest.current(action),
+      ...(catalogAliases !== undefined && { aliases: catalogAliases }),
     });
     created.apply(operations);
     return created;
   });
   useLayoutEffect(() => session.apply(operations), [session, operations]);
-  const { surfaces, issues } = useSyncExternalStore(session.subscribe, session.snapshot, session.snapshot);
+  const { surfaces, issues, order, v08 } = useSyncExternalStore(session.subscribe, session.snapshot, session.snapshot);
+
+  /** Every surface, v0.9 and v0.8, in the order the list first names them. A rebuild remounts a v0.8 surface, so typed text goes. */
+  const draw = (v08Ids: readonly string[], epoch: number): ReactNode => {
+    const drawn = [
+      ...surfaces.map((surface) => ({
+        key: `v0.9:${surface.id}`,
+        element: (
+          <div key={`v0.9:${surface.id}`} className="agui-a2ui-surface" data-surface={surface.id} data-version="v0.9">
+            <FieldMessagesProvider>
+              <A2uiSurface surface={surface} />
+            </FieldMessagesProvider>
+          </div>
+        ),
+      })),
+      ...v08Ids.map((id) => ({
+        key: `v0.8:${id}`,
+        element: (
+          <div key={`v0.8:${id}:${epoch}`} className="agui-a2ui-surface" data-surface={id} data-version="v0.8">
+            <V08Surface id={id} />
+          </div>
+        ),
+      })),
+    ].sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key));
+    if (drawn.length === 0 && issues.length === 0) return <p role="status" className="agui-a2ui-note">No surface has been created yet.</p>;
+    return drawn.map((entry) => entry.element);
+  };
 
   return (
     <Shell activityId={activityId} status="rendered">
       {issues.length > 0 && <Issues issues={issues} />}
-      {surfaces.map((surface) => (
-        <div key={surface.id} className="agui-a2ui-surface" data-surface={surface.id}>
-          <FieldMessagesProvider>
-            <A2uiSurface surface={surface} />
-          </FieldMessagesProvider>
-        </div>
-      ))}
-      {surfaces.length === 0 && issues.length === 0 && <p role="status" className="agui-a2ui-note">No surface has been created yet.</p>}
+      {v08.messages.length > 0 ? (
+        <V08Host session={session} feed={v08} onAction={(action) => latest.current(action)}>
+          {draw}
+        </V08Host>
+      ) : (
+        draw([], v08.epoch)
+      )}
     </Shell>
   );
 }
@@ -134,7 +161,7 @@ function Rendered({ activityId, operations, onAction }: Pick<A2uiViewProps, 'act
  * the generation `lifecycle` (building, retrying, failed) when the activity declared one. It reads
  * nothing but its props and calls `onAction` only when a user acts on a surface.
  */
-export function A2uiView({ activityId, operations, renderEnabled, onAction, lifecycle }: A2uiViewProps & { readonly lifecycle?: Lifecycle }): ReactElement {
+export function A2uiView({ activityId, operations, renderEnabled, catalogAliases, onAction, lifecycle }: A2uiViewProps & { readonly lifecycle?: Lifecycle }): ReactElement {
   if (!renderEnabled) {
     return (
       <Shell activityId={activityId} status="json-only">
@@ -157,7 +184,7 @@ export function A2uiView({ activityId, operations, renderEnabled, onAction, life
       </Shell>
     );
   }
-  return <Rendered activityId={activityId} operations={operations} onAction={onAction} />;
+  return <Rendered activityId={activityId} operations={operations} catalogAliases={catalogAliases} onAction={onAction} />;
 }
 
 /** What the conversation view needs of an activity entry; its `ActivityEntry` fits. */
@@ -173,11 +200,11 @@ export interface ActivityLike {
  */
 export function a2uiActivity(
   entry: ActivityLike,
-  options: { readonly renderEnabled: boolean; onAction(action: A2uiAction): void },
+  options: { readonly renderEnabled: boolean; readonly catalogAliases?: CatalogAliases; onAction(action: A2uiAction): void },
 ): ReactNode | undefined {
   if (entry.activityType !== A2UI_ACTIVITY_TYPE) return undefined;
   const { content } = entry;
   const operations = isRecord(content) ? (content['a2ui_operations'] ?? null) : null;
   const lifecycle = operations === null ? readLifecycle(content) : undefined;
-  return <A2uiView key={entry.messageId} activityId={entry.messageId} operations={operations} lifecycle={lifecycle} renderEnabled={options.renderEnabled} onAction={options.onAction} />;
+  return <A2uiView key={entry.messageId} activityId={entry.messageId} operations={operations} lifecycle={lifecycle} renderEnabled={options.renderEnabled} catalogAliases={options.catalogAliases} onAction={options.onAction} />;
 }

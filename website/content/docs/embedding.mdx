@@ -65,6 +65,7 @@ FastAPI uses the same call because it is a Starlette application. The package it
 | `path` | The page's path, default `/agui-inspector`. It must start with `/` and cannot be `/` alone. A trailing `/` is ignored. |
 | `theme` | Optional `{"light": {...}, "dark": {...}}`. Each map is optional and maps the ten public `--agui-*` names to CSS values, for example `{"light": {"--agui-accent": "#2563eb"}}`. The helper writes it into `config.json` as given. |
 | `brand` | Optional `Brand(name=..., logo=..., logo_dark=...)`. Every field is optional. The helper writes the set fields into `config.json` as given, with `logo_dark` written as `logoDark`. See [Branding the embedded page](#branding-the-embedded-page). |
+| `catalog_aliases` | Optional `{"<former id>": "<bundled catalog id>"}`. The helper writes it into `config.json` as `catalogAliases`, as given. See [Catalog aliases](#catalog-aliases). |
 
 ## Debug guard
 
@@ -108,6 +109,25 @@ The page checks the brand when it loads `config.json`. It shows a "Configuration
 
 `brand` changes nothing else: same routes, same content security policy header, no extra request. A host that serves the assets itself puts the same `brand` field in its own `config.json`.
 
+## Catalog aliases
+
+`catalog_aliases` maps an A2UI catalog id that your agent still uses to a catalog that the inspector bundles:
+
+```python
+mount_inspector(
+    app,
+    agents=[Agent(id="support", url="/agents/support/stream")],
+    enabled=True,
+    catalog_aliases={
+        "https://catalogs.example.com/old/basic.json": "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json",
+    },
+)
+```
+
+The helper does not check it. The page checks it when it loads `config.json` and shows a "Configuration" warning for each entry it rejects. A rejected entry never stops the page or the agents from loading. The rules are in [configuration](./configuration.mdx#catalog-aliases).
+
+`catalog_aliases` changes nothing else: same routes, same content security policy header, no extra request. A host that serves the assets itself puts the same `catalogAliases` field in its own `config.json`.
+
 ## Routes
 
 With the default path the helper adds:
@@ -116,7 +136,7 @@ With the default path the helper adds:
 | --- | --- |
 | `GET /agui-inspector` | A 307 redirect to `/agui-inspector/` that keeps the query string, so the page's relative script URL resolves. The `Location` includes the ASGI (Asynchronous Server Gateway Interface) `root_path`, which holds the prefix of every outer mount. Under `outer.mount("/api", app)` it is `/api/agui-inspector/`. |
 | `GET /agui-inspector/` | The inspector page. |
-| `GET /agui-inspector/config.json` | The version-0 configuration built from `agents`, `theme` and `brand`: `{"version": 0, "agents": [...], "theme": {...}, "brand": {...}}`. Fields left as `None` are left out, and so are `theme` and `brand` when you pass none. The page reads it from its own directory, so a custom `path` works the same way. |
+| `GET /agui-inspector/config.json` | The version-0 configuration built from `agents`, `theme`, `brand` and `catalog_aliases`: `{"version": 0, "agents": [...], "theme": {...}, "brand": {...}, "catalogAliases": {...}}`. Fields left as `None` are left out, and so are `theme`, `brand` and `catalogAliases` when you pass none. The page reads it from its own directory, so a custom `path` works the same way. |
 | `GET /agui-inspector/<file>` | A packaged asset, including nested ones. Anything else is a 404. |
 
 The helper rejects other methods. It adds no session endpoints, no storage and no proxy for the agent. The page calls your agent URL directly, and a captured session never reaches the server.

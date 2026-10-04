@@ -1,4 +1,4 @@
-import { Fragment, createContext, useContext, useEffect, useId, useRef, useState, useSyncExternalStore, type CSSProperties, type KeyboardEvent, type ReactElement, type ReactNode } from 'react';
+import { Fragment, createContext, useContext, useEffect, useId, useState, useSyncExternalStore, type CSSProperties, type ReactElement, type ReactNode } from 'react';
 import { createBinderlessComponentImplementation, createComponentImplementation, type ReactComponentImplementation } from '@a2ui/react/v0_9';
 import {
   ButtonApi,
@@ -12,7 +12,7 @@ import {
 } from '@a2ui/web_core/v0_9/basic_catalog';
 import { z } from 'zod';
 import type { JsonValue } from '../../contracts';
-import { CodeBlock, Finding } from '../theme/primitives';
+import { ButtonView, IconView, ModalView, TabsView, UnknownView } from './parts';
 
 // The components the official renderer draws without a usable hook. @a2ui/react 0.12.0 styles them with
 // CSS-module class names that are never resolved, and Tabs, Modal, ChoicePicker and Divider carry no
@@ -70,26 +70,12 @@ const Divider = createComponentImplementation(DividerApi, ({ props }) => {
   return <div role="separator" aria-orientation={vertical ? 'vertical' : 'horizontal'} className="agui-a2ui-divider" data-axis={vertical ? 'vertical' : 'horizontal'} style={weighted(props.weight)} {...accessible(props.accessibility).aria} />;
 });
 
-/**
- * Icon. The inspector loads no icon font, so a named icon is drawn as its name, humanised, in a small
- * tag that is announced as an image with that name. An `svgPath` draws normally.
- */
+/** Icon: see `IconView`. The inspector loads no icon font, so a named icon is drawn as its name. */
 const Icon = createComponentImplementation(IconApi, ({ props }) => {
-  const name = props.name;
-  const { label } = accessible(props.accessibility);
-  if (typeof name === 'object' && name !== null && 'svgPath' in name) {
-    return (
-      <svg className="agui-a2ui-icon" viewBox="0 0 24 24" role={label ? 'img' : undefined} aria-label={label} aria-hidden={label ? undefined : true} style={weighted(props.weight)}>
-        <path d={String(name.svgPath)} fill="currentColor" />
-      </svg>
-    );
-  }
-  const words = typeof name === 'string' ? name.replace(/([A-Z])/g, ' $1').toLowerCase() : '';
-  return (
-    <span className="agui-a2ui-icon-name" role="img" aria-label={label ?? words} style={weighted(props.weight)}>
-      {words}
-    </span>
-  );
+  const { name } = props;
+  const label = accessible(props.accessibility).label;
+  const drawn = typeof name === 'object' && name !== null && 'svgPath' in name ? { svgPath: String(name.svgPath) } : typeof name === 'string' ? name : '';
+  return <IconView name={drawn} label={label} style={weighted(props.weight)} />;
 });
 
 /**
@@ -145,31 +131,15 @@ export function FieldMessagesProvider({ children }: { children: ReactNode }): Re
  * the button is disabled and adds nothing.
  */
 const Button = createComponentImplementation(ButtonApi, ({ props, buildChild }) => {
-  const hintId = useId();
   const messages = useContext(FieldMessagesContext);
   const read = messages?.snapshot ?? (() => noMessages);
   const fieldShows = useSyncExternalStore(messages?.subscribe ?? subscribeNone, read, read);
   const invalid = props.isValid === false;
   const hint = invalid ? props.validationErrors?.find((message) => !fieldShows.has(message)) : undefined;
   return (
-    <span className="agui-a2ui-action" style={weighted(props.weight)}>
-      <button
-        type="button"
-        className="agui-a2ui-btn"
-        data-variant={props.variant ?? 'default'}
-        disabled={invalid}
-        aria-describedby={hint ? hintId : undefined}
-        onClick={props.action}
-        {...accessible(props.accessibility).aria}
-      >
-        {props.child ? buildChild(props.child) : null}
-      </button>
-      {hint && (
-        <span id={hintId} className="agui-a2ui-hint">
-          {hint}
-        </span>
-      )}
-    </span>
+    <ButtonView variant={props.variant ?? 'default'} disabled={invalid} hint={hint} aria={accessible(props.accessibility).aria} style={weighted(props.weight)} onClick={props.action}>
+      {props.child ? buildChild(props.child) : null}
+    </ButtonView>
   );
 });
 
@@ -246,88 +216,16 @@ const ChoicePicker = createComponentImplementation(ChoicePickerApi, ({ props }) 
   );
 });
 
-/** Tabs: the WAI-ARIA tabs pattern. Arrow keys, Home and End move between tabs and select them. */
+/** Tabs: the WAI-ARIA tabs pattern, as `TabsView` draws it. */
 const Tabs = createComponentImplementation(TabsApi, ({ props, buildChild }) => {
-  const id = useId();
   const tabs = props.tabs ?? [];
-  const [chosen, setChosen] = useState(0);
-  const selected = Math.min(chosen, Math.max(tabs.length - 1, 0));
-  const refs = useRef<Array<HTMLButtonElement | null>>([]);
-  const move = (event: KeyboardEvent, to: number) => {
-    event.preventDefault();
-    const next = (to + tabs.length) % tabs.length;
-    setChosen(next);
-    refs.current[next]?.focus();
-  };
-  const onKeyDown = (event: KeyboardEvent) => {
-    if (event.key === 'ArrowRight') move(event, selected + 1);
-    else if (event.key === 'ArrowLeft') move(event, selected - 1);
-    else if (event.key === 'Home') move(event, 0);
-    else if (event.key === 'End') move(event, tabs.length - 1);
-  };
-  const active = tabs[selected];
-  return (
-    <div className="agui-a2ui-tabs" style={weighted(props.weight)}>
-      <div role="tablist" className="agui-a2ui-tablist" {...accessible(props.accessibility).aria} onKeyDown={onKeyDown}>
-        {tabs.map((tab, at) => (
-          <button
-            key={at}
-            ref={(element) => {
-              refs.current[at] = element;
-            }}
-            type="button"
-            role="tab"
-            id={`${id}-tab-${at}`}
-            className="agui-a2ui-tab"
-            aria-selected={at === selected}
-            aria-controls={`${id}-panel`}
-            tabIndex={at === selected ? 0 : -1}
-            onClick={() => setChosen(at)}
-          >
-            {String(tab.title)}
-          </button>
-        ))}
-      </div>
-      <div role="tabpanel" id={`${id}-panel`} className="agui-a2ui-tabpanel" aria-labelledby={`${id}-tab-${selected}`} tabIndex={0}>
-        {active ? buildChild(active.child) : null}
-      </div>
-    </div>
-  );
+  return <TabsView titles={tabs.map((tab) => String(tab.title))} panel={(at) => (tabs[at] ? buildChild(tabs[at].child) : null)} aria={accessible(props.accessibility).aria} style={weighted(props.weight)} />;
 });
 
-/**
- * Modal: the trigger opens a native dialog. The browser traps focus inside, Escape and the close button
- * shut it and focus returns to the trigger. Clicking the backdrop shuts it too.
- */
-const Modal = createComponentImplementation(ModalApi, ({ props, buildChild }) => {
-  const [open, setOpen] = useState(false);
-  const dialog = useRef<HTMLDialogElement>(null);
-  useEffect(() => {
-    if (open && dialog.current && !dialog.current.open) dialog.current.showModal();
-  }, [open]);
-  return (
-    <>
-      <div className="agui-a2ui-modal-trigger" onClick={() => setOpen(true)} style={weighted(props.weight)}>
-        {props.trigger ? buildChild(props.trigger) : null}
-      </div>
-      {open && (
-        <dialog
-          ref={dialog}
-          className="agui-a2ui-modal"
-          {...accessible(props.accessibility).aria}
-          aria-label={str(props.accessibility?.label) ?? 'Dialog'}
-          onClose={() => setOpen(false)}
-          onClick={(event) => event.target === event.currentTarget && dialog.current?.close()}
-        >
-          <button type="button" className="agui-a2ui-modal-close" aria-label="Close" onClick={() => dialog.current?.close()}>
-            ×
-          </button>
-          <div className="agui-a2ui-modal-body">{props.content ? buildChild(props.content) : null}</div>
-        </dialog>
-      )}
-    </>
-  );
-});
+/** Modal: the trigger opens the native dialog of `ModalView`. */
+const Modal = createComponentImplementation(ModalApi, ({ props, buildChild }) => (
+  <ModalView trigger={props.trigger ? buildChild(props.trigger) : null} content={props.content ? buildChild(props.content) : null} label={str(props.accessibility?.label)} aria={accessible(props.accessibility).aria} style={weighted(props.weight)} />
+));
 
 /**
  * What stands in for a component whose type the catalog does not list, in place of the renderer's raw red
@@ -337,17 +235,7 @@ const Modal = createComponentImplementation(ModalApi, ({ props, buildChild }) =>
 export const unknownComponent = (type: string): ReactComponentImplementation =>
   createBinderlessComponentImplementation({ name: type, schema: z.object({}).passthrough() }, ({ context }) => {
     const { id, properties } = context.componentModel;
-    return (
-      <div role="alert" className="agui-a2ui-unknown">
-        <Finding variant="err" kind={`Component ${id}`}>
-          Unknown component type: {type}. The catalog has no such component, so nothing is drawn for it.
-        </Finding>
-        <details className="agui-a2ui-received">
-          <summary>As received</summary>
-          <CodeBlock text={JSON.stringify({ id, component: type, ...properties } satisfies Record<string, JsonValue | undefined>, null, 2)} aria-label={`Received component ${id}`} />
-        </details>
-      </div>
-    );
+    return <UnknownView id={id} type={type} definition={{ id, component: type, ...properties } satisfies Record<string, JsonValue | undefined>} />;
   });
 
 export const COMPONENTS: Readonly<Record<string, ReactComponentImplementation>> = { Row, Divider, Icon, Button, TextField, ChoicePicker, Tabs, Modal };

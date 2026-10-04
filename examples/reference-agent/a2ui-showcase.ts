@@ -3,8 +3,9 @@
 // a pure function of the run input: nothing is remembered between runs, so a later step rebuilds what it
 // needs from the action's name and its resolved `context`. The activity a story paints keeps one message
 // id for all its runs, so a later run changes the surface in place; the stories that finish in one run take
-// their ids from the run id. Everything is fictional and made of the basic catalog (v0.9) alone: no
-// picture, no address that resolves, no catalog beyond the bundled one.
+// their ids from the run id. Everything is fictional and made of the standard catalogs alone (the v0.9 basic
+// catalog, and the v0.8 standard catalog for the expense report): no picture, no address that resolves, no
+// catalog beyond the bundled ones.
 //
 // What each story is there to show:
 //   find a table   a results surface (List template of Cards), a booking surface opened beside it, both
@@ -16,11 +17,14 @@
 //   self-repair    the middleware's lifecycle on one activity: building, an invalid attempt, retrying,
 //                  then the valid surface, or failed once the attempts run out
 //   sandbox probe  everything the inspector refuses: media, openUrl, an unknown component, an unknown
-//                  catalog, a v0.8 operation, a malformed list, markup in text
+//                  catalog, an operation that declares v0.8 as its version, a malformed list, markup in text
+//   expense report two A2UI v0.8 surfaces (no `version` key anywhere): a form whose button binds four values and
+//                  a status line with a withdraw button; submitting changes the status and adds a line that
+//                  shows what the agent received, withdrawing removes the form with a v0.8 deleteSurface
 //
 // Returns events only; the run's first and last frame belong to scenarios.ts, which also owns the
 // framing. Imports nothing from Node, React or a worker. Erasable TypeScript only, so Node can run it.
-import { BASIC_CATALOG_ID, THIRD_PARTY_HOST, externalResources, malformedOperations, type Operation, type UserAction } from './a2ui-scenarios.ts';
+import { BASIC_CATALOG_ID, THIRD_PARTY_HOST, externalResources, malformedOperations, v08Continuation, v08Surfaces, type Operation, type UserAction } from './a2ui-scenarios.ts';
 
 /** What the last user message asks the A2UI agent to show. Anything else, or nothing, gets the order form. Quick messages follow this order. */
 export const SHOWCASE = {
@@ -30,6 +34,7 @@ export const SHOWCASE = {
   selfRepair: 'Compare three laptops',
   neverValid: 'Compare three laptops (never valid)',
   sandbox: 'Probe the sandbox',
+  v08: 'Review an expense report (v0.8)',
 } as const;
 
 /** The actions the showcase's surfaces send, and the stories that answer them. */
@@ -40,6 +45,8 @@ export const ACTIONS = {
   bookAnother: 'book_another',
   submitTicket: 'submit_ticket',
   pauseDeploy: 'pause_deploy',
+  submitExpense: 'submit_expense',
+  withdrawExpense: 'withdraw_expense',
 } as const;
 
 const V = 'v0.9';
@@ -475,6 +482,17 @@ export const sandboxProbe: readonly unknown[] = [
   ...malformedOperations,
 ];
 
+// ---- expense report (A2UI v0.8) -----------------------------------------------------------------
+
+const EXPENSE_ACTIVITY = 'a2ui-expense-v08';
+
+/** Run 1: the two surfaces. Each action's run answers with the same list, extended by the story (a2ui-scenarios.ts). */
+function expenseReport(action: UserAction | undefined): readonly object[] | undefined {
+  if (action === undefined) return [surfaces(EXPENSE_ACTIVITY, v08Surfaces)];
+  if (action.name !== ACTIONS.submitExpense && action.name !== ACTIONS.withdrawExpense) return undefined;
+  return [surfaces(EXPENSE_ACTIVITY, v08Continuation(v08Surfaces, action))];
+}
+
 // ---- dispatch -----------------------------------------------------------------------------------
 
 const STORIES: ReadonlyArray<readonly [message: string, story: (runId: string) => readonly object[]]> = [
@@ -484,6 +502,7 @@ const STORIES: ReadonlyArray<readonly [message: string, story: (runId: string) =
   [SHOWCASE.selfRepair, (runId) => selfRepair(runId, false)],
   [SHOWCASE.neverValid, (runId) => selfRepair(runId, true)],
   [SHOWCASE.sandbox, (runId) => [surfaces(`a2ui-surface-sandbox-${runId}`, sandboxProbe)]],
+  [SHOWCASE.v08, () => expenseReport(undefined)!],
 ];
 
 /**
@@ -491,7 +510,7 @@ const STORIES: ReadonlyArray<readonly [message: string, story: (runId: string) =
  * surface action is answered by the story that owns its name, and the user's message by the story it names.
  */
 export function showcaseEvents(runId: string, userText: string, action: UserAction | undefined): readonly object[] | undefined {
-  if (action !== undefined) return findTable(runId, action) ?? supportTicket(runId, action) ?? deploy(action);
+  if (action !== undefined) return findTable(runId, action) ?? supportTicket(runId, action) ?? deploy(action) ?? expenseReport(action);
   const wanted = userText.trim().toLowerCase();
   return STORIES.find(([message]) => message.toLowerCase() === wanted)?.[1](runId);
 }

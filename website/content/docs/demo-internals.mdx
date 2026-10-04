@@ -109,7 +109,7 @@ timing passes a profile: `createInteractiveServer({ pace: NATURAL_PACE })`, or `
 ## Writing a showcase story
 
 The A2UI showcase's stories are in [`a2ui-showcase.ts`](https://github.com/dogganidhal/agui-inspector/blob/main/examples/reference-agent/a2ui-showcase.ts)
-and use only the bundled basic catalog (A2UI v0.9). Four renderer details matter when you write one:
+and use the bundled catalogs (the v0.9 basic catalog, and the v0.8 standard catalog for the expense report). Four v0.9 renderer details matter when you write one:
 
 - A check is `{ "condition": ..., "message": ... }`, and a button with a failing check is disabled.
 - A text field holds text, so check it with `regex` or `length`. `numeric` takes a number and reports an error on a

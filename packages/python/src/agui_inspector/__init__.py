@@ -77,6 +77,7 @@ def mount_inspector(
     path: str = DEFAULT_PATH,
     theme: dict[str, dict[str, str]] | None = None,
     brand: Brand | None = None,
+    catalog_aliases: dict[str, str] | None = None,
 ) -> None:
     """Serve the inspector page, its assets and ``<path>/config.json`` from ``app``.
 
@@ -96,6 +97,12 @@ def mount_inspector(
     ``brand`` puts the adopter's name and logo in the page's top bar. Like ``theme`` it goes into
     ``config.json`` as given, with ``logo_dark`` written as ``logoDark`` and unset fields left out. The page
     accepts a logo only from its own origin or as a ``data:`` image and warns about anything else.
+
+    ``catalog_aliases`` maps a former A2UI catalog id to the id of a catalog the inspector bundles
+    (``https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json`` or
+    ``https://a2ui.org/specification/v0_8/standard_catalog_definition.json``). It goes into
+    ``config.json`` as ``catalogAliases``, as given: the page validates it and shows a warning for any
+    entry it rejects, never an error.
     """
     if not enabled:
         return
@@ -121,6 +128,7 @@ def mount_inspector(
             "agents": [{k: v for k, v in asdict(a).items() if v is not None} for a in agents],
             **({"theme": theme} if theme is not None else {}),
             **({"brand": _brand_config(brand)} if brand is not None else {}),
+            **({"catalogAliases": catalog_aliases} if catalog_aliases is not None else {}),
         }
     )
     headers = {"content-security-policy": _CSP}

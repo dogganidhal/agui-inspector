@@ -3,7 +3,10 @@
    --agui-* restyles surfaces too. The official @a2ui/react 0.12.0 ships its component stylesheet with
    unresolved CSS-module class names, so it is not loaded. Components that style through inline
    variables (Card, Column, List, CheckBox, Slider, DateTimeInput) are themed by the --a2ui-* block below;
-   the rest are drawn by components.tsx with the agui-a2ui-* classes in this file. */
+   the rest are drawn by components.tsx with the agui-a2ui-* classes in this file. v0.8 surfaces (v08.tsx)
+   share those classes where a control has the same shape, and the last block adds what the v0.8 renderer's
+   layout components need. The renderer's own v0.8 stylesheet is never loaded either (the page's policy would
+   refuse it), and v08-theme.ts names these classes instead of its utility ones. */
 
 .agui-a2ui {
   --a2ui-color-background: var(--bg);
@@ -262,3 +265,46 @@ textarea.agui-a2ui-input { resize: vertical; }
 .agui-a2ui-lifecycle { display: grid; gap: calc(var(--u) * 2); }
 .agui-a2ui-pending { display: flex; flex-wrap: wrap; align-items: center; gap: calc(var(--u) * 2); margin: 0; color: var(--muted); }
 .agui-a2ui-errors { margin: calc(var(--u) * 2) 0 0; padding-left: calc(var(--u) * 4); color: var(--muted); font: 12px/1.5 var(--agui-font-mono); }
+
+/* A2UI v0.8 surfaces. The renderer's layout components are an `a2ui-*` host element holding a section, with
+   `data-*` attributes for alignment. The surface's own primary color and font, when its beginRendering carries
+   them, arrive as --p-50 and --font-family on the renderer's root; everything else comes from the theme tokens. */
+.agui-a2ui-surface[data-version="v0.8"] .a2ui-surface {
+  --v08-accent: var(--p-50, var(--acc));
+  display: grid;
+  min-width: 0;
+  font-family: var(--font-family, var(--agui-font-sans));
+}
+.agui-a2ui-surface[data-version="v0.8"] :is(.a2ui-row, .a2ui-column, .a2ui-list, .a2ui-card, .a2ui-text, .a2ui-button, .a2ui-tabs, .a2ui-modal, .a2ui-icon, .a2ui-image, .a2ui-video, .a2ui-audioplayer, .a2ui-textfield, .a2ui-checkbox, .a2ui-slider, .a2ui-datetime-input, .a2ui-multiplechoice, .a2ui-divider) {
+  min-width: 0;
+  flex: var(--weight, initial);
+}
+.agui-a2ui-surface[data-version="v0.8"] :is(.a2ui-row, .a2ui-column, .a2ui-list) > section { display: flex; min-width: 0; }
+.agui-a2ui-surface[data-version="v0.8"] .a2ui-row > section { flex-flow: row wrap; gap: calc(var(--u) * 2) calc(var(--u) * 3); }
+.agui-a2ui-surface[data-version="v0.8"] .a2ui-column > section { flex-direction: column; gap: var(--a2ui-column-gap); }
+.agui-a2ui-surface[data-version="v0.8"] .a2ui-list > section { flex-direction: column; gap: var(--a2ui-list-gap); }
+.agui-a2ui-surface[data-version="v0.8"] .a2ui-list[data-direction="horizontal"] > section { flex-flow: row wrap; }
+.agui-a2ui-surface[data-version="v0.8"] [data-alignment="start"] > section { align-items: flex-start; }
+.agui-a2ui-surface[data-version="v0.8"] [data-alignment="center"] > section { align-items: center; }
+.agui-a2ui-surface[data-version="v0.8"] [data-alignment="end"] > section { align-items: flex-end; }
+.agui-a2ui-surface[data-version="v0.8"] [data-alignment="stretch"] > section { align-items: stretch; }
+.agui-a2ui-surface[data-version="v0.8"] [data-distribution="start"] > section { justify-content: flex-start; }
+.agui-a2ui-surface[data-version="v0.8"] [data-distribution="center"] > section { justify-content: center; }
+.agui-a2ui-surface[data-version="v0.8"] [data-distribution="end"] > section { justify-content: flex-end; }
+.agui-a2ui-surface[data-version="v0.8"] [data-distribution="spaceBetween"] > section { justify-content: space-between; }
+.agui-a2ui-surface[data-version="v0.8"] [data-distribution="spaceAround"] > section { justify-content: space-around; }
+.agui-a2ui-surface[data-version="v0.8"] [data-distribution="spaceEvenly"] > section { justify-content: space-evenly; }
+.agui-a2ui-surface[data-version="v0.8"] .a2ui-card > section {
+  padding: var(--a2ui-card-padding);
+  border: var(--a2ui-card-border);
+  border-radius: var(--r);
+  background: var(--a2ui-card-background);
+}
+.agui-a2ui-surface[data-version="v0.8"] .a2ui-text :is(p, h1, h2, h3, h4, h5) { margin: 0; }
+.agui-a2ui-surface[data-version="v0.8"] .a2ui-datetime-input { max-width: 16rem; }
+.agui-a2ui-v08-check { display: inline-flex; align-items: center; gap: var(--a2ui-checkbox-gap); }
+.agui-a2ui-v08-slider { display: grid; gap: calc(var(--u) * 1.5); }
+.agui-a2ui-v08-divider { display: block; width: 100%; height: 1px; margin: 0; border: 0; background: var(--line-2); }
+.agui-a2ui-surface[data-version="v0.8"] :is(input[type="checkbox"], input[type="range"]) { accent-color: var(--v08-accent); }
+.agui-a2ui-surface[data-version="v0.8"] .agui-a2ui-btn[data-variant="primary"] { background: var(--v08-accent); }
+.agui-a2ui-surface[data-version="v0.8"] .agui-a2ui-tab[aria-selected="true"] { border-bottom-color: var(--v08-accent); }

@@ -354,7 +354,7 @@ test('self-repair: the lifecycle on one activity ends on the valid surface, or o
   expectNothingLeft(requested, site);
 });
 
-test('sandbox probe: media, openUrl, an unknown component, an unknown catalog, v0.8 and a malformed list are refused and reported, and nothing leaves the page', async ({ page, site, requested }) => {
+test('sandbox probe: media, openUrl, an unknown component, an unknown catalog, a declared v0.8 version and a malformed list are refused and reported, and nothing leaves the page', async ({ page, site, requested }) => {
   await openShowcase(page, site);
   await quick(page, 'Probe the sandbox').click();
   const view = page.locator('[data-view="a2ui"]');
@@ -366,8 +366,8 @@ test('sandbox probe: media, openUrl, an unknown component, an unknown catalog, v
   // One message per bad operation, after its position (the list starts at 1), and the operations around them still draw.
   for (const message of [
     'This operation is not an object.',
-    'This operation has no version. Only A2UI v0.9 is supported.',
-    'This operation is A2UI v0.8. Only A2UI v0.9 is supported.',
+    'This operation has no version and no v0.8 message name. A2UI v0.9 operations declare "version": "v0.9".',
+    'This operation declares version v0.8. A2UI v0.9 operations declare "v0.9", and v0.8 messages have no version.',
     'Catalog not found: https://catalog.invalid/custom.json',
     'Surface not found for message: ghost',
   ]) {
@@ -386,6 +386,53 @@ test('sandbox probe: media, openUrl, an unknown component, an unknown catalog, v
 
   const session = await exportSession(page);
   expectCleanSession(session);
+  expect(requested.filter((url) => url.includes('.invalid')), 'nothing asked for a reserved address').toEqual([]);
+  expectNothingLeft(requested, site);
+});
+
+test('expense report (v0.8): two surfaces drawn by the v0.8 renderer, submit changes the status, withdraw removes the form, and every action carries its five fields', async ({ page, site, requested }) => {
+  const problems: string[] = [];
+  page.on('pageerror', (error) => problems.push(error.message));
+  page.on('console', (message) => message.type() === 'error' && problems.push(message.text()));
+  await openShowcase(page, site);
+  await quick(page, 'Review an expense report (v0.8)').click();
+  const form = surface(page, 'expense');
+  await expect(form).toBeVisible();
+  await idle(page);
+  await expect(form).toHaveAttribute('data-version', 'v0.8');
+  await expect(surface(page, 'status')).toHaveAttribute('data-version', 'v0.8');
+  await expect(page.getByRole('heading', { name: 'Expense report' })).toBeVisible();
+  await expect(page.getByText('Waiting for review')).toBeVisible();
+
+  await form.getByRole('textbox', { name: 'Amount' }).fill('73.10');
+  await form.getByRole('combobox', { name: 'Category' }).selectOption('equipment');
+  await form.getByRole('checkbox', { name: 'Receipt attached' }).check();
+  // Typing sent nothing: only the first run has gone out.
+  expect(conversations(await exportSession(page))).toHaveLength(1);
+
+  await form.getByRole('button', { name: 'Submit expense' }).click();
+  await expect(page.getByText('Submitted 73.10 for equipment')).toBeVisible();
+  await expect(page.getByText(/Received submit_expense from submit on expense: /)).toBeVisible();
+  // The answer extends the list in place: what was typed is still there.
+  await expect(form.getByRole('textbox', { name: 'Amount' })).toHaveValue('73.10');
+  await idle(page);
+
+  await surface(page, 'status').getByRole('button', { name: 'Withdraw' }).click();
+  await expect(page.getByText('Withdrawn')).toBeVisible();
+  await expect(form).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Expense report' })).toHaveCount(0);
+  await idle(page);
+
+  const session = await exportSession(page);
+  expectCleanSession(session);
+  const [first, submitted, withdrawn] = conversations(session);
+  expect(eventsOf(session, first!.id).filter((event) => event.type === 'ACTIVITY_SNAPSHOT')).toHaveLength(1);
+  expect(userAction(submitted!)).toMatchObject({ name: 'submit_expense', surfaceId: 'expense', sourceComponentId: 'submit', context: { amount: '73.10', category: ['equipment'], receipt: true, urgency: 2 } });
+  expect(userAction(withdrawn!)).toMatchObject({ name: 'withdraw_expense', surfaceId: 'status', sourceComponentId: 'withdraw', context: { status: expect.stringMatching(/^Submitted 73\.10 for equipment/) } });
+  // What the agent sent for the first run is what the activity JSON holds: no version key anywhere, nothing rewritten.
+  const sent = JSON.stringify(contentOf(eventsOf(session, first!.id).find((event) => event.type === 'ACTIVITY_SNAPSHOT')!));
+  expect(sent).not.toContain('"version"');
+  expect(problems).toEqual([]);
   expect(requested.filter((url) => url.includes('.invalid')), 'nothing asked for a reserved address').toEqual([]);
   expectNothingLeft(requested, site);
 });

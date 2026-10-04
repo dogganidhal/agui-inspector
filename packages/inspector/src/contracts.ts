@@ -120,12 +120,17 @@ export interface BrandConfig {
   readonly logoDark?: string;
 }
 
+/** A former A2UI catalog id mapped to the id of a catalog the inspector bundles. Own properties only. */
+export type CatalogAliases = { readonly [id: string]: string };
+
 /** `version` may be omitted in a historical file and is then read as 0. */
 export interface ConfigFile {
   readonly version?: typeof FORMAT_VERSION;
   readonly agents: readonly AgentConfig[];
   readonly theme?: ThemeConfig;
   readonly brand?: BrandConfig;
+  /** Optional: ids an agent may use for a bundled A2UI catalog, beside the built-in ones. */
+  readonly catalogAliases?: CatalogAliases;
 }
 
 /**
@@ -526,6 +531,8 @@ export interface A2uiViewProps {
   readonly operations: JsonValue;
   /** When false the operations stay inspectable as JSON. */
   readonly renderEnabled: boolean;
+  /** The config's catalog aliases. Fixed for the life of the view. */
+  readonly catalogAliases?: CatalogAliases;
   onAction(action: A2uiAction): void;
 }
 

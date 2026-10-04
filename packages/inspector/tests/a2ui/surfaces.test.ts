@@ -18,6 +18,7 @@ import { A2UI_ACTIVITY_TYPE, A2uiView, a2uiActivity } from '../../src/views/a2ui
 import { createBundledCatalog } from '../../src/views/a2ui/catalog.tsx';
 import {
   BASIC_CATALOG_ID,
+  STANDARD_V08_CATALOG_ID,
   deleteForm,
   externalResources,
   formSurface,
@@ -351,7 +352,9 @@ test('the A2UI core stays framework-free and independent of the optional render 
 test('nothing in the A2UI sources fetches, opens or sends anything on its own', () => {
   for (const { file, text } of [...sourcesUnder('core/a2ui'), ...sourcesUnder('views/a2ui')]) {
     assert.doesNotMatch(text, /\bfetch\(|XMLHttpRequest|sendBeacon|window\.open|new WebSocket|new EventSource|@import/, file);
-    assert.doesNotMatch(text, /https?:\/\//, `${file} names no remote address`);
+    // Catalog ids are addresses by spelling only: nothing requests them. Only the table of ids spells them.
+    const spelled = file === 'catalogs.ts' ? text.replaceAll(/https:\/\/a2ui\.org\/specification\/[\w./-]+/g, '') : text;
+    assert.doesNotMatch(spelled, /https?:\/\//, `${file} names no remote address`);
   }
 });
 
@@ -368,11 +371,13 @@ test('the stylesheet takes colors, radii and fonts from the theme tokens and loa
   }
 });
 
-test('the A2UI page states v0.9-only support, the bundled catalog and the blocked resources', () => {
+test('the A2UI page states the versions, the bundled catalogs, the aliases and the blocked resources', () => {
   const doc = readFileSync(path.join(process.cwd(), 'website', 'content', 'docs', 'a2ui.mdx'), 'utf8');
-  assert.match(doc, /Only A2UI v0\.9 is supported/);
+  assert.match(doc, /v0\.8 and v0\.9 surfaces/);
+  assert.doesNotMatch(doc, /Only A2UI v0\.9 is supported/);
   assert.ok(doc.includes(BASIC_CATALOG_ID));
-  for (const name of ['Image', 'Video', 'AudioPlayer', 'openUrl', 'forwardedProps.a2uiAction.userAction', 'renderA2ui', 'injectA2uiTool']) {
+  assert.ok(doc.includes(STANDARD_V08_CATALOG_ID));
+  for (const name of ['Image', 'Video', 'AudioPlayer', 'openUrl', 'forwardedProps.a2uiAction.userAction', 'renderA2ui', 'injectA2uiTool', 'catalogAliases', 'beginRendering', 'surfaceUpdate', 'Catalog not found']) {
     assert.ok(doc.includes(name), `${name} is documented`);
   }
 });

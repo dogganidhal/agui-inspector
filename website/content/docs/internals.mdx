@@ -259,10 +259,10 @@ view's activity card:
 import { A2uiView, a2uiActivity } from 'views/a2ui/index';
 
 // Standalone
-<A2uiView activityId={id} operations={content.a2ui_operations} renderEnabled={profile.renderA2ui} onAction={start} />
+<A2uiView activityId={id} operations={content.a2ui_operations} renderEnabled={profile.renderA2ui} catalogAliases={config.catalogAliases} onAction={start} />
 
 // Inside the conversation view's card
-<ConversationView {...props} renderActivity={(entry) => a2uiActivity(entry, { renderEnabled: profile.renderA2ui, onAction: start })} />
+<ConversationView {...props} renderActivity={(entry) => a2uiActivity(entry, { renderEnabled: profile.renderA2ui, catalogAliases: config.catalogAliases, onAction: start })} />
 ```
 
 `a2uiActivity` returns `undefined` for any type other than `a2ui-surface`, so the card stays on JSON. When a user
@@ -276,7 +276,32 @@ surfaces. Components that the inspector draws use `agui-a2ui-*` classes from the
 `@a2ui/react` 0.12.0 has unresolved CSS-module class names, so the inspector does not load it. Layout comes from the
 renderer's inline styles, except for `Row`.
 
-In 0.1.0 the renderer is in the main bundle. `npm run check:bundle:renderer` reports how much room is left.
+Both renderers are in the main bundle. `npm run check:bundle:renderer` reports how much room is left.
+
+### Versions, aliases and the v0.8 renderer
+
+One session in `core/a2ui` reads an activity's operation list. `operations.ts` finds the version of each entry: v0.9
+entries declare it, and v0.8 entries have no version and hold one of four message names. v0.9 entries go to a
+`MessageProcessor` from `@a2ui/web_core/v0_9`. v0.8 entries are checked with `A2uiMessageSchema` from
+`@a2ui/web_core/v0_8` and with the catalog table, because the v0.8 processor ignores `catalogId`. The session keeps the
+accepted v0.8 messages in order in its snapshot (`v08`), with an `epoch` that grows on every rebuild.
+
+`catalogs.ts` holds the two bundled catalog ids, the built-in alias and the config's aliases in one table. It imports
+no package, so `core/config` uses it to check the `catalogAliases` field. The v0.9 catalogs are built from the same
+table: `createBundledCatalogs` makes one catalog per alias id, all sharing the guarded components.
+
+The v0.8 renderer owns its processor. `A2UIProvider` makes one, and the contexts its components read are not exported.
+So `views/a2ui/v08.tsx` mounts the provider and a small component that feeds the session's v0.8 messages into it, once
+each and as copies. On a new epoch it clears the surfaces and replays the list. A message that the processor throws on
+goes back to the session as an issue with its position.
+
+The renderer would inject its own stylesheet as a `<style>` element. The page's static policy has no `style-src`, but
+the policy that the page adds at startup has `style-src 'self'`, and the inline style would be refused and reported.
+`v08.tsx` first adds a `<template id="a2ui-structural-styles">` to the document head, which makes the renderer skip the
+injection. The provider gets the theme in `v08-theme.ts`, whose class names come from `a2ui.css`. Eight of the
+renderer's components are replaced in its global component registry: `Text`, `Image`, `Video`, `AudioPlayer`, `Icon`,
+`Tabs`, `Modal` and `Button`. `parts.tsx` holds the markup that v0.9 and v0.8 components share: tabs, modal, icon,
+button, the blocked-media note and the unknown-component error.
 
 ## Settings view wiring
 
@@ -486,11 +511,15 @@ npm run test:unit -- packages/inspector/tests/a2ui
 npm run test:e2e -- tests/e2e/a2ui
 ```
 
-The unit tests are `catalog.test.ts`, `gallery.test.ts` and `lifecycle.test.ts`. The Chromium specs `surfaces.spec.ts`
-and `components.spec.ts` drive the real renderer. `components.spec.ts` writes screenshots to `.build/a2ui-gallery/`,
+The unit tests are `catalog.test.ts`, `catalogs.test.ts`, `versions.test.ts`, `session-v08.test.ts`, `actions.test.ts`,
+`gallery.test.ts`, `gallery-v08.test.ts`, `lifecycle.test.ts` and `surfaces.test.ts`. The Chromium specs
+`surfaces.spec.ts`, `components.spec.ts`, `v08.spec.ts` and `aliases.spec.ts` drive the real renderers. `v08.spec.ts`
+opens the fixture page at `/strict`, which carries the page's `style-src 'self'`. One violation is there before any
+surface is drawn: `@a2ui/react/v0_9` injects a style for Safari's date input as it loads. The spec names it by its hash
+and fails on any other. `aliases.spec.ts` runs the assembled application with a configured alias. `components.spec.ts` writes screenshots to `.build/a2ui-gallery/`,
 which is not committed. The network test runs under a content security policy that allows images, media and
 connections, so the test checks the guard itself. A control case shows that the stock renderer does make the
-request. The scenarios are in [`examples/reference-agent/a2ui-scenarios.ts`](https://github.com/dogganidhal/agui-inspector/blob/main/examples/reference-agent/a2ui-scenarios.ts) and the gallery is in [`packages/inspector/tests/a2ui/gallery.ts`](https://github.com/dogganidhal/agui-inspector/blob/main/packages/inspector/tests/a2ui/gallery.ts). Neither needs a model or a network.
+request. The scenarios, v0.8 and v0.9, are in [`examples/reference-agent/a2ui-scenarios.ts`](https://github.com/dogganidhal/agui-inspector/blob/main/examples/reference-agent/a2ui-scenarios.ts) and the galleries are in [`gallery.ts`](https://github.com/dogganidhal/agui-inspector/blob/main/packages/inspector/tests/a2ui/gallery.ts) and [`gallery-v08.ts`](https://github.com/dogganidhal/agui-inspector/blob/main/packages/inspector/tests/a2ui/gallery-v08.ts) in `packages/inspector/tests/a2ui`. Neither needs a model or a network.
 
 ## Theme tests
 

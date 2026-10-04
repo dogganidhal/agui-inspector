@@ -247,6 +247,44 @@ class EnabledTest(StaticFixture):
         with self.assertRaises(AttributeError):
             Brand(name="Acme").name = "Other"  # type: ignore[misc]
 
+    def test_catalog_aliases_are_served_in_config_json_for_starlette_and_fastapi(self):
+        aliases = {"https://catalog.invalid/old/basic.json": "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json"}
+        for name, app in self.apps():
+            with self.subTest(name):
+                mount_inspector(app, agents=AGENTS, enabled=True, catalog_aliases=aliases)
+                body = TestClient(app).get("/agui-inspector/config.json").json()
+                self.assertEqual({"version": 0, "agents": [{"id": "support", "url": "/agents/support/stream"}], "catalogAliases": aliases}, body)
+
+    def test_catalog_aliases_follow_a_custom_mount_path_and_sit_beside_a_theme(self):
+        app = Starlette()
+        theme = {"dark": {"--agui-bg": "#101418"}}
+        mount_inspector(app, agents=AGENTS, enabled=True, path="/tools/inspector", theme=theme, catalog_aliases={"old": "new"})
+        body = TestClient(app).get("/tools/inspector/config.json").json()
+        self.assertEqual({"old": "new"}, body["catalogAliases"])
+        self.assertEqual(theme, body["theme"])
+
+    def test_no_catalog_aliases_means_no_catalog_aliases_field(self):
+        app = Starlette()
+        mount_inspector(app, agents=AGENTS, enabled=True)
+        self.assertNotIn("catalogAliases", TestClient(app).get("/agui-inspector/config.json").json())
+
+    def test_catalog_aliases_are_delivered_unchanged_so_the_page_alone_judges_them(self):
+        # The browser validates ids and targets and shows a warning; the helper must not hide or repair them.
+        aliases = {"": "x", "https://a2ui.org/specification/v0_9/basic_catalog.json": 3, "old": "not a catalog"}
+        app = Starlette()
+        mount_inspector(app, agents=AGENTS, enabled=True, catalog_aliases=aliases)
+        self.assertEqual(aliases, TestClient(app).get("/agui-inspector/config.json").json()["catalogAliases"])
+        empty = Starlette()
+        mount_inspector(empty, agents=AGENTS, enabled=True, catalog_aliases={})
+        self.assertEqual({}, TestClient(empty).get("/agui-inspector/config.json").json()["catalogAliases"])
+
+    def test_a_disabled_helper_with_catalog_aliases_still_mounts_nothing(self):
+        for name, app in self.apps():
+            with self.subTest(name), self.assertNoLogs("agui_inspector"):
+                before = list(app.routes)
+                mount_inspector(app, agents=AGENTS, catalog_aliases={"old": "new"})
+                self.assertEqual(before, list(app.routes))
+
     def test_agents_need_a_unique_nonempty_id_and_a_url(self):
         for bad in ([Agent(id="a", url="/1"), Agent(id="a", url="/2")], [Agent(id="", url="/1")], [Agent(id="a", url="")]):
             with self.subTest(bad), self.assertRaises(ValueError):

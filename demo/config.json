@@ -26,10 +26,10 @@
       "name": "A2UI showcase (browser-local example)",
       "url": "__demo__/agent/a2ui",
       "capabilities": {
-        "identity": { "name": "A2UI showcase agent", "version": "0.2.0", "description": "Scripted A2UI v0.9 stories built from the basic catalog" },
+        "identity": { "name": "A2UI showcase agent", "version": "0.2.0", "description": "Scripted A2UI v0.9 and v0.8 stories built from the bundled catalogs" },
         "transport": { "streaming": true },
         "tools": { "supported": false },
-        "custom": { "a2ui": { "version": "v0.9", "catalog": "basic", "activityType": "a2ui-surface", "activityDeltas": true } }
+        "custom": { "a2ui": { "versions": ["v0.8", "v0.9"], "catalogs": ["basic", "standard"], "activityType": "a2ui-surface", "activityDeltas": true } }
       },
       "preset": {
         "messages": "turn",
@@ -40,6 +40,7 @@
           "Compare three laptops",
           "Compare three laptops (never valid)",
           "Probe the sandbox",
+          "Review an expense report (v0.8)",
           "Show the order form"
         ]
       }
