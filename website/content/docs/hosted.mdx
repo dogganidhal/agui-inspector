@@ -69,7 +69,7 @@ For your own agent, put its origin in `allowedOrigins` and make sure its CORS (C
 | `index.html` | The page. Its `<meta>` content security policy and its one script tag are fixed. |
 | `app.js`, `app.css` | The application and its styles. The A2UI renderer is inside `app.js`. |
 | `hosting-config.json` | The deployment's own policy: mode and allowed origins. Edit this one. |
-| `config.json` | Optional. The agents to list, in the [configuration](./configuration.mdx) format. The build does not include one. |
+| `config.json` | Optional. The agents to list, in the [configuration](./configuration.mdx) format, and an optional [brand](./configuration.mdx#brand): your name and logo in the top bar, with the logo on this page's origin or a `data:` image. The build does not include one. |
 
 The page loads nothing else: no fonts, no analytics, no third-party scripts, no server-side code. It never sends a captured session anywhere. Exports are files the user saves.
 

@@ -87,6 +87,10 @@ Custom properties inherit through shadow roots, so an element inside one gets th
 
 The inspector loads no font. To use a brand font, load it with your own `@font-face` and name it in `--agui-font-sans` or `--agui-font-mono`. The bundle may include a font file if it fits the bundle budget, but the default build includes none.
 
+## Name and logo
+
+The theme recolors the default mark through `--agui-accent`. To show your own name and logo in the top bar instead, set `brand` in `config.json`. A custom logo is shown as it is and is not recolored, and a second logo can replace it in the dark theme. [Configuration](./configuration.mdx#brand) has the fields, the rules for a logo and the warnings. The content security policy and the "no third-party request" rule stay as they are.
+
 ## Host page styles
 
 The other tokens the views read are internal and derived from the ten. Do not override them. Their names are short and have no prefix. So the inspector declares them, with their dark versions, on its mount element `#root` and never on the document's `:root`. A host page that already defines `--bg`, `--fg`, `--line`, `--muted`, `--acc` or `--r` cannot change the inspector's derived values, and the inspector does not overwrite the host's. The ten public properties stay on `:root`. Their names have a prefix, an override must sit on the same element as the defaults built from it, and they are the contract.

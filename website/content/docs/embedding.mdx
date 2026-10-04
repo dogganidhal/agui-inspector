@@ -62,6 +62,7 @@ FastAPI uses the same call because it is a Starlette application. The package it
 | `enabled` | Default `False`. A disabled call returns before it imports Starlette, registers a route or logs anything. |
 | `path` | The page's path, default `/agui-inspector`. It must start with `/` and cannot be `/` alone. A trailing `/` is ignored. |
 | `theme` | Optional `{"light": {...}, "dark": {...}}`. Each map is optional and maps the ten public `--agui-*` names to CSS values, for example `{"light": {"--agui-accent": "#2563eb"}}`. The helper writes it into `config.json` as given. |
+| `brand` | Optional `Brand(name=..., logo=..., logo_dark=...)`. Every field is optional. The helper writes the set fields into `config.json` as given, with `logo_dark` written as `logoDark`. See [Branding the embedded page](#branding-the-embedded-page). |
 
 ## Debug guard
 
@@ -77,6 +78,32 @@ The helper does not check `theme`. The page checks it when it loads `config.json
 
 `theme` changes nothing else: same routes, same content security policy header, no extra request. A host that serves the assets itself puts the same `theme` field in its own `config.json`.
 
+## Branding the embedded page
+
+`brand` shows your product's name and logo in the top bar, instead of the agui-inspector mark and name:
+
+```python
+from agui_inspector import Agent, Brand, mount_inspector
+
+mount_inspector(
+    app,
+    agents=[Agent(id="support", url="/agents/support/stream")],
+    enabled=True,
+    brand=Brand(name="Acme Console", logo="/static/acme.svg", logo_dark="/static/acme-dark.svg"),
+)
+```
+
+The helper does not check the values and serves no logo file. Serve the logo from one of your own routes, such as a static files mount, and write its path. A logo must be a path or a URL on the page's own origin, or a `data:` image. To inline one, build the URI yourself:
+
+```python
+import base64
+logo = "data:image/svg+xml;base64," + base64.b64encode(open("acme.svg", "rb").read()).decode()
+```
+
+The page checks the brand when it loads `config.json`. It shows a "Configuration" warning for each field it rejects, and a rejected field never stops the page or the agents from loading. The rules, the warnings and the dark logo are in [configuration](./configuration.mdx#brand).
+
+`brand` changes nothing else: same routes, same content security policy header, no extra request. A host that serves the assets itself puts the same `brand` field in its own `config.json`.
+
 ## Routes
 
 With the default path the helper adds:
@@ -85,7 +112,7 @@ With the default path the helper adds:
 | --- | --- |
 | `GET /agui-inspector` | A 307 redirect to `/agui-inspector/` that keeps the query string, so the page's relative script URL resolves. The `Location` includes the ASGI (Asynchronous Server Gateway Interface) `root_path`, which holds the prefix of every outer mount. Under `outer.mount("/api", app)` it is `/api/agui-inspector/`. |
 | `GET /agui-inspector/` | The inspector page. |
-| `GET /agui-inspector/config.json` | The version-0 configuration built from `agents` and `theme`: `{"version": 0, "agents": [...], "theme": {...}}`. Fields left as `None` are left out, and so is `theme` when you pass none. The page reads it from its own directory, so a custom `path` works the same way. |
+| `GET /agui-inspector/config.json` | The version-0 configuration built from `agents`, `theme` and `brand`: `{"version": 0, "agents": [...], "theme": {...}, "brand": {...}}`. Fields left as `None` are left out, and so are `theme` and `brand` when you pass none. The page reads it from its own directory, so a custom `path` works the same way. |
 | `GET /agui-inspector/<file>` | A packaged asset, including nested ones. Anything else is a 404. |
 
 The helper rejects other methods. It adds no session endpoints, no storage and no proxy for the agent. The page calls your agent URL directly, and a captured session never reaches the server.

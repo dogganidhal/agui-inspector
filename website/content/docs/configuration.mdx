@@ -8,7 +8,7 @@ Three things control a run:
 | Surface | Decides | Who edits it |
 | --- | --- | --- |
 | `hosting-config.json` | Where this deployment may connect. Read first, and nothing later can change it. See [Host the static page](./hosted.mdx#hosting-configjson). | The deployer |
-| `config.json` | The agents the page lists, their optional [presets](./presets.mdx), and an optional theme. | The deployer, or `mount_inspector`, which writes it from its arguments |
+| `config.json` | The agents the page lists, their optional [presets](./presets.mdx), an optional theme and an optional brand. | The deployer, or `mount_inspector`, which writes it from its arguments |
 | The client profile | Your client settings: what the next run sends (protocol version, tools, context, message mode, forwarded properties) and whether A2UI surfaces render. Edit it under Settings. The browser stores it. | You, in the browser |
 
 A preset holds what one agent needs for a run: setup requests, variables, forwarded properties, a message mode and quick messages. The profile can override two of these. Its `messageMode` replaces the preset's mode when set. Its `forwardedProps` are merged over the preset's ([client profile](#client-profile)).
@@ -34,6 +34,11 @@ A configuration is JSON that lists agents. The embedded bundle reads `config.jso
   "theme": {
     "light": { "--agui-accent": "#2563eb", "--agui-radius": "6px" },
     "dark": { "--agui-accent": "#93c5fd" }
+  },
+  "brand": {
+    "name": "Acme Console",
+    "logo": "/static/acme.svg",
+    "logoDark": "/static/acme-dark.svg"
   }
 }
 ```
@@ -46,6 +51,7 @@ A configuration is JSON that lists agents. The embedded bundle reads `config.jso
 | `agents[].capabilities` | Optional. An inline object with up to eleven groups, or a URL that returns one. See [Declared capabilities](#declared-capabilities). |
 | `agents[].preset` | Optional. See [presets](./presets.mdx). |
 | `theme` | Optional. `light` and `dark` maps that give string values to the ten public `--agui-*` names. See [Theme](#theme). |
+| `brand` | Optional. The name and logos that replace the default ones in the top bar. See [Brand](#brand). |
 
 The agents appear in a picker beside the endpoint field in the top bar, on every pane and tab, and again under Settings. Both pickers change the same selection. The top-bar picker appears only when at least one agent is configured. An endpoint you type by hand matches no agent, so the picker then shows "Custom URL".
 
@@ -70,6 +76,42 @@ A theme problem causes a warning and never stops startup. The page shows a "Conf
 | A value containing `@`, `;`, `{`, `}` or a backslash | One warning. That entry is ignored. |
 
 Values go into custom properties through the CSS object model. So a value cannot start a request or escape its declaration. The content security policy is the same with or without a theme. The warning names the map and the property, never the rejected value. `parseConfig` returns the accepted maps as `theme` and the messages as `warnings`. Only an unusable `agents` list is an error.
+
+### Brand
+
+`brand` puts your product's name and logo in the top bar, in every deployment mode, with no rebuild. Every field is optional. Without `brand` the page shows the agui-inspector mark and name.
+
+| Field | Rule |
+| --- | --- |
+| `name` | A string with at least one character that is not whitespace. It replaces the text "agui-inspector" in the page heading and is shown as plain text. A long name is cut with an ellipsis. |
+| `logo` | The image that replaces the default mark. It is shown without the colored frame of the default mark, and the theme does not recolor it. |
+| `logoDark` | The image to show in the dark theme instead of `logo`. It needs a valid `logo`. Without it, `logo` shows in both themes. |
+
+Each field replaces only its own part. A name with no logo keeps the default mark. A logo with no name keeps the text "agui-inspector". The dark logo follows the same choice as the rest of the page: the theme switch when you press it, the system preference otherwise. Both images load when the page starts.
+
+A logo must be one of two things:
+
+- A path or URL on the page's own origin. A relative path is read against the page, as `config.json` is, even when the configuration was read from another file. A full URL is accepted only when its origin is the page's.
+- A `data:` URI with an image type, such as `data:image/svg+xml;base64,...`. It has no size limit.
+
+Anything else is rejected: another origin, a URL with `user:password@`, any other scheme (`javascript:`, `blob:`, `file:`), and a `data:` URI that is not an image. The page judges the URL the browser would load. So `//host/logo.png`, a backslash, or a tab or newline inside the value cannot reach another origin. The content security policy stays `img-src 'self' data:`, and a rejected logo is never requested.
+
+The page shows a logo through an image element only. A script or a link inside an SVG logo does not run and is not requested.
+
+A brand problem causes a warning and never stops startup, like a theme problem. The page shows a "Configuration" warning under the top bar, on every tab. Each bad field is dropped on its own. The agents, the theme and every valid brand field in the same file still work.
+
+| Input | Result |
+| --- | --- |
+| `brand` is not an object | One warning. The whole field is ignored. |
+| A field other than `name`, `logo` and `logoDark` | One warning. That field is ignored. |
+| `name` is not a string, is empty or is only whitespace | One warning. The name is ignored. |
+| `logo` or `logoDark` is not a nonempty string, is not a URL, has credentials, or breaks the rules above | One warning. That logo is ignored. |
+| `logoDark` with no valid `logo` | One warning. The dark logo is ignored. |
+| A valid logo whose file is missing, is not an image or redirects to another origin | The theme that uses it shows the default mark, and one warning says `brand.logo could not be loaded; the default mark is shown` (or `brand.logoDark`). A failed dark logo does not fall back to `logo`. |
+
+A warning names the field and never repeats the value. `parseConfig(text, page)` returns the accepted fields as `brand`, with each logo as the full URL it resolves to, and the messages in `warnings` after the theme's. It takes the page's origin and location to check logos. Without them, only a path or a `data:` image passes.
+
+The brand is not part of a session export, a profile or browser storage. For Python, see [Branding the embedded page](./embedding.mdx#branding-the-embedded-page). For colors, see [Theming](./theming.mdx).
 
 ### Declared capabilities
 
@@ -130,6 +172,7 @@ A page can mount the application itself instead of loading the shipped `index.ht
 
 - 0.1.0 adds the optional `allowVisitorTargets` field to `hosting-config.json`, version 0. A file without it works as before and needs no migration. Before 0.1.0, the field was an unknown key and the file was refused.
 - 0.1.0 adds the optional `theme` field to the version-0 configuration. A file without it reads as before and needs no migration. Before 0.1.0, `theme` was an unknown field and an error.
+- 0.2.0 adds the optional `brand` field to the version-0 configuration. A file without it reads as before and needs no migration. Before 0.2.0, `brand` was an unknown field and an error, so an older inspector refuses a file that has it.
 
 No other format has changed since version 0. Any later change that breaks an existing file will appear here, with the steps to update it. Until 1.0.0, such a change may keep the version number, so this list is the record.
 
