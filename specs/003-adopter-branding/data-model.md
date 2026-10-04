@@ -7,7 +7,7 @@ with no valid field is not kept: `ParsedConfig.brand` is then absent.
 
 | Field | Type | Rule |
 | --- | --- | --- |
-| `name` | string | A string with at least one character that is not whitespace. Shown as the heading text. |
+| `name` | string | A string with at least one character that is not whitespace. Shown as the heading text. Without it, a valid `logo` shows alone and the heading "agui-inspector" is visually hidden. |
 | `logo` | string | A resolved logo source (below). Shown instead of the default mark. |
 | `logoDark` | string | A resolved logo source. Shown instead of `logo` in the dark theme. Kept only when `logo` is kept. |
 

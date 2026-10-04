@@ -33,6 +33,22 @@ roadmap, the constitution and the code.
 - Q: Is there a size limit for a `data:` logo? → A: No. The deployer writes the file, and a data logo is part of
   `config.json`, not of the bundle. The bundle budget is not affected.
 
+### Session 2026-10-04, follow-up
+
+A maintainer saw a brand with a Doctolib wordmark logo and no name. The text "agui-inspector" next to a wordmark
+looked wrong, so the orchestrator approved a change to FR-004. It stays in this feature.
+
+- Q: What does the top bar show for a brand with a logo and no name? → A: The logo alone, with no visible text. The
+  wordmark already names the product.
+- Q: Does the page still have a heading? → A: Yes. The `<h1>` stays in the top bar with the text "agui-inspector",
+  visually hidden but available to assistive technology. The logo stays decorative (`alt=""`), so a screen reader
+  hears the heading once.
+- Q: What changes for a name, with or without a logo, and for no brand? → A: Nothing. A name is still the visible
+  heading, a name without a logo keeps the default mark, and no brand shows the default mark and the text.
+- Q: What does a logo-only brand show when its logo fails to load? → A: The default mark alone, with the same
+  "Configuration" warning, and the heading stays hidden. The brand still has a logo and no name, so the rule does not
+  depend on whether the image loaded. This keeps the heading one rule and the markup stable across a theme change.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Show my product's name and logo in an embedded inspector (Priority: P1)
@@ -51,9 +67,11 @@ brand and check that the page is unchanged.
 
 1. **Given** a mount with a name and a logo on the host's own origin, **When** the page loads, **Then** the top bar
    shows that logo in place of the default mark and that name in place of the text "agui-inspector".
-2. **Given** a mount with no brand, **When** the page loads, **Then** the top bar shows the default mark and the text
+2. **Given** a mount with a logo and no name, **When** the page loads, **Then** the top bar shows the logo alone, with
+   no visible text, and the page still has a heading "agui-inspector" for assistive technology.
+3. **Given** a mount with no brand, **When** the page loads, **Then** the top bar shows the default mark and the text
    "agui-inspector", and the served `config.json` is the same as before this feature.
-3. **Given** a mount with a brand, **When** a developer lists the routes the helper adds, the response headers and the
+4. **Given** a mount with a brand, **When** a developer lists the routes the helper adds, the response headers and the
    page's requests, **Then** nothing new appears: no extra route, no change to the content security policy, and no
    request to another origin.
 
@@ -152,6 +170,7 @@ and the network log.
 - `brand: {}` is valid and changes nothing. `brand: null`, a string or a list is not an object and is rejected.
 - A theme map and a brand together in one file both apply. A brand never changes theme values, and a theme never
   changes brand values.
+- A logo with no name whose image fails to load shows the default mark alone, and the heading stays hidden.
 - A recorded session export and its import do not carry the brand. The brand belongs to the deployment, not to a
   recording.
 
@@ -166,8 +185,10 @@ and the network log.
   plain text and MUST be a string with at least one character that is not whitespace.
 - **FR-003**: A valid `logo` MUST replace the default mark in the top bar. It MUST be shown as an image at a fixed
   height, with its proportions kept, and without the accent-colored frame that the default mark has.
-- **FR-004**: Each field MUST replace only its own counterpart. A name without a logo keeps the default mark, and a
-  logo without a name keeps the text "agui-inspector".
+- **FR-004**: A name without a logo keeps the default mark. A logo without a name MUST show the logo alone, with no
+  visible text beside it: a logo usually names the product, and "agui-inspector" next to a wordmark is wrong. The
+  top bar MUST still hold the heading with the text "agui-inspector", visually hidden and available to assistive
+  technology (FR-013). A name, with or without a logo, and no brand at all are unchanged.
 - **FR-005**: A valid `logoDark` MUST show instead of `logo` whenever the dark theme is on. The page MUST follow the
   same light or dark choice as the rest of the page: the explicit choice from the theme switch when there is one,
   and the system preference otherwise. Without `logoDark`, `logo` MUST show in both themes. A `logoDark` with no valid
@@ -205,7 +226,8 @@ and the network log.
   read from, write to or widen `hosting-config.json` or the request policy.
 - **FR-012**: The brand MUST hold no credentials, and the name and logo MUST NOT be recorded in a session export, a
   profile or browser storage. The page MUST make no telemetry call about the brand.
-- **FR-013**: The name MUST be the text of the page's heading. The logo is decoration next to that heading and MUST
+- **FR-013**: The name MUST be the text of the page's heading. A logo without a name leaves the heading as
+  "agui-inspector", visually hidden (FR-004). The logo is decoration next to that heading and MUST
   have an empty text alternative, so a screen reader hears the name once. The brand adds no control that takes focus.
 - **FR-014**: The default mark MUST keep its four synced copies and its black and white repository assets, unchanged.
   The brand MUST NOT edit the page title, the favicon, the footer, the failure page shown when startup fails or any
@@ -235,7 +257,8 @@ and the network log.
 ### Measurable Outcomes
 
 - **SC-001**: With the same brand set, the top bar shows the adopter's name and logo, and neither the default text nor
-  the default mark, in all four serving modes, in the light and in the dark theme.
+  the default mark, in all four serving modes, in the light and in the dark theme. With a logo and no name it shows
+  the logo alone, with no visible text.
 - **SC-002**: With no brand, the top bar matches the 0.1.0 page, and `mount_inspector` serves the same `config.json`
   bytes as before for the same arguments.
 - **SC-003**: For each rejected value in FR-008, the page shows one warning, drops only that field, keeps the agents

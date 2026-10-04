@@ -11,7 +11,8 @@
 `config.json` gets an optional `brand` object: `name`, `logo` and `logoDark`. The configuration reader validates it and
 turns each bad field into a "Configuration" warning, as it does for `theme`. A logo is accepted only when it resolves
 to the page's own origin or is a `data:` image. The reader is told where the page is, so it checks the resolved URL,
-not the text. The top bar renders the name as the heading and the logo as a decorative image. A dark logo is a second
+not the text. The top bar renders the name as the heading and the logo as a decorative image. A logo with no name
+shows alone: the heading stays, as "agui-inspector", visually hidden (follow-up, clarified 2026-10-04). A dark logo is a second
 image that the stylesheet shows in the dark theme, with the same selectors that choose the dark tokens. A logo that
 fails to load falls back to the default mark and adds a warning. `mount_inspector` takes a `Brand` record and writes
 it into the `config.json` it serves.
@@ -105,7 +106,7 @@ packages/inspector/src/
     ├── startup.ts                    # hands the page's origin and location to loadConfig; Started.brand
     ├── brand.tsx                     # new: the top bar's mark and name; stateless, takes the failed logos as a prop
     ├── index.tsx                     # uses <Brand>; keeps the failed logos and merges their warnings
-    └── app.css                       # logo size, theme-matched visibility, name ellipsis
+    └── app.css                       # logo size, theme-matched visibility, name ellipsis, hidden heading
 
 packages/python/
 ├── src/agui_inspector/__init__.py    # Brand; mount_inspector(brand=...)
@@ -140,7 +141,7 @@ testable without a browser.
 | --- | --- | --- |
 | Reader unit | No brand: no `brand`, no warning. Valid: name only, logo only, both, with a dark logo. Every rejected value in FR-008, each as one warning, others kept. A page-aware origin check: same-origin path, absolute same-origin URL, other origin, scheme-relative, backslash, tab and newline tricks, `blob:`, `javascript:`, `data:text/html`, credentials. Warnings never contain the rejected value. | FR-001 to FR-008 |
 | Startup unit | The page's origin and location reach the reader. A brand adds no request. The policy text is the same with and without it. | FR-006, FR-007, FR-011 |
-| Markup unit | Default markup is the 0.1.0 markup. A name replaces the heading text and is escaped. A logo has an empty `alt`. A dark logo renders two images, one for each theme. | FR-002 to FR-005, FR-013 |
+| Markup unit | Default markup is the 0.1.0 markup. A name replaces the heading text and is escaped. A logo has an empty `alt`. A logo with no name hides the heading text visually and keeps it in the markup. A dark logo renders two images, one for each theme. | FR-002 to FR-005, FR-013 |
 | Python unit | `Brand` is written as given, `logo_dark` as `logoDark`, unset fields left out, no brand means no key. Same for Starlette and FastAPI and a custom path. Disabled helper mounts nothing. Routes and headers unchanged. | FR-010 |
 | End to end | Same top bar in hosted, embedded, Python and generic static modes, in light and dark, by system preference and by the switch. Each rejected value: one warning, no request to another origin, agents still run, policy unchanged. A missing logo falls back with a warning, and a missing dark logo warns at once. Long name and wide logo keep the bar on one row. | SC-001 to SC-006 |
 | Gates | `npm run check:ci`: typecheck, unit, build, bundle budget, end to end, Python. | FR-017 |

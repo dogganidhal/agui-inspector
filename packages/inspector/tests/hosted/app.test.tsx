@@ -142,15 +142,19 @@ test('a name replaces the heading text only, and is text, never markup', () => {
   assert.equal(build({ brand: { name: 'Acme' } }).markup.match(/<h1>/g)?.length, 1);
 });
 
-test('a logo replaces the default mark with an unframed decorative image, and the name stays agui-inspector without one', () => {
+test('a logo with no name shows alone: an unframed decorative image, and the heading agui-inspector is hidden from the eye', () => {
   const header = bar(build({ brand: { logo: '/static/acme.svg' } }).markup);
   assert.ok(brandOf(header).startsWith('<span class="agui-app-brand"><span class="agui-app-logo" aria-hidden="true"><img class="agui-app-logo-img" src="/static/acme.svg" alt=""/></span>'));
   assert.doesNotMatch(header, /agui-app-mark/);
-  assert.match(brandOf(header), /<h1>agui-inspector<\/h1>$/);
+  assert.match(brandOf(header), /<h1 class="agui-app-sr">agui-inspector<\/h1>$/);
+  assert.equal(header.match(/<h1/g)?.length, 1);
   assert.deepEqual([...header.matchAll(/\ssrc="([^"]*)"/g)].map((match) => match[1]), ['/static/acme.svg'], 'the logo is the only image the brand adds');
 
   const both = bar(build({ brand: { name: 'Acme', logo: 'data:image/png;base64,AAAA' } }).markup);
   assert.match(brandOf(both), /<img class="agui-app-logo-img" src="data:image\/png;base64,AAAA" alt=""\/><\/span><h1>Acme<\/h1>$/);
+
+  const dark = bar(build({ brand: { logo: '/a.svg', logoDark: '/b.svg' } }).markup);
+  assert.match(brandOf(dark), /<h1 class="agui-app-sr">agui-inspector<\/h1>$/);
 });
 
 test('a dark logo is a second image in its own wrapper, and a single logo has no wrapper', () => {

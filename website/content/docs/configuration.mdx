@@ -87,7 +87,7 @@ Values go into custom properties through the CSS object model. So a value cannot
 | `logo` | The image that replaces the default mark. It is shown without the colored frame of the default mark, and the theme does not recolor it. |
 | `logoDark` | The image to show in the dark theme instead of `logo`. It needs a valid `logo`. Without it, `logo` shows in both themes. |
 
-Each field replaces only its own part. A name with no logo keeps the default mark. A logo with no name keeps the text "agui-inspector". The dark logo follows the same choice as the rest of the page: the theme switch when you press it, the system preference otherwise. Both images load when the page starts.
+Each field replaces only its own part. A name with no logo keeps the default mark. A logo with no name is shown alone, with no text beside it, because a logo usually names the product. The page heading stays for screen readers and reads "agui-inspector", but it is not visible. The dark logo follows the same choice as the rest of the page: the theme switch when you press it, the system preference otherwise. Both images load when the page starts.
 
 A logo must be one of two things:
 

@@ -72,6 +72,7 @@ With no brand, the markup is today's:
 With a brand:
 
 - `<h1>` holds `brand.name` when valid. The text is escaped React text.
+- With a valid `logo` and no `name`, the `<h1>` still holds "agui-inspector" and has `class="agui-app-sr"`, which hides it visually and keeps it for assistive technology. No other brand makes the heading hidden.
 - With a valid `logo` the `agui-app-mark` span is replaced by `<span class="agui-app-logo" aria-hidden="true">`.
   - Without `logoDark`: one `<img class="agui-app-logo-img" src="…" alt="">`.
   - With `logoDark`: two wrappers, `<span data-for="light">` and `<span data-for="dark">`, each with one image.
