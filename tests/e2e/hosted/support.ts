@@ -96,6 +96,15 @@ const revealEvents = (turn: number) => [
   { type: 'TEXT_MESSAGE_CONTENT', messageId: `ghost-${turn}`, delta: `turn ${turn} orphan` },
 ];
 
+/** The `/state-history` scenario: a snapshot, a delta with two operations, a delta that cannot apply, a second snapshot and a last delta. */
+const historyEvents = [
+  { type: 'STATE_SNAPSHOT', snapshot: { round: 0, items: ['a'] } },
+  { type: 'STATE_DELTA', delta: [{ op: 'replace', path: '/round', value: 1 }, { op: 'add', path: '/items/-', value: 'b' }] },
+  { type: 'STATE_DELTA', delta: [{ op: 'remove', path: '/missing' }] },
+  { type: 'STATE_SNAPSHOT', snapshot: { round: 10, items: [] } },
+  { type: 'STATE_DELTA', delta: [{ op: 'replace', path: '/round', value: 11 }] },
+];
+
 const sse = (events: readonly object[]) => events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join('');
 
 async function readBody(request: IncomingMessage): Promise<string> {
@@ -131,7 +140,9 @@ function answer(pathname: string, input: { threadId?: unknown; runId?: unknown; 
         ? evidenceEvents
         : pathname === '/reveal'
           ? revealEvents(Array.isArray(input.messages) ? input.messages.filter((message) => (message as { role?: unknown }).role === 'user').length : 1)
-          : [{ type: 'TEXT_MESSAGE_START', messageId: 'msg-1', role: 'assistant' }, { type: 'TEXT_MESSAGE_CONTENT', messageId: 'msg-1', delta: AGENT_REPLY }, { type: 'TEXT_MESSAGE_END', messageId: 'msg-1' }];
+          : pathname === '/state-history'
+            ? historyEvents
+            : [{ type: 'TEXT_MESSAGE_START', messageId: 'msg-1', role: 'assistant' }, { type: 'TEXT_MESSAGE_CONTENT', messageId: 'msg-1', delta: AGENT_REPLY }, { type: 'TEXT_MESSAGE_END', messageId: 'msg-1' }];
   response.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store' });
   response.end(sse([{ type: 'RUN_STARTED', threadId, runId }, ...activity, { type: 'RUN_FINISHED', threadId, runId, outcome: { type: 'success' } }]));
 }

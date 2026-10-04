@@ -136,3 +136,45 @@ for (const scheme of ['light', 'dark'] as const) {
     }
   });
 }
+
+// The state history draws offsets, frame numbers, summaries, diff kinds and a banner on its own fills. Each is measured
+// where it is drawn, on a selected row, an unselected row and a past point that has added, removed and changed paths.
+for (const scheme of ['light', 'dark'] as const) {
+  test(`the state history reaches 4.5:1 in the default ${scheme} theme`, async ({ page, openSite }) => {
+    await page.emulateMedia({ colorScheme: scheme });
+    const site = await openSite({ config: (origins) => ({ version: 0, agents: [{ id: 'history', name: 'History agent', url: `${origins.agent.origin}/state-history` }] }) });
+    await open(page, site);
+    await expect(page.locator('html')).toHaveCSS('color-scheme', scheme);
+    await send(page, 'Hello there');
+    await expect(page.locator('[data-entry="run"][data-status="finished"]')).toHaveCount(1);
+    await page.getByRole('group', { name: 'Inspection pane' }).getByRole('button', { name: 'State', exact: true }).click();
+    const state = page.locator('[data-view="state"]');
+    const history = state.getByRole('listbox', { name: 'State history' });
+    await expect(history.getByRole('option')).toHaveCount(6);
+    await history.focus();
+
+    const checked = new Set<string>();
+    const measure = async (name: string, locator: Locator) => {
+      await expect(locator.first(), name).toBeVisible();
+      for (const { text, size, foreground, background } of await paint(locator)) {
+        checked.add(name);
+        const ratio = contrast(foreground, background);
+        expect.soft(ratio, `${name}: "${text}" at ${size}, rgb(${foreground}) on rgb(${background}) in ${scheme}`).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+      }
+    };
+
+    // The snapshot over a longer state removes items, and the delta before it adds one and changes a number.
+    await page.keyboard.press('ArrowDown');
+    await measure('row text', history.locator('.agui-conv-point > span:not([aria-hidden])'));
+    await measure('row tags', history.locator('.agui-conv-point .agui-tag'));
+    await measure('banner', state.locator('[data-part="state-banner"] > span, [data-part="state-banner"] .agui-tag'));
+    await measure('note', state.locator('.agui-conv-note'));
+    await measure('removed', state.locator('.agui-conv-diff[data-kind="removed"] .agui-tag'));
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('ArrowDown');
+    await measure('added', state.locator('.agui-conv-diff[data-kind="added"] .agui-tag'));
+    await measure('changed', state.locator('.agui-conv-diff[data-kind="changed"] .agui-tag'));
+    await measure('was and now', state.locator('.agui-conv-diff[data-kind="changed"] .agui-conv-muted'));
+    expect([...checked].sort(), 'every kind of text was measured').toEqual(['added', 'banner', 'changed', 'note', 'removed', 'row tags', 'row text', 'was and now']);
+  });
+}

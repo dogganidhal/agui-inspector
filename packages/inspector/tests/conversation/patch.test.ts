@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { JsonValue } from '../../src/contracts.ts';
-import { applyJsonPatch } from '../../src/core/projection/patch.ts';
+import { applyJsonPatch, applyStateDelta } from '../../src/core/projection/patch.ts';
 
 const ok = (document: JsonValue, patch: readonly object[]): JsonValue => {
   const result = applyJsonPatch(document, patch as never);
@@ -76,4 +76,16 @@ test('a __proto__ member is data, never the prototype', () => {
   assert.equal(Object.hasOwn(out, '__proto__'), true);
   assert.equal(({} as Record<string, unknown>).polluted, undefined);
   assert.equal(Object.getPrototypeOf(out), Object.prototype);
+});
+
+test('a state delta with no state yet applies to an empty object', () => {
+  const result = applyStateDelta(undefined, [{ op: 'add', path: '/a', value: 1 }] as never);
+  assert.deepEqual(result.ok && result.value, { a: 1 });
+});
+
+test('a state delta that fails reports why and leaves its input alone', () => {
+  const state = { a: 1 };
+  const result = applyStateDelta(state, [{ op: 'replace', path: '/a', value: 2 }, { op: 'remove', path: '/missing' }] as never);
+  assert.equal(result.ok, false);
+  assert.deepEqual(state, { a: 1 });
 });

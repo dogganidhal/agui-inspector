@@ -28,7 +28,7 @@ import type {
   Run,
   SessionStore,
 } from '../../contracts.ts';
-import { applyJsonPatch } from './patch.ts';
+import { applyJsonPatch, applyStateDelta } from './patch.ts';
 
 // ---------------------------------------------------------------------------------------------
 // Output
@@ -230,11 +230,21 @@ export interface StateChange {
   /** False when a delta could not be applied; the current state is then the last valid one. */
   readonly applied: boolean;
   readonly error?: string;
+  /** The state after this change, kept on some deltas so a past state replays a few deltas, not all of them. */
+  readonly checkpoint?: JsonValue;
 }
+
+/**
+ * A checkpoint every 64 deltas bounds a replay to 63 patches. A patch copies the state, so replaying 5,000 deltas of
+ * a 28 KB state took 1.3 s, and keeping every state would cost 5,000 copies. Measured in specs/010-state-history.
+ */
+const CHECKPOINT_EVERY = 64;
 
 export interface StateModel {
   /** The state the next run carries. Undefined until a run or a state event provides one. */
   current: JsonValue | undefined;
+  /** The state the first run of the thread carried in its input, when it carried one. */
+  initial?: JsonValue;
   /** Newest first. */
   changes: StateChange[];
 }
@@ -345,6 +355,7 @@ export function projectConversation(session: InspectionSession, current?: string
   const derived: DerivedEntry[] = [];
   const issues: ProjectionIssue[] = [];
   const state: StateModel = { current: undefined, changes: [] };
+  let sinceAnchor = 0;
 
   const messages = new Map<string, MessageEntry>();
   const reasonings = new Map<string, ReasoningEntry>();
@@ -639,7 +650,7 @@ export function projectConversation(session: InspectionSession, current?: string
     stack = [];
     entries.push(run);
 
-    if (position === 0 && state.current === undefined && input.state !== undefined) state.current = input.state as JsonValue;
+    if (position === 0 && state.current === undefined && input.state !== undefined) state.current = state.initial = input.state as JsonValue;
     if (Array.isArray(input.resume) && input.resume.length > 0) run.carried.push(`resume · ${input.resume.length} ${input.resume.length === 1 ? 'answer' : 'answers'}`);
     const action = isRecord(input.forwardedProps) && isRecord(input.forwardedProps.a2uiAction) ? input.forwardedProps.a2uiAction : undefined;
     const actionName = isRecord(action?.userAction) ? str(action.userAction.name) : undefined;
@@ -944,14 +955,17 @@ export function projectConversation(session: InspectionSession, current?: string
 
         case 'STATE_SNAPSHOT':
           state.current = event.snapshot as JsonValue;
+          sinceAnchor = 0;
           state.changes.push({ frameId: raw.id, exchangeId: exchange.id, ...(run.runId !== undefined && { runId: run.runId }), offsetMs: raw.offsetMs, type: 'STATE_SNAPSHOT', snapshot: event.snapshot as JsonValue, applied: true });
           break;
         case 'STATE_DELTA': {
           const operations = (Array.isArray(event.delta) ? event.delta : []) as unknown as PatchOperationView[];
-          const result = applyJsonPatch(state.current ?? {}, operations as never);
+          const result = applyStateDelta(state.current, operations as never);
           if (result.ok) state.current = result.value;
           else issue(`State delta could not be applied: ${result.error}`);
-          state.changes.push({ frameId: raw.id, exchangeId: exchange.id, ...(run.runId !== undefined && { runId: run.runId }), offsetMs: raw.offsetMs, type: 'STATE_DELTA', operations, applied: result.ok, ...(!result.ok && { error: result.error }) });
+          const checkpoint = ++sinceAnchor >= CHECKPOINT_EVERY && state.current !== undefined;
+          if (checkpoint) sinceAnchor = 0;
+          state.changes.push({ frameId: raw.id, exchangeId: exchange.id, ...(run.runId !== undefined && { runId: run.runId }), offsetMs: raw.offsetMs, type: 'STATE_DELTA', operations, applied: result.ok, ...(!result.ok && { error: result.error }), ...(checkpoint && { checkpoint: state.current as JsonValue }) });
           break;
         }
         case 'MESSAGES_SNAPSHOT':
@@ -1054,7 +1068,7 @@ export function projectConversation(session: InspectionSession, current?: string
     if (run.threadId === undefined) delete run.threadId;
   }
 
-  return { ...(threadId !== undefined && { threadId }), entries, state: { current: state.current, changes: state.changes.reverse() }, derived, issues };
+  return { ...(threadId !== undefined && { threadId }), entries, state: { current: state.current, ...(state.initial !== undefined && { initial: state.initial }), changes: state.changes.reverse() }, derived, issues };
 }
 
 // ---------------------------------------------------------------------------------------------

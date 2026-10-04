@@ -19,3 +19,11 @@ test('the document keeps the received versus derived distinction and the opaque-
   assert.match(doc, /not decoded/);
   assert.match(doc, /Markdown is not interpreted/);
 });
+
+test('the state history is described, with its keys, its diff kinds and its labels', () => {
+  assert.match(doc, /### State history/);
+  assert.match(doc, /### Read a diff/);
+  assert.match(doc, /### Move through the history/);
+  for (const key of ['Down arrow', 'Up arrow', 'Home', 'End']) assert.ok(doc.includes(`| ${key} |`), `${key} is missing from the key table`);
+  for (const label of ['`+ added`', '`- removed`', '`~ changed`', 'Past state', 'Back to latest', 'No net change']) assert.ok(doc.includes(label), `${label} is missing`);
+});

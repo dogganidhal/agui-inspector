@@ -3,7 +3,7 @@
 // time and look at what a user would see. Test support, never part of the shipped app.
 import { createRoot } from 'react-dom/client';
 import type { ReactElement } from 'react';
-import type { ConversationViewProps } from '../../src/contracts';
+import type { ConversationViewProps, EvidenceTarget } from '../../src/contracts';
 import { publishChunkExpansions } from '../../src/core/projection/index';
 import { ConversationView } from '../../src/views/conversation/index';
 import { StateView } from '../../src/views/conversation/state';
@@ -15,6 +15,8 @@ import '../../src/views/conversation/conversation.css';
 const host = harness((callback) => void requestAnimationFrame(callback));
 
 const noop = () => undefined;
+/** What the state view asked the page to reveal, in order: the page's navigation is outside this host. */
+const revealed: EvidenceTarget[] = [];
 const props: ConversationViewProps = {
   store: host.store,
   interrupts: [],
@@ -36,7 +38,7 @@ function Page(): ReactElement {
         />
       </div>
       <div data-pane="state">
-        <StateView store={host.store} />
+        <StateView store={host.store} onReveal={(target) => void revealed.push(target)} />
       </div>
     </main>
   );
@@ -51,6 +53,8 @@ declare global {
       /** Appends the chunk expansions to the store, the way the assembly does. Returns how many were added. */
       publish(): number;
       session(): ReturnType<typeof host.session>;
+      /** The targets the state view asked to reveal. */
+      revealed: EvidenceTarget[];
     };
   }
 }
@@ -61,6 +65,7 @@ window.__conversation = {
   close: (exchangeId, transport) => host.close(exchangeId, transport),
   publish: () => publishChunkExpansions(host.store),
   session: () => host.session(),
+  revealed,
 };
 
 createRoot(document.getElementById('root') as HTMLElement).render(<Page />);

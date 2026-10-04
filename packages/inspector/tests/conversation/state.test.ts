@@ -9,6 +9,7 @@ import { projectConversation } from '../../src/core/projection/index.ts';
 import { applyJsonPatch } from '../../src/core/projection/patch.ts';
 import { ConversationView } from '../../src/views/conversation/index.tsx';
 import { StateView } from '../../src/views/conversation/state.tsx';
+import { StateDetail, selectedIndex, summaryOf } from '../../src/views/conversation/state-history.tsx';
 import { RUN_FINISHED, RUN_STARTED, harness, sessionOf } from './support.ts';
 
 const snapshot = (value: object) => ({ type: 'STATE_SNAPSHOT', snapshot: value });
@@ -22,6 +23,9 @@ function scripted(events: ReadonlyArray<object | string>, options: Parameters<ty
   return h;
 }
 const stateHtml = (h: ReturnType<typeof harness>) => renderToStaticMarkup(createElement(StateView, { store: h.store }));
+/** One point of the history, rendered on its own: 0 is the newest change. */
+const detailHtml = (h: ReturnType<typeof harness>, index: number) =>
+  renderToStaticMarkup(createElement(StateDetail, { model: projectConversation(h.session()).state, index, frames: new Map(h.session().frames.map((frame) => [frame.id, frame])), onLatest() {} }));
 const conversationHtml = (h: ReturnType<typeof harness>) =>
   renderToStaticMarkup(
     createElement(ConversationView, { store: h.store, interrupts: [], toolResults: [], onDraftInterrupt() {}, onAnswerInterrupt() {}, onDraftToolResult() {}, onSubmitToolResult() {}, onContinue() {} }),
@@ -79,10 +83,10 @@ test('each delta lists its operations with op, path and value', () => {
   const h = scripted([RUN_STARTED, snapshot({ n: 1 }), delta({ op: 'replace', path: '/n', value: 2 }, { op: 'move', from: '/a', path: '/b' })]);
   const html = stateHtml(h);
   assert.match(html, /Sent as state in the next run/);
-  assert.match(html, /STATE_DELTA/);
+  assert.match(html, /aria-label="Delta operations"/);
   assert.match(html, /replace<\/span><span class="agui-conv-mono">\/n<\/span>.*?2/);
   assert.match(html, /from \/a/);
-  assert.ok(html.indexOf('STATE_DELTA') < html.indexOf('STATE_SNAPSHOT'), 'newest first');
+  assert.ok(html.lastIndexOf('STATE_DELTA') < html.lastIndexOf('STATE_SNAPSHOT'), 'the history lists the newest change first');
 });
 
 test('a delta that cannot be applied is shown with its error, the state stays valid and the evidence is untouched', () => {
@@ -94,9 +98,10 @@ test('a delta that cannot be applied is shown with its error, the state stays va
   assert.match(model.state.changes[1]?.error ?? '', /replace/);
   assert.equal(model.issues.length, 1);
 
-  const html = stateHtml(h);
-  assert.match(html, /not applied/);
+  assert.match(stateHtml(h), /not applied/, 'the history row says so');
+  const html = detailHtml(h, 1);
   assert.match(html, /last valid one/);
+  assert.match(html, /No net change\./);
   assert.equal(JSON.stringify(h.session().frames), before, 'projection never writes to the raw frames');
   const failed = h.session().frames.find((frame) => frame.eventType === 'STATE_DELTA')!;
   assert.equal(failed.schemaVerdict, 'valid', 'a delta that does not fit the state is still a valid, received frame');
@@ -205,4 +210,139 @@ test('applying a patch never changes the document it was given', () => {
   const document: JsonValue = { a: { b: [1] } };
   applyJsonPatch(document, [{ op: 'add', path: '/a/b/-', value: 2 }]);
   assert.deepEqual(document, { a: { b: [1] } });
+});
+
+// ---- state history: the diff, the rows and a past point (specs/010-state-history) ----
+
+const KINDS_RUN = [
+  RUN_STARTED,
+  snapshot({ round: 0, items: ['a'], gone: true, name: 'x' }),
+  delta({ op: 'add', path: '/items/-', value: 'b' }, { op: 'replace', path: '/round', value: 1 }, { op: 'remove', path: '/gone' }, { op: 'move', from: '/name', path: '/title' }, { op: 'copy', from: '/title', path: '/alias' }, { op: 'test', path: '/round', value: 1 }),
+];
+
+test('each difference carries its kind as a word and a sign, so removing color loses nothing', () => {
+  const html = detailHtml(scripted(KINDS_RUN), 0);
+  for (const label of ['+ added', '- removed', '~ changed']) assert.ok(html.includes(label), label);
+  assert.match(html, /aria-label="State diff"/);
+  const kinds = [...html.matchAll(/data-kind="(\w+)"/g)].map((match) => match[1]);
+  assert.deepEqual(kinds.sort(), ['added', 'added', 'added', 'changed', 'removed', 'removed'], 'the net effect of six operations: a move is a removal and an addition, a copy an addition, a test nothing');
+  assert.match(html, /\/items\/1/);
+  assert.match(html, /was<\/span>.*?0.*?now<\/span>.*?1/, 'a change shows the value before and after');
+});
+
+test('a delta with no net effect says so, and a snapshot shows what it replaced', () => {
+  const h = scripted([RUN_STARTED, snapshot({ n: 1 }), delta({ op: 'replace', path: '/n', value: 1 }), snapshot({ c: 3 })]);
+  assert.match(detailHtml(h, 1), /No net change\./);
+  assert.doesNotMatch(detailHtml(h, 1), /aria-label="State diff"/);
+  const replaced = detailHtml(h, 0);
+  assert.deepEqual([...replaced.matchAll(/data-kind="(\w+)"/g)].map((match) => match[1]), ['removed', 'added']);
+  assert.match(replaced, /\/n/);
+  assert.match(replaced, /\/c/);
+});
+
+test('the first state of a thread is shown in full without a diff', () => {
+  const html = detailHtml(scripted([RUN_STARTED, snapshot({ a: 1 }), delta({ op: 'add', path: '/b', value: 2 })]), 1);
+  assert.match(html, /First state of the thread\. Shown in full\./);
+  assert.doesNotMatch(html, /agui-conv-diffs|No net change/);
+  assert.match(html, /&quot;a&quot;/);
+});
+
+test('a long value is shortened and the full value stays out of the page until it is opened', () => {
+  const long = 'x'.repeat(200);
+  const html = detailHtml(scripted([RUN_STARTED, snapshot({}), delta({ op: 'add', path: '/note', value: long })]), 0);
+  const diff = html.slice(html.indexOf('aria-label="State diff"'), html.indexOf('</ul>', html.indexOf('aria-label="State diff"')));
+  assert.ok(diff.includes(`${'x'.repeat(79)}…`), 'the first 80 characters of the JSON text, quote included');
+  assert.equal(diff.includes('x'.repeat(80)), false, 'the diff does not hold the full value while the disclosure is closed');
+  assert.match(diff, /<details/);
+  const operations = html.slice(html.indexOf('aria-label="Delta operations"'));
+  assert.equal(operations.includes('x'.repeat(80)), false, 'nor do the operations');
+});
+
+test('a diff of more than 100 differences shows 100 and a button for the rest', () => {
+  const wide = Object.fromEntries(Array.from({ length: 250 }, (_, i) => [`k${i}`, i]));
+  const html = detailHtml(scripted([RUN_STARTED, snapshot({}), snapshot(wide)]), 0);
+  assert.equal([...html.matchAll(/data-kind="added"/g)].length, 100);
+  assert.match(html, /<button[^>]*>Show 150 more<\/button>/);
+});
+
+test('the operations show with each delta and the derived note is on every point', () => {
+  const h = scripted([RUN_STARTED, snapshot({ n: 1 }), delta({ op: 'replace', path: '/n', value: 2 }, { op: 'add', path: '/m', value: 3 })]);
+  const latest = detailHtml(h, 0);
+  assert.match(latest, /Operations \(2\)/);
+  assert.match(latest, /aria-label="Delta operations"/);
+  assert.match(latest, /Derived from the snapshots and deltas below/);
+  assert.match(latest, /aria-label="Current state"/);
+  assert.match(detailHtml(h, 1), /Derived from the recorded frames, not received/);
+  assert.doesNotMatch(detailHtml(h, 1), /Delta operations/, 'a snapshot has no operations');
+});
+
+test('every row says what its change did, from its operations alone', () => {
+  const model = projectConversation(
+    sessionOf([RUN_STARTED, snapshot({ n: 1 }), delta({ op: 'replace', path: '/n', value: 2 }), delta({ op: 'replace', path: '/n', value: 3 }, { op: 'add', path: '/m', value: 1 }), delta()]),
+  );
+  assert.deepEqual(model.state.changes.map(summaryOf), ['Empty delta', 'replace /n and 1 more', 'replace /n', 'Replaced the state']);
+  const html = stateHtml(scripted([RUN_STARTED, snapshot({ n: 1 }), delta({ op: 'replace', path: '/n', value: 2 })]));
+  assert.match(html, /role="listbox" aria-label="State history"/);
+  assert.match(html, /role="option" aria-selected="true"/);
+  assert.match(html, /Replaced the state/);
+});
+
+test('the latest point is the current state and says so, with no banner', () => {
+  const h = scripted([RUN_STARTED, snapshot({ n: 1 }), delta({ op: 'replace', path: '/n', value: 2 })]);
+  const html = stateHtml(h);
+  assert.match(html, /data-point="latest"/);
+  assert.match(html, /Current state/);
+  assert.match(html, /Sent as state in the next run/);
+  assert.doesNotMatch(html, /state-banner|Past state|Back to latest/);
+});
+
+test('a past point shows its own state and diff, says it is a past state and offers the way back', () => {
+  const h = scripted([RUN_STARTED, snapshot({ n: 1 }), delta({ op: 'replace', path: '/n', value: 2 }), delta({ op: 'replace', path: '/n', value: 3 })]);
+  const html = detailHtml(h, 1);
+  assert.match(html, /data-point="past"/);
+  assert.match(html, /data-part="state-banner"/);
+  assert.match(html, /Past state/);
+  assert.match(html, /1 newer change</);
+  assert.match(html, /<button[^>]*>Back to latest<\/button>/);
+  assert.match(html, /State after STATE_DELTA/);
+  assert.match(html, /aria-label="State at the selected point"/);
+  assert.match(html, /&quot;n&quot;<\/span><span class="agui-j-p">:<\/span> <span class="agui-j-n">2</);
+  assert.doesNotMatch(html, /Sent as state in the next run/);
+  assert.match(detailHtml(h, 2), /2 newer changes/);
+});
+
+test('the starting state is the oldest point, shown in full without a diff', () => {
+  const h = scripted([RUN_STARTED, delta({ op: 'add', path: '/a', value: 1 })], { input: { threadId: 't1', runId: 'r1', state: { seeded: true } } });
+  const html = detailHtml(h, 1);
+  assert.match(html, /Starting state/);
+  assert.match(html, /seeded/);
+  assert.doesNotMatch(html, /agui-conv-diffs|No net change|First state/);
+  assert.match(stateHtml(h), /Starting state/);
+});
+
+test('a snapshot between delta groups gives the right state at each point', () => {
+  const h = scripted([RUN_STARTED, snapshot({ a: 1 }), delta({ op: 'add', path: '/b', value: 2 }), snapshot({ c: 3 }), delta({ op: 'add', path: '/d', value: 4 })]);
+  const has = (index: number, key: string) => detailHtml(h, index).includes(`&quot;${key}&quot;`);
+  assert.deepEqual([has(0, 'c'), has(0, 'd'), has(0, 'a')], [true, true, false]);
+  assert.deepEqual([has(1, 'c'), has(1, 'd')], [true, false]);
+  assert.deepEqual([has(2, 'a'), has(2, 'b'), has(2, 'c')], [true, true, false]);
+});
+
+test('a stored selection becomes an index: none or a missing key is the newest point, and it grows as newer changes arrive', () => {
+  const h = harness();
+  h.open('ex1', { input: { threadId: 't1', runId: 'r1', state: {} } });
+  [RUN_STARTED, snapshot({ n: 1 }), delta({ op: 'replace', path: '/n', value: 2 }), delta({ op: 'replace', path: '/n', value: 3 })].forEach((event, i) => h.push('ex1', event, (i + 1) * 10));
+  const state = projectConversation(h.session()).state;
+  const key = state.changes[2]?.frameId;
+  assert.equal(selectedIndex(state, undefined), 0);
+  assert.equal(selectedIndex(state, 'gone'), 0);
+  assert.equal(selectedIndex(state, key), 2);
+  assert.equal(selectedIndex(state, 'start'), 3, 'the starting state is the oldest point');
+  h.push('ex1', delta({ op: 'replace', path: '/n', value: 4 }), 100);
+  assert.equal(selectedIndex(projectConversation(h.session()).state, key), 3, 'one newer change pushes the same change one row down');
+});
+
+test('a thread without a starting state has no starting-state key', () => {
+  const state = projectConversation(sessionOf([RUN_STARTED, snapshot({ a: 1 })])).state;
+  assert.equal(selectedIndex(state, 'start'), 0);
 });
