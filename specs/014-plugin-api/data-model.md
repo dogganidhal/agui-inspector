@@ -29,15 +29,15 @@ Reasons come from `pluginSource`: `must be a nonempty string`, `is not a valid U
 | --- | --- | --- |
 | `load(addresses, importModule, page)` | `Promise<void>` | Requests every module, activates each in order, never rejects. |
 | `beforeRun(run, signal)` | `Promise<Result<RunAgentInput>>` | Runs the registered hooks in order. |
-| `headers(request, signal)` | `Promise<Result<Readonly<Record<string, string>>>>` | Merges the registered providers' answers. |
+| `provideHeaders(request, signal)` | `Promise<Result<Readonly<Record<string, string>>>>` | Merges the registered providers' answers. |
 | `eventRenderer(name)` | `PluginRenderer \| undefined` | The renderer that claimed this custom event name. |
 | `activityRenderer(type)` | `PluginRenderer \| undefined` | The renderer that claimed this activity type. |
 | `report(plugin, extension, error)` | `void` | Adds a warning. Used by the host and by `PluginSlot`. |
 | `warnings()` and `subscribe(listener)` | `readonly string[]` and `Unsubscribe` | What the page shows. A stable array until it changes. |
 | `count()` | `number` | Plugins whose activation finished without error. |
 
-`PluginRenderer` is `{ plugin: string; extension: 'renderCustomEvent' | 'renderActivity'; render: Render<…> }`: what the
-registry holds, so `PluginSlot` can report a failure under the right name.
+`PluginRenderer` is `{ plugin: string; render: Render<…> }`: what the registry holds, so `PluginSlot` can report a failure
+under the right name.
 
 Internal state:
 
@@ -69,6 +69,9 @@ ends. A registration call on a closed set reports a warning and does nothing.
 ```ts
 export const PLUGIN_API_VERSION = 0;
 
+/** An `HTMLElement`; a project with no DOM types gets the one method the host needs. */
+export type RenderContainer = HTMLElement;
+
 export interface PluginApi {
   readonly version: number;
   beforeRun(hook: BeforeRunHook): void;
@@ -84,10 +87,10 @@ The members, the arguments and the rules are in [contracts/plugin-api.md](contra
 
 | Name | Shape | Meaning |
 | --- | --- | --- |
-| `RunPlugins` | `{ beforeRun, headers }` | What the runtime needs of the host. A constant `NO_PLUGINS` answers at once. |
+| `RunPlugins` | `{ beforeRun, provideHeaders }` | What the runtime needs of the host. A constant `NO_PLUGINS` answers at once. |
 | `RuntimeOptions.plugins` | `RunPlugins`, optional | Absent means `NO_PLUGINS`. |
-| `TransportRequest.headers` | `Readonly<Record<string, string>>`, optional | Headers for this one request, validated and merged by the transport. The recorder is never given a `TransportRequest`. |
-| `PreparationContext.headers` | `(request, signal) => Promise<Result<Readonly<Record<string, string>>>>`, optional | Called before each preparation is recorded. |
+| `AbortableTransport.send(request, auth, signal, headers)` | `headers?: ProvidedHeaders` | The fourth argument: headers for this one request, validated and merged by the transport below the typed token. Like the token, they never go inside the request. The recorder is given neither. |
+| `PreparationContext.provideHeaders` | `(request, signal) => Promise<Result<ProvidedHeaders>>`, optional | Called before each preparation is recorded. |
 
 ## Page seam (`app`)
 

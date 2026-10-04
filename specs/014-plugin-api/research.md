@@ -108,12 +108,12 @@ that removes tool messages.
 
 **Decision**: `provideHeaders({ method, url, body, signal })` returns an object of headers or nothing. The runtime calls the
 providers before each preparation request, run request and raw request, and puts the result in a new optional field,
-`TransportRequest.headers`. The guarded transport validates the headers again, merges them below the typed token and
+the fourth argument of `send`. The guarded transport validates the headers again, merges them below the typed token and
 sends them.
 
 **Where the call sits**: before `recorder.record`, never inside the `send` callback. If a provider fails inside `send`, the
 recorder would write an exchange with a transport error for a request that never left the page. Resolving first means a
-failed provider records nothing. The recorder is not given `TransportRequest`, so it still cannot see a header. The three
+failed provider records nothing. The recorder is given neither the request's headers nor this argument, so it still cannot see a header. The three
 call sites are the preparation loop (`runPreparations`), the run (`dispatchRun`, just before the point where owed replies are
 carried) and `sendRaw`.
 
@@ -145,6 +145,9 @@ receives. Nothing in `RuntimeState`, the store, the recorder, the profile or the
   the method and the path.
 - Running providers inside the transport. The transport would need to know about plugins, and the failure would be recorded
   (see above).
+
+**Why an argument and not a field**: `contracts.test.ts` keeps `TransportRequest` free of any header key, and the transport takes
+credentials as a separate argument. A provider's header can be a credential, so it follows the token's route.
 
 ## 6. Renderers
 
@@ -267,7 +270,7 @@ real container shows is checked in Playwright.
 
 ## 13. Cost when no plugin is used
 
-`PluginHost.beforeRun` and `headers` return at once when nothing is registered, with no copy and no clone. A renderer lookup
+`PluginHost.beforeRun` and `provideHeaders` return at once when nothing is registered, with no copy and no clone. A renderer lookup
 is a `Map.get`. `PluginSlot` exists only for an entry that has a renderer. The footer count is a number. No new
 dependency, so the bundle grows by the host (a few kilobytes) and the slot.
 

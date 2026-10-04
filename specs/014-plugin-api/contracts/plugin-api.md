@@ -154,7 +154,7 @@ The same text never shows twice. At most 20 warnings are kept. The message is th
 | Hook failed | `<address>: beforeRun threw: <message>` |
 | Hook result invalid | `<address>: beforeRun returned an invalid input: <reason>` |
 | Provider failed | `<address>: provideHeaders threw: <message>` |
-| Provider result invalid | `<address>: provideHeaders returned an invalid header "<name>": <reason>` |
+| Provider result invalid | `<address>: provideHeaders returned an invalid header: <reason>` (the reason names the header and never the value) |
 | Renderer threw | `<address>: renderActivity(<type>) threw: <message>` |
 
 ## Versioning

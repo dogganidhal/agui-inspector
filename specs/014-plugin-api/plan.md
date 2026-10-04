@@ -19,8 +19,8 @@ ends without error.
 
 The runtime asks the host at three points it already has. Before the preparations of a run, `beforeRun` may replace the
 composed input, which goes out and is recorded as sent. Before each preparation, run and raw request, `provideHeaders`
-returns headers that ride in a new optional field of `TransportRequest`. The guarded transport validates them again and
-merges them below the typed token. The recorder never sees a `TransportRequest`. The conversation view gets a
+returns headers that reach the guarded transport as a fourth argument of `send`, as the token does. The transport validates
+them again and merges them below the typed token. The recorder is given neither. The conversation view gets a
 `renderCustom` seam next to the existing `renderActivity`. The app tries the A2UI view first and a plugin renderer second.
 A small `PluginSlot` component hands each renderer an empty container and a copy of the data, and shows the JSON view when
 the renderer throws.
@@ -45,6 +45,20 @@ Features 005, 008 and 013 merged before implementation. The plan took these from
   the theme, brand and catalog alias warnings.
 - Feature 005 is in `main`. `--plugin` is added to its parser and its start check, and its files are served by the shared
   core through an `@internal` option (research 10).
+
+## Changes during implementation
+
+Four things changed from the approved plan. Each is smaller than the thing it replaced, and none changes the spec.
+
+- Provider headers reach the transport as a fourth argument of `send`, not as a field of `TransportRequest`. A type test in
+  `tests/foundation/contracts.test.ts` says that `TransportRequest` has no `headers` and that credentials arrive as a separate
+  argument. The headers are held to the same rule as the token, so the argument is the honest place for them.
+- The host's and the runtime's method is `provideHeaders`. A source test says that nothing under `src/core` touches `.headers`,
+  which is how it finds code that reads an HTTP header.
+- `RenderContainer` in `contracts.ts` is `HTMLElement` where the DOM types are loaded. The demo's worker project has none, and
+  a bare `HTMLElement` stopped it compiling.
+- The command's plugin files are served by the shared core through the `@internal` option `localFiles`, as research 10 planned.
+  The command checks `Origin` and `Sec-Fetch-Site` for `/plugins/` in its own listener.
 
 ## Technical Context
 
@@ -106,7 +120,7 @@ The reasons and the rejected alternatives are in [research.md](research.md). In 
 3. A plugin is one function that receives a frozen versioned object. Registrations commit only on success (research 3, 8).
 4. One run hook, before the preparations, with a checked and copied result (research 4).
 5. Header providers are resolved before the recorder is called, never inside `send`, so a failed one records nothing. The
-   headers ride in `TransportRequest`, which the recorder never receives (research 5).
+   headers reach the transport as an argument of `send`, never inside the request, and the recorder is given neither (research 5).
 6. Renderers draw into a container and are keyed by the JSON text of their data (research 6).
 7. A failure is a warning; on the send path it also stops that one request (research 7).
 
@@ -133,7 +147,7 @@ specs/014-plugin-api/
 
 ```text
 packages/inspector/src/
-├── contracts.ts                      # PluginApi and its argument types; PLUGIN_API_VERSION; ConfigFile.plugins; TransportRequest.headers
+├── contracts.ts                      # PluginApi and its argument types; PLUGIN_API_VERSION; ConfigFile.plugins; RenderContainer
 ├── core/config/
 │   ├── validation.ts                 # pluginSource(): the address check, reused at load time
 │   └── index.ts                      # parsePlugins(); ParsedConfig.plugins
@@ -143,8 +157,8 @@ packages/inspector/src/
 ├── core/profiles/index.ts            # checkRunInput() split out of composeRunInput
 ├── core/runtime/
 │   ├── index.ts                      # RuntimeOptions.plugins; beforeRun before the preparations; header resolution for run and raw
-│   ├── prepare.ts                    # PreparationContext.headers, called before each preparation is recorded
-│   └── transport.ts                  # TransportRequest.headers; headerValueProblem(); merge below the typed token
+│   ├── prepare.ts                    # PreparationContext.provideHeaders, called before each preparation is recorded
+│   └── transport.ts                  # send() takes the provider headers as a fourth argument; providedHeaderProblem(); merge below the typed token
 ├── app/
 │   ├── startup.ts                    # host before the runtime; load after the configuration; Started.plugins; env.importModule
 │   ├── plugin-slot.tsx               # new: one container per rendered entry; JSON view and a warning on failure
@@ -208,12 +222,12 @@ dispatchRun
   resolve preset -> composeRunInput
   plugins.beforeRun            (new: may replace the input; a failure refuses the run here, nothing sent)
   runPreparations
-    for each preparation: plugins.headers -> recorder.record -> transport.send({ headers })   (new first step)
-  plugins.headers for the run  (new: before owed replies are cleared)
+    for each preparation: plugins.provideHeaders -> recorder.record -> transport.send(request, auth, signal, headers)   (new first step)
+  plugins.provideHeaders for the run  (new: before owed replies are cleared)
   replies = NO_REPLIES
   execute -> recorder.record -> transport.send({ headers })
 sendRaw
-  plugins.headers -> recorder.record -> transport.send({ headers })
+  plugins.provideHeaders -> recorder.record -> transport.send(request, auth, signal, headers)
 ```
 
 A failure at any new step calls `refuse(message)` or returns the preparation failure, so the existing path shows it and
