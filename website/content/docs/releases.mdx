@@ -108,6 +108,11 @@ Only the maintainer can do these. Nothing in the repository changes a setting.
 You cannot replace a published version. To fix a bad release, yank it (mark it as withdrawn) on PyPI, deprecate it with
 `npm deprecate` on npm, and publish the next version.
 
+If a publish job fails before anything is uploaded, fix the workflow on `main` and delete the remote tag of the failed
+release first (`git push origin --delete <package>@<version>`). A re-run uses the workflow file from the tagged
+commit, so it fails the same way. A new push does not publish while the tag exists. Without the tag, the run that the
+fix starts tags the fix commit and publishes the version.
+
 ## npm release
 
 The npm package `agui-inspector` is released by the same workflow and the same version pull request as the Python
@@ -115,7 +120,7 @@ package. It was `release-python.yml` until npm joined it. Each package has its o
 names the packages it bumps. A release publishes only the packages whose version changed.
 
 The publish job for npm, `publish-npm`, has `id-token: write` and uses the `npm` environment. It has no checkout. It
-downloads the tarball that the build job packed and runs `npm publish npm-dist/*.tgz --provenance`. npm trusted
+downloads the tarball that the build job packed and runs `npm publish ./npm-dist/*.tgz --provenance`. npm trusted
 publishing trades the job's OIDC token for a short-lived publish token, so no npm token is stored anywhere.
 `--provenance` attaches a signed statement that names the workflow and the commit. It also makes the publish fail
 instead of going out without one. The tarball holds the `dist` directory that the wheel carries, and the tests compare
