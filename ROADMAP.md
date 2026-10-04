@@ -7,219 +7,84 @@ and planning input.
 
 ## Current status
 
-As of 2026-10-04. This is the one summary of where the release stands. The sections under
-[Planning history](#planning-history) record how it got here and are not kept current.
+As of 2026-10-04. This is the one summary of where the release stands.
 
-Built and merged on `main`:
+Released:
 
-- The 0.1.0 MVP: embedded Starlette and FastAPI support, the hosted page, npm static assets for other servers, the
-  recorder, views for all 31 baseline event types, manual interrupt and tool replies, A2UI v0.9 surfaces, configuration,
-  presets and client profiles, raw submissions, and session export and import. Waves W1 and W2 (PRs #3 to #18) and the
-  three W3 follow-ups (D01 release hygiene, D02 theme delivery, D03 the catalog alias and the credential-echo
-  regression) are all merged.
-- The public demo, live at <https://dogganidhal.github.io/agui-inspector/> since 2026-10-02 and deployed from `main` by
-  `pages.yml`. It is the hosted page with scripted examples answered by a service worker, and it also accepts a
-  visitor's own HTTPS or `localhost` server. See [public demo](https://dogganidhal.github.io/agui-inspector/docs/demo/).
-- The docs site, <https://dogganidhal.github.io/agui-inspector/docs/>, built from the MDX pages in `website/` and
-  deployed with the demo by `pages.yml`.
-- The release workflow, `release.yml` (named `release-python.yml` until 2026-10-04). It published 0.1.0 to PyPI on 2026-10-03, through trusted
-  publishing with attestations, and keeps a `chore: version packages` pull request open for the next release. See
-  [distribution](https://dogganidhal.github.io/agui-inspector/docs/releases/#python-release).
+- 0.1.0, on [PyPI](https://pypi.org/project/agui-inspector/) since 2026-10-03 (`pip install "agui-inspector[embedded]"`)
+  and on [npm](https://www.npmjs.com/package/agui-inspector) since 2026-10-04, with provenance. It has embedded
+  Starlette and FastAPI support, the hosted page, npm static assets for other servers, the recorder, views for all 31
+  baseline event types, manual interrupt and tool replies, A2UI v0.9 surfaces, configuration, presets and client
+  profiles, raw submissions, and session export and import. The [MVP specification](specs/001-inspector-mvp/spec.md)
+  defines its scope.
+- The public demo at <https://dogganidhal.github.io/agui-inspector/>, deployed from `main` by `pages.yml`. See
+  [public demo](https://dogganidhal.github.io/agui-inspector/docs/demo/).
+- The docs site at <https://dogganidhal.github.io/agui-inspector/docs/>, deployed with the demo.
 
-Still to verify:
+Releases go through `release.yml`: a changeset per change, the `chore: version packages` pull request, then the
+maintainer's approval of the `pypi` and `npm` deployments. See
+[distribution](https://dogganidhal.github.io/agui-inspector/docs/releases/). Nothing in this repository authorizes
+publishing, tagging or releasing. Each remains the maintainer's decision.
 
-- SC-009, the 5,000-frame responsiveness check, on the headed Mac mini M2. The Apple M4 Pro headless result is
-  development evidence only, so SC-009 stays not passed until the maintainer runs the physical certification. See
-  [development](https://dogganidhal.github.io/agui-inspector/docs/development/#5000-frame-benchmark).
-- A manual smoke run of each distribution mode (hosted, Python and static assets) before any release.
-- Firefox for the numeric loopback addresses. Chromium and Safari are recorded in
-  [hosted](https://dogganidhal.github.io/agui-inspector/docs/hosted/#browser-check).
+Next is [0.2.0](#020). There is no 1.0.0 target for now. [Decisions](#decisions) explains why.
 
-Publication gates:
+## 0.2.0
 
-- Python: 0.1.0 is on [PyPI](https://pypi.org/project/agui-inspector/) since 2026-10-03
-  (`pip install "agui-inspector[embedded]"`). Later releases take the same path: a changeset, the version pull
-  request, and the maintainer's approval of the `pypi` deployment.
-- npm: nothing is published, so there is no npm install yet. `release.yml` now also packs the npm package from
-  the tagged commit and publishes it with npm provenance through trusted publishing, and `packages/inspector` is no
-  longer private. The maintainer still has to publish the first version by hand, register the trusted publisher and
-  create the `npm` environment. The first release from CI is 0.1.0, through a changeset. See [distribution](https://dogganidhal.github.io/agui-inspector/docs/releases/#one-time-setup-for-npm).
-- G-03, whether upstream accepts the inspector under `apps/inspector`, is open. `@ag-ui/inspector` stays conditional on it.
-- Nothing in this repository authorizes publishing, tagging or releasing. Each remains the maintainer's decision.
+0.2.0 ships when every item below has merged. Each item has an issue and starts as a feature spec through Spec Kit.
+None of them waits for another, so the order is a priority: branding first, then the best impact for the effort.
 
-Planned and not built: the CLI, the JS server helpers and the in-app inspector, listed under
-[1.0.0](#100-stable-target). Embedding in Python today mounts a separate page. It does not observe a host
-application's agent.
+| # | Capability | Scope | Impact | Effort | Issue |
+| --- | --- | --- | --- | --- | --- |
+| 1 | Branding | The adopter's logo and product name in the top bar, set in `config.json` and through `mount_inspector` | High | Small | [#73](https://github.com/dogganidhal/agui-inspector/issues/73) |
+| 2 | Client automation | Interrupts resolved or cancelled automatically, and scripted client tool results, set in the client profile | Medium | Small | [#74](https://github.com/dogganidhal/agui-inspector/issues/74) |
+| 3 | CLI and proxy | `npx agui-inspector --target <url>`: local bundle serving, loopback-only listener, explicit target allowlist, unchanged target bytes | High | Medium | [#75](https://github.com/dogganidhal/agui-inspector/issues/75) |
+| 4 | JS server helpers | Express, Hono and Next.js helpers with the same contract as `mount_inspector` | High | Medium | [#76](https://github.com/dogganidhal/agui-inspector/issues/76) |
+| 5 | Protocol diagnostics | A rule catalogue with ids, protocol version handling, and findings for frames that contradict declared capabilities | High | Medium | [#77](https://github.com/dogganidhal/agui-inspector/issues/77) |
+| 6 | A2UI v0.8 and catalog aliases | v0.8 surfaces through the v0.8 renderer of `@a2ui/react`, and catalog aliases in the config | Medium | Medium | [#78](https://github.com/dogganidhal/agui-inspector/issues/78) |
+| 7 | Inspection views | Subagent lanes and a timeline, state history with diffs, a waterfall of runs, and Markdown on demand | High | Large | [#79](https://github.com/dogganidhal/agui-inspector/issues/79) |
+| 8 | Transport and resumption | The protobuf encoding and resumable runs through `connectAgent` | Low | Medium | [#80](https://github.com/dogganidhal/agui-inspector/issues/80) |
+| 9 | Plugins | Hooks before a run and on its input, header providers, and renderers for custom events and activities | Medium | Large | [#81](https://github.com/dogganidhal/agui-inspector/issues/81) |
 
-## 0.1.0 MVP
+Branding has three constraints. The logo comes from the page's own origin or a `data:` URI, so the content security
+policy and the no-third-party-request rule stay as they are. A bad value shows a configuration warning and never stops
+startup. Without a brand, the default mark and name stay.
 
-Status: see [Current status](#current-status).
+[#86](https://github.com/dogganidhal/agui-inspector/issues/86) brings the docs in line with this roadmap. Several pages
+still mention 1.0.0 plans.
 
-The [MVP specification](specs/001-inspector-mvp/spec.md) defines the accepted scope;
-its [requirements checklist](specs/001-inspector-mvp/checklists/requirements.md) records the review.
+## Next minor
 
-- Embedded support for Starlette and FastAPI, a hosted page, and npm static assets for other servers.
-- HTTP/SSE recording with raw frames, timing, schema and sequence findings, and terminal-event checks.
-- Views for all 31 baseline event types, the conversation, and current state.
-- Manual interrupt and tool replies, plus A2UI v0.9 surfaces and action round trips.
-- Agent configuration, presets, and client profiles with browser persistence and JSON import/export.
-- Raw JSON submissions, including schema-invalid inputs, and session export/import for inspection.
-- Views styled through documented theme properties, so adopters can restyle the inspector without
-  rebuilding it, delivered as optional light/dark maps in `config.json` (also accepted by Python).
-  Unknown/private names or unsafe values produce visible nonfatal warnings; CSP is unchanged.
-  The [UI design](specs/001-inspector-mvp/design/design.md) defines the properties.
+These build on 0.2.0 and ship in the release after it.
 
-Release criteria remain in the feature spec. The workload target is 5,000 retained frames, with at
-least 95% of filter changes and frame expansions finishing visibly within 200 ms during capture.
-The implementation plan fixes the benchmark profile. The M4 Pro headless result is informational;
-headed physical M2 certification remains with the maintainer. The complete client
-bundle is limited to 2 MB minified and 600 KB gzipped.
+| Capability | Scope | Needs | Issue |
+| --- | --- | --- | --- |
+| Conformance suite | `agui-inspector test --target <url>` with JSON and JUnit reports, and a violating test for every catalogue rule | #75, #77, #82 | [#83](https://github.com/dogganidhal/agui-inspector/issues/83) |
+| Python reference agent | The scripted, model-free scenarios of the TypeScript reference agent, in Python | | [#82](https://github.com/dogganidhal/agui-inspector/issues/82) |
+| Replay | `agui-inspector replay <session file>` serves a recorded session as an AG-UI endpoint, for client tests | #75 | [#84](https://github.com/dogganidhal/agui-inspector/issues/84) |
+| Rule docs and examples | A page per rule, and examples for the major AG-UI server frameworks | #77 | [#85](https://github.com/dogganidhal/agui-inspector/issues/85) |
 
-### Docs site (2026-10-03)
+## Decisions
 
-The guides moved from `docs/*.md` to a Fumadocs site in `website/` (Next.js static export, its own lockfile, not a
-workspace). The Pages workflow builds it next to the demo and serves it at
-<https://dogganidhal.github.io/agui-inspector/docs/>; the demo keeps the site root. The theme imports the inspector's
-`tokens.css`, so both share one look. Pull request CI builds the site in a job of its own. `docs/reference/product-brief.md`
-stays as the frozen brief. No package, tag or release is involved.
+Taken on 2026-10-04, when this roadmap was revised.
 
-## 1.0.0 stable target
-
-Status: roadmap only. Individual feature specifications, implementation plans, and tasks have not
-been created.
-
-This release inherits the MVP. Browser-persisted profiles and JSON profile exchange are already in
-0.1.0 scope; freezing those formats as version 1 remains a 1.0.0 commitment.
-
-Promote one capability at a time into Spec Kit when its dependencies are understood and the work
-is selected for implementation. No delivery order or dates are assigned below.
-
-| Capability | Planned scope | Dependencies |
-| --- | --- | --- |
-| CLI and proxy | Local bundle serving, explicit target allowlist, loopback-only listener, unchanged target bytes | MVP bundle and configuration |
-| JS server helpers | Express, Hono, and Next.js route-handler integrations | Static distribution and embedding contract |
-| In-app inspector | Observe a host `AbstractAgent` without requests of its own | Element and A2UI style-isolation decisions |
-| Transport and resumption | Binary/protobuf transport, reconnection, and resumable runs | MVP recording contracts and protocol/client support |
-| Protocol diagnostics | Rule catalogue, protocol/version handling, and capability-consistency findings | Protocol rules and declared capabilities |
-| Client automation | Automatic interrupt resolution/cancellation and scripted tool replies | Manual reply flows and client profiles |
-| Conformance | Server test suite, JSON/JUnit reports, and Python/TypeScript reference agents | Rule catalogue and capability-aware scenarios |
-| Replay | Serve recorded sessions as AG-UI endpoints for client tests | Session format and recorded timing |
-| Inspection views | Subagent lanes and timelines, state history/diffs, waterfalls, and optional conversation Markdown | Recorded events and run relationships |
-| Plugins | Before-run/input hooks, header providers, and custom event/activity renderers | Preset limits and a versioned extension contract |
-| A2UI compatibility | v0.8, v0.9, and v1.0 support plus general catalog aliases (one middleware-default/basic alias is already MVP scope) | Support in the A2UI project's renderer |
-| Documentation | A page per rule and examples for major server frameworks | Rule catalogue and supported integrations |
-
-### Release criteria
-
-- Config, session, profile, and plugin API formats are published as version 1 with JSON Schemas.
-  After 1.0.0, format changes are additive; incompatible changes wait for 2.0.0.
-- All four distribution modes run the reference agent's full scenarios.
-- The server suite runs in CI against Python and TypeScript reference agents, with a violating test
-  for every catalogue rule.
-- Every supported event type has a dedicated view and fixture test.
-- Sessions support 50,000 frames, with the A2UI renderer loaded on demand.
-- A WCAG 2.2 AA accessibility audit passes, including keyboard navigation.
+- The next release is 0.2.0. There is no 1.0.0 target. The 1.0.0 acceptance criteria in the constitution apply to a
+  1.0.0 release only, and none is planned.
+- A release needs `npm run check:ci` to pass and the maintainer's approval of the deployment. There are no other
+  release gates and no manual release checks. agui-inspector is a developer tool, and the checks should match that.
+- 0.2.0 is the nine capabilities above. It ships when all of them have merged. Work that depends on them goes into the
+  next minor.
+- Branding is new in this plan and comes first. The other eight follow impact over effort.
+- Only features that AG-UI and A2UI have already released are planned. WebSocket and push transports, protocol
+  capability discovery, and A2UI v1.0 rendering wait until upstream ships them.
+- The in-app inspector is not planned. It is too soon to tell how a custom element should isolate the styles that A2UI
+  injects into the document. This closes G-06 for now.
+- The inspector does not move upstream for now, and the package keeps the name `agui-inspector`. This closes G-03.
+- Formats stay at version 0. New fields are optional, as `theme` was in 0.1.0, so existing files keep working. A change
+  that breaks an existing file comes with migration steps in the changelog.
 
 ## Open decisions
 
-- G-03 upstream placement: whether `ag-ui-protocol/ag-ui` would accept `apps/inspector`, and when.
-- G-04 capability discovery: conditional on a protocol-defined mechanism. The MVP uses inline
-  declarations or a configured capabilities URL.
-- G-05 WebSocket and push: conditional on AG-UI specifying their behavior. Capability names alone do not
-  establish a transport contract.
-- G-06 in-app element: decide how element isolation works with A2UI styles injected into the document.
-  Shadow-root integration remains unresolved.
+None.
 
-## Planning history
-
-These records are kept for traceability. Each describes the date in its heading, so present-tense lines in them can be
-out of date. [Current status](#current-status) is the source for where things stand. The task checkboxes in
-[`specs/`](specs) are history in the same way.
-
-### MVP status line, as first written
-
-Status: implemented on main (W1/W2, PRs #3-#18). Release verification pending: SC-009 on the
-physical runner, a manual smoke run in all MVP distribution modes, and the first publish (the Python release
-workflow is in place and waits for the maintainer's tag; npm is not set up).
-Three approved W3 follow-ups remain in [tasks](specs/001-inspector-mvp/tasks.md#wave-w3-release-decision-follow-ups).
-The public-demo companion is planned in [feature 002](specs/002-public-demo/spec.md); its
-implementation waits for all three W3 slices to merge and does not authorize package publication.
-
-Since then the three W3 slices and the public demo have merged.
-
-### Approved release decisions (2026-10-02)
-
-- G-01 closed: MIT, `Copyright (c) 2026 Nidhal Dogga`; both distributions ship bundled-dependency
-  third-party notices, including Apache-2.0 license texts and any NOTICE for `@a2ui/react`,
-  `@a2ui/web_core` and `@a2ui/markdown-it`. D01 implements packaging/metadata and the exact
-  DOMPurify 3.4.16 override/lock, Python 3.10/3.14 CI and benchmark-doc cleanup.
-- G-02 closed: `agui-inspector` on npm and PyPI, both unregistered on this date.
-  `@ag-ui/inspector` remains conditional on upstream adoption; G-03 remains open.
-- G-07 closed by constitution 1.0.3 PATCH: inspector-held credentials remain memory-only and are
-  never written by it; the recorder reads no headers. Target evidence, including credential
-  echoes, remains unchanged, with the sensitive-data export warning. No redaction anywhere.
-- G-08 closed without an extra integration PR: checkpoint 13 pass, 1 fail (F-01 embedded config
-  path, fixed by #18), 2 pending (SC-008 credential part, D03; SC-009 physical M2, maintainer).
-- G-09 closed: `config.json` theme light/dark public-property maps in every MVP mode; D02 delivers
-  validation/application, Python support and root-scoped derived tokens to avoid host collisions.
-- D03 adds the single middleware 0.0.11 default catalog id alias to the renderer's basic catalog,
-  beside the catalog factory, plus the credential-echo end-to-end regression. General aliases
-  remain 1.0.0 scope. `renderA2ui` is display-only and persists/exports; tool injection changes input.
-
-Each W3 slice is one PR depending only on main after the decision-recording PR, with disjoint
-ownership. Manifests remain private: no publishing, tags or releases are authorized. FR-040 remains.
-
-### Python release workflow (2026-10-03)
-
-Changesets drive the Python release. `.github/workflows/release-python.yml` keeps a `chore: version packages` pull request
-up to date on `main`; merging it tags the version, runs the strict gate and publishes to PyPI through trusted
-publishing, with no stored token. At that date nothing had run it: the maintainer still had to register the trusted
-publisher, the `pypi` environment and the repository setting that lets the version pull request open, and the manifests
-stay private (the Python classifier included) until the first release PR. The npm release (provenance, a workflow of its
-own) is not set up. See [distribution](https://dogganidhal.github.io/agui-inspector/docs/releases/).
-
-### npm release workflow (2026-10-04)
-
-The npm package joins the Python release, and the workflow file is renamed from `release-python.yml` to `release.yml`.
-PyPI matches the trusted publisher to the file name, so the maintainer has to update it. Changesets versions and tags
-`agui-inspector` and `agui-inspector-python` separately, and a release publishes only the package it tagged. The build
-job packs the npm tarball from the same checked build as the wheel. A `publish-npm` job in `release.yml` publishes it with `--provenance` through npm
-trusted publishing, in the `npm` environment, with no stored token. npm cannot register a trusted publisher for a name
-that does not exist, so a placeholder 0.0.0 is the maintainer's to publish by hand. A pending `minor` changeset then
-takes the package to 0.1.0, which CI publishes with provenance. Nothing has been published, tagged or released. See [distribution](https://dogganidhal.github.io/agui-inspector/docs/releases/#npm-release).
-
-### Public demo companion (2026-10-02)
-
-Status: live at <https://dogganidhal.github.io/agui-inspector/> since 2026-10-02. The
-[specification](specs/002-public-demo/spec.md), [implementation plan](specs/002-public-demo/plan.md) and
-[three slices](specs/002-public-demo/tasks.md) (T001 to T017) are implemented and merged; the Pages workflow
-deployed the demo from `main`.
-The demo accompanies 0.1.0 without adding npm/PyPI publishing, tags, the release workflow,
-JS server helpers or CLI to this feature.
-
-- GitHub Pages serves the existing hosted app under `/agui-inspector/`. Demo-only same-origin
-  service-worker endpoints reuse deterministic reference scenarios and return real HTTP/SSE
-  through the ordinary transport/recorder/frame reader; no model or external example service.
-- Example agents/presets/quick messages cover plain, interrupt, tools, slow, state, broken,
-  A2UI surfaces/actions and all 31 baseline event types. First-page readiness, unavailable
-  browser fallback and Pages sub-path routing are explicit acceptance requirements.
-- Constitution 1.1.0 MINOR permits explicit default-off hosted startup opt-in for visitor-selected
-  HTTPS and browser-supported HTTP loopback targets without inspector endpoint approval prompts.
-  The page discloses the boundary; defaults, embedded auth, no telemetry/automatic third-party
-  traffic, no hosted cookies, local scripts/no eval and memory-only credentials stay unchanged.
-  Use `http://localhost:<port>` locally; Chromium IPv4 must be re-proven, other browsers checked
-  manually, and IPv6 support is not claimed without exact CSP proof. No all-HTTP CSP fallback.
-- Demo worker/bootstrap/config stay outside ordinary static/npm/Python artifacts; both complete
-  asset sets retain the 2 MB/600 KB budgets and inherited 5,000-frame acceptance.
-- P01 **visitor-policy** and P02 **shared-demo-endpoints** have disjoint paths and depend on
-  main after W3 D01/D02/D03; P03 **demo-pages-delivery** depends on both, with at most one unmerged
-  direct parent. It supplies integrated browser/package checks, docs/embedding link and the
-  SHA-pinned least-privilege main-only Pages workflow.
-
-Open gates at planning time were [G-D01 through G-D05](specs/002-public-demo/plan.md#open-gates): W3 merges, exact
-numeric-loopback CSP evidence, native worker byte/Stop proof, separate maintainer Pages
-authorization, and integrated budgets/package-isolation/CI evidence. Physical M2 certification
-and MVP release/publishing decisions remain separate; planning does not enable Pages or deploy.
-
-Outcome: G-D01, G-D03 and G-D05 are met by merged work and the checks in `npm run check:ci`. The maintainer granted
-G-D04 on 2026-10-02. G-D02 is met for Chromium and Safari, and the Firefox check is open.
+Earlier plans, including the 1.0.0 target and the 0.1.0 decision log, are in the
+[previous version of this file](https://github.com/dogganidhal/agui-inspector/blob/e400f85bafca94da65f1a4f0f348e2957bb708d0/ROADMAP.md).
