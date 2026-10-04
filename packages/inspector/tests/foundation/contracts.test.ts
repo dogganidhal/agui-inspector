@@ -181,7 +181,7 @@ test('a session envelope is plain JSON that carries no auth or header fields', (
   assert.equal(JSON.parse(text).session.frames[0].envelope, frame.envelope, 'raw envelope text survives unchanged');
 });
 
-test('a profile envelope holds the seven settings and nothing volatile', () => {
+test('a profile envelope holds the seven settings, the three optional automation settings and nothing volatile', () => {
   const settings: ClientProfileSettings = {
     protocolVersion: '1.0',
     tools: [{ name: 'lookup', description: 'Look up', parameters: { type: 'object' } }],
@@ -190,9 +190,13 @@ test('a profile envelope holds the seven settings and nothing volatile', () => {
     injectA2uiTool: false,
     messageMode: 'turn',
     forwardedProps: { user: 'u1' },
+    interruptReply: 'resolve',
+    interruptPayloads: { approval: { approved: true } },
+    toolResults: { lookup: 'found' },
   };
   const envelope: ProfileEnvelope = { version: FORMAT_VERSION, profile: settings };
   assert.deepEqual(Object.keys(envelope.profile).sort(), [
-    'context', 'forwardedProps', 'injectA2uiTool', 'messageMode', 'protocolVersion', 'renderA2ui', 'tools',
+    'context', 'forwardedProps', 'injectA2uiTool', 'interruptPayloads', 'interruptReply', 'messageMode', 'protocolVersion', 'renderA2ui', 'toolResults', 'tools',
   ]);
+  assert.doesNotMatch(JSON.stringify(envelope), /authorization|token|headers?"/i);
 });

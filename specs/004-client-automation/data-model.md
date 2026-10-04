@@ -10,7 +10,7 @@ Three optional fields join the seven in `contracts.ts`. The other seven are unch
 | Field | Type | Default | Rule |
 | --- | --- | --- | --- |
 | `interruptReply` | `"resolve"` or `"cancel"` | absent (by hand) | Any other value is an error that names the field. The key is left out of the parsed value when absent. |
-| `interruptPayloads` | object, interrupt reason to JSON value | absent (the starting answer) | Every key is a nonempty string, the `reason` of an interrupt. Every value is any JSON value, including `null`. Order is kept. An empty object parses to absent. Used only when `interruptReply` is `"resolve"`, and kept when it is not. |
+| `interruptPayloads` | object, interrupt reason to JSON value | absent (the starting answer) | Every key is a nonempty string, the `reason` of an interrupt. Every value is any JSON value except `null`, which the protocol's run input schema refuses as a resume payload. Order is kept. An empty object parses to absent. Used only when `interruptReply` is `"resolve"`, and kept when it is not. |
 | `toolResults` | object, tool name to text | absent (by hand) | Every key is the `name` of a tool in the same profile. Every value is a nonempty string. Order is kept. An empty object parses to absent. |
 
 Notes:

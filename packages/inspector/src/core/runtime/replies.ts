@@ -6,10 +6,12 @@
 // (the upstream resume entries, tool messages) and checks the one thing a surface action must be.
 //
 // Resolve and Cancel are protocol answers; they are not the Stop control, which ends a connection.
-// Nothing here sends anything or invents an event. An answer exists only when the user gave it.
+// Nothing here sends anything or invents an event. An answer exists only when the user gave it, or when
+// the profile the user wrote says to give it (`automate`): that goes through the same states a manual
+// answer does, so the continuation it builds is the one a manual answer builds.
 import type { Message, ResumeEntry, ToolMessage, Interrupt } from '@ag-ui/core';
 import { buildResumeArray } from '@ag-ui/client';
-import type { A2uiAction, InterruptAnswer, JsonValue, ObservedOutcome, RunRecordId, ToolResultDraft } from '../../contracts.ts';
+import type { A2uiAction, AutomaticReplies, ClientProfileSettings, InterruptAnswer, JsonValue, ObservedOutcome, RunRecordId, ToolResultDraft } from '../../contracts.ts';
 import { fail, isJsonObject, isRecord, ok, type Result } from '../config/validation.ts';
 import { seedFromSchema } from './schema.ts';
 
@@ -104,6 +106,54 @@ export const draftToolResult = (replies: PendingReplies, toolCallId: string, tex
 
 export const submitToolResult = (replies: PendingReplies, toolCallId: string): Result<PendingReplies> =>
   changeTool(replies, toolCallId, (draft) => ({ ...draft, status: 'answered' }));
+
+// ---------------------------------------------------------------------------------------------
+// Automatic answers. The profile's wishes, applied to what a run left waiting.
+// ---------------------------------------------------------------------------------------------
+
+/** Automatic continuations in a row after which the profile stops answering and the developer decides. */
+export const AUTOMATIC_REPLY_LIMIT = 10;
+
+export type Automation = Pick<ClientProfileSettings, 'interruptReply' | 'interruptPayloads' | 'toolResults'>;
+
+/**
+ * What the profile answers for these replies; the same value when it answers nothing. Resolve answers with the
+ * payload mapped to the interrupt's reason, as written, or keeps the starting answer drawn from the schema;
+ * Cancel carries none. A tool call gets the text mapped to its tool's name. Only replies that still wait are
+ * touched, and each answer is marked automatic. The reason and the tool name come from the agent, so both
+ * lookups are by own key: a name like `constructor` finds nothing.
+ */
+export function automate(replies: PendingReplies, automation: Automation): PendingReplies {
+  const { interruptReply, interruptPayloads, toolResults: scripts } = automation;
+  let changed = false;
+  const interrupts =
+    interruptReply === undefined
+      ? replies.interrupts
+      : replies.interrupts.map((answer): InterruptAnswer => {
+          if (answer.status !== 'unanswered') return answer;
+          changed = true;
+          if (interruptReply === 'cancel') return { ...answer, status: 'cancelled', automatic: true };
+          const reason = replies.source.find((interrupt) => interrupt.id === answer.interruptId)?.reason;
+          const mapped = reason !== undefined && interruptPayloads !== undefined && Object.hasOwn(interruptPayloads, reason);
+          return { ...answer, draft: mapped ? structuredClone(interruptPayloads[reason] as JsonValue) : answer.draft, status: 'resolved', automatic: true };
+        });
+  const toolResults =
+    scripts === undefined
+      ? replies.toolResults
+      : replies.toolResults.map((draft): ToolResultDraft => {
+          if (draft.status !== 'pending' || draft.toolName === '' || !Object.hasOwn(scripts, draft.toolName)) return draft;
+          changed = true;
+          return { ...draft, resultDraft: scripts[draft.toolName] as string, status: 'answered', automatic: true };
+        });
+  return changed ? { ...replies, interrupts, toolResults } : replies;
+}
+
+/** The ids of the replies the inspector answered, or undefined when it answered none. */
+export function automaticReplies(replies: PendingReplies): AutomaticReplies | undefined {
+  const interruptIds = replies.interrupts.filter((answer) => answer.automatic).map((answer) => answer.interruptId);
+  const toolCallIds = replies.toolResults.filter((draft) => draft.automatic).map((draft) => draft.toolCallId);
+  return interruptIds.length + toolCallIds.length > 0 ? { interruptIds, toolCallIds } : undefined;
+}
 
 // ---------------------------------------------------------------------------------------------
 // The barrier

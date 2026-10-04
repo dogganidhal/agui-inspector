@@ -38,6 +38,7 @@ Rules, checked by `parseProfileSettings` for import, load and the settings panel
 | `interruptPayloads` is not an object (a list, text, `null`) | Error: `profile.interruptPayloads must be an object from interrupt reason to JSON`. |
 | An `interruptPayloads` key that is empty | Error: `profile.interruptPayloads: an interrupt reason cannot be empty`. |
 | An `interruptPayloads` value that is not JSON (possible from code, not from a file) | Error: `profile.interruptPayloads.<reason> must be JSON`. |
+| An `interruptPayloads` value that is `null` | Error: `profile.interruptPayloads.<reason> cannot be null: the protocol's run input does not accept a null answer`. |
 | `interruptPayloads` is `{}` | Accepted and read as absent. |
 | `interruptPayloads` set while `interruptReply` is absent or `"cancel"` | Accepted and kept. It is not used. |
 | `toolResults` is not an object (a list, text, `null`) | Error: `profile.toolResults must be an object from tool name to text`. |

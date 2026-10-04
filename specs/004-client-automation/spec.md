@@ -25,9 +25,10 @@ roadmap, the constitution and the code, each one as the recommended option.
   no schema. The maintainer answered the open question on 2026-10-04: an automatic Resolve that can only send the
   starting answer, such as `approved: false`, is not useful, so the optional payload setting is part of 0.2.0.
 - Q: How is a scripted payload matched and checked? → A: By the interrupt's `reason`, which is a required open string
-  in the protocol, mirroring how a scripted tool result is matched by tool name. The payload is any JSON value and is
-  sent exactly as written. It is not checked against the response schema. The manual editor's schema check only warns
-  and never blocks, and the same holds here, with nothing to warn because nobody types the answer.
+  in the protocol, mirroring how a scripted tool result is matched by tool name. The payload is any JSON value except
+  `null` (the protocol's run input schema refuses a `null` resume payload) and is sent exactly as written. It is not
+  checked against the response schema. The manual editor's schema check only warns and never blocks, and the same holds
+  here, with nothing to warn because nobody types the answer.
 - Q: Is the automatic reply limit a profile setting? → A: No. It is fixed at 10 automatic continuations in a row. A
   configurable limit adds a field, a control and a validation rule for a safety net that a developer can pass by
   answering once by hand.
@@ -196,8 +197,9 @@ send its quick message. Count the runs.
   reply mode only. A run ends with interrupts or with pending tool calls, not both.
 - A payload for a reason that no interrupt of the run has: it is not used. A payload while the interrupt reply is
   cancel or by hand: it is kept and not used, so switching the mode loses nothing. Cancel never sends a payload.
-- A payload that is `null`, an empty object or a list: it is sent as that JSON value, as typing it in the editor
-  would send it.
+- A payload that is an empty object, a list, text, a number or `false`: it is sent as that JSON value, as typing it in
+  the editor would send it. A payload that is `null` is refused when the profile loads, because the protocol's run input
+  schema does not accept a `null` resume payload, so it could never be sent. A `null` inside an object is fine.
 - Two interrupts with the same reason: both get that reason's payload.
 - A pending tool call whose name the client never saw start has no name, so no script matches it and it waits by hand.
 - A pending tool call whose arguments are not valid JSON still gets its scripted result. The script does not depend on
@@ -227,7 +229,7 @@ send its quick message. Count the runs.
   cancel. A profile that does not set it means by hand.
 - **FR-002**: The client profile MUST have an optional scripted result for each of its client tools, identified by the
   tool's name. A scripted result is nonempty text. A tool without one is answered by hand. It MUST also have an optional
-  scripted payload for each interrupt reason, identified by the reason text. A payload is any JSON value.
+  scripted payload for each interrupt reason, identified by the reason text. A payload is any JSON value except `null`.
 - **FR-003**: Replying by hand MUST stay the default. A new profile, a default profile and a profile without the new
   settings MUST behave as in 0.1.0: the inspector answers nothing for the developer.
 - **FR-004**: The profile panel MUST let the developer choose the interrupt reply setting, add, change or remove the
@@ -290,7 +292,7 @@ send its quick message. Count the runs.
   MUST stay at format version 0, and the new fields MUST be optional, so every existing profile file keeps working.
 - **FR-019**: A profile with an unknown reply mode, a scripted result that is not text or is empty, a scripted
   result for a tool the profile does not have, or a payload map that is not an object, has an empty reason or holds a
-  value that is not JSON MUST fail with a visible error that names the field. The profile in use
+  value that is not JSON or is `null` MUST fail with a visible error that names the field. The profile in use
   MUST NOT change. This is the existing rule for a bad profile file.
 - **FR-020**: The new settings MUST hold only the reply mode, the scripted payloads and the scripted texts. The profile still has no field for
   an authentication header or token. Credentials stay in memory only.

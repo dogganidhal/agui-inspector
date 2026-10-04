@@ -16,6 +16,7 @@ import {
   exportProfile,
   importProfile,
   loadProfile,
+  parseProfileSettings,
   saveProfile,
 } from '../../src/core/profiles/index.ts';
 
@@ -306,7 +307,7 @@ test('the default profile declares protocol 1.0, renders A2UI, injects nothing a
   });
 });
 
-test('export writes a version 0 envelope with exactly the seven settings, and import restores them', () => {
+test('export writes a version 0 envelope with the seven settings and no automation key unless one is set, and import restores them', () => {
   const settings = profile({ protocolVersion: '1.1', tools: [tool('get_weather')], context: [{ description: 'locale', value: 'en-US' }], renderA2ui: false, injectA2uiTool: true, messageMode: 'turn', forwardedProps: { tenant: 'acme', n: [1, { a: null }] } });
   const text = exportProfile(settings);
   const envelope = JSON.parse(text) as { version: number; profile: Record<string, unknown> };
@@ -314,6 +315,123 @@ test('export writes a version 0 envelope with exactly the seven settings, and im
   assert.deepEqual(Object.keys(envelope).sort(), ['profile', 'version']);
   assert.deepEqual(Object.keys(envelope.profile).sort(), ['context', 'forwardedProps', 'injectA2uiTool', 'messageMode', 'protocolVersion', 'renderA2ui', 'tools']);
   assert.deepEqual(value(importProfile(text)), settings);
+});
+
+// ---------------------------------------------------------------------------------------------
+// Automatic replies (spec 004: interruptReply, interruptPayloads, toolResults)
+// ---------------------------------------------------------------------------------------------
+
+const wrapped = (patch: object) => JSON.stringify({ version: 0, profile: { ...defaultProfile(), ...patch } });
+const parsed = (patch: object): ClientProfileSettings => value(importProfile(wrapped(patch)));
+const refused = (patch: object): string => failure(importProfile(wrapped(patch)));
+const AUTOMATION_KEYS = ['interruptReply', 'interruptPayloads', 'toolResults'];
+
+test('a 0.1.0 profile, with none of the automation keys, still loads and every reply stays by hand', () => {
+  const settings = parsed({ tools: [tool('pick_color')] });
+  for (const key of AUTOMATION_KEYS) assert.equal(key in settings, false, key);
+  assert.equal(AUTOMATION_KEYS.some((key) => key in defaultProfile()), false, 'the default profile sets none of them');
+  assert.equal(AUTOMATION_KEYS.some((key) => key in JSON.parse(exportProfile(defaultProfile())).profile), false, 'an exported default profile equals a 0.1.0 export');
+});
+
+test('interruptReply is resolve or cancel; anything else names the field', () => {
+  assert.equal(parsed({ interruptReply: 'resolve' }).interruptReply, 'resolve');
+  assert.equal(parsed({ interruptReply: 'cancel' }).interruptReply, 'cancel');
+  for (const bad of ['manual', 'Resolve', '', null, 3, true, {}]) {
+    assert.match(refused({ interruptReply: bad }), /profile\.interruptReply must be "resolve" or "cancel"/, String(bad));
+  }
+});
+
+test('interruptPayloads maps a reason to a JSON value, kept in the order of the file and as written', () => {
+  const payloads = { approval: { approved: true, note: ' spaced\n', n: [1, { a: null }] }, flag: false, empty: {}, list: [], text: 'ok', count: 3, 'ünï': 'x' };
+  const settings = parsed({ interruptReply: 'resolve', interruptPayloads: payloads });
+  assert.deepEqual(settings.interruptPayloads, payloads);
+  assert.deepEqual(Object.keys(settings.interruptPayloads ?? {}), Object.keys(payloads));
+  const copy = value(parseProfileSettings({ ...defaultProfile(), interruptPayloads: payloads }));
+  assert.deepEqual(copy.interruptPayloads, payloads);
+  assert.notEqual(copy.interruptPayloads?.approval, payloads.approval, 'the profile holds its own copy');
+  assert.deepEqual(value(importProfile(exportProfile(settings))), settings, 'export then import is equal');
+});
+
+test('interruptPayloads is checked: an object, nonempty reasons, JSON values; an empty object is read as absent', () => {
+  for (const bad of [[], 'text', null, 3, true]) {
+    assert.match(refused({ interruptPayloads: bad }), /profile\.interruptPayloads must be an object from interrupt reason to JSON/, JSON.stringify(bad));
+  }
+  assert.match(refused({ interruptPayloads: { '': 1 } }), /profile\.interruptPayloads: an interrupt reason cannot be empty/);
+  assert.match(
+    failure(parseProfileSettings({ ...defaultProfile(), interruptPayloads: { approval: undefined } })),
+    /profile\.interruptPayloads\.approval must be JSON/,
+  );
+  assert.match(failure(parseProfileSettings({ ...defaultProfile(), interruptPayloads: { approval: () => 1 } })), /approval must be JSON/);
+  assert.match(refused({ interruptPayloads: { approval: null } }), /profile\.interruptPayloads\.approval cannot be null/, 'the run input schema refuses a null resume payload, so it could never be sent');
+  assert.equal(parsed({ interruptPayloads: { approval: { a: null } } }).interruptPayloads?.approval !== undefined, true, 'a null inside the payload is fine');
+  assert.equal('interruptPayloads' in parsed({ interruptPayloads: {} }), false);
+});
+
+test('a payload map is kept when the reply is cancel or by hand: switching the mode loses nothing', () => {
+  assert.deepEqual(parsed({ interruptReply: 'cancel', interruptPayloads: { approval: 1 } }).interruptPayloads, { approval: 1 });
+  assert.deepEqual(parsed({ interruptPayloads: { approval: 1 } }).interruptPayloads, { approval: 1 });
+});
+
+test('a reason named __proto__ stays an own key and changes no prototype, through parse, export and import', () => {
+  const text = '{"version":0,"profile":{"protocolVersion":"1.0","tools":[],"context":[],"renderA2ui":true,"injectA2uiTool":false,"forwardedProps":{},"interruptPayloads":{"__proto__":{"polluted":true},"constructor":1}}}';
+  const settings = value(importProfile(text));
+  const payloads = settings.interruptPayloads as Record<string, unknown>;
+  assert.equal(Object.hasOwn(payloads, '__proto__'), true);
+  assert.deepEqual(Object.getOwnPropertyDescriptor(payloads, '__proto__')?.value, { polluted: true });
+  assert.equal(Object.getPrototypeOf(payloads), Object.prototype);
+  assert.equal(({} as Record<string, unknown>).polluted, undefined);
+  assert.deepEqual(Object.keys(payloads), ['__proto__', 'constructor']);
+  assert.equal(Object.hasOwn(value(importProfile(exportProfile(settings))).interruptPayloads as object, '__proto__'), true);
+});
+
+test('toolResults maps a profile tool name to nonempty text, kept byte for byte', () => {
+  const results = { pick_color: ' teal\n', pick_size: '{"size":2}', unicode: 'café ☕' };
+  const settings = parsed({ tools: [tool('pick_color'), tool('pick_size'), tool('unicode')], toolResults: results });
+  assert.deepEqual(settings.toolResults, results);
+  assert.deepEqual(value(importProfile(exportProfile(settings))), settings);
+});
+
+test('toolResults is checked: an object, keys that name profile tools, nonempty text values; an empty object is read as absent', () => {
+  const tools = [tool('pick_color')];
+  for (const bad of [[], 'text', null, 3]) {
+    assert.match(refused({ tools, toolResults: bad }), /profile\.toolResults must be an object from tool name to text/, JSON.stringify(bad));
+  }
+  assert.match(refused({ tools, toolResults: { pick_colour: 'x' } }), /profile\.toolResults: no tool named "pick_colour"/);
+  assert.match(refused({ tools, toolResults: { constructor: 'x' } }), /no tool named "constructor"/);
+  for (const bad of ['', 1, null, {}, ['a'], true]) {
+    assert.match(refused({ tools, toolResults: { pick_color: bad } }), /profile\.toolResults\.pick_color must be nonempty text/, JSON.stringify(bad));
+  }
+  assert.match(refused({ toolResults: { pick_color: 'x' } }), /no tool named "pick_color"/, 'a script needs its tool in the same profile');
+  assert.equal('toolResults' in parsed({ tools, toolResults: {} }), false);
+});
+
+test('export writes each automation key only when it is set, and save then load keep all three', () => {
+  const set = profile({ tools: [tool('pick_color')], interruptReply: 'resolve', interruptPayloads: { approval: { approved: true } }, toolResults: { pick_color: 'teal' } });
+  const envelope = JSON.parse(exportProfile(set)) as { version: number; profile: Record<string, unknown> };
+  assert.equal(envelope.version, 0);
+  assert.deepEqual(envelope.profile.interruptReply, 'resolve');
+  assert.deepEqual(envelope.profile.interruptPayloads, { approval: { approved: true } });
+  assert.deepEqual(envelope.profile.toolResults, { pick_color: 'teal' });
+  const only = JSON.parse(exportProfile(profile({ interruptReply: 'cancel' }))) as { profile: Record<string, unknown> };
+  assert.deepEqual(Object.keys(only.profile).filter((key) => AUTOMATION_KEYS.includes(key)), ['interruptReply']);
+
+  const store = new Map<string, string>();
+  const storage = { getItem: (key: string) => store.get(key) ?? null, setItem: (key: string, text: string) => void store.set(key, text) };
+  value(saveProfile(storage, set));
+  assert.deepEqual(value(loadProfile(storage)), set);
+});
+
+test('a bad automation key in a saved profile is a visible load error and the rest is not loaded', () => {
+  const saved = wrapped({ interruptReply: 'manual' });
+  assert.match(failure(loadProfile({ getItem: () => saved, setItem: () => undefined })), /The saved profile was not loaded\..*interruptReply/);
+});
+
+test('the automation keys are not run input: tools, context and properties are the same with or without them', () => {
+  const plain = value(composeRunInput(baseParams({ profile: profile({ tools: [tool('pick_color')] }) })));
+  const automatic = value(
+    composeRunInput(baseParams({ profile: profile({ tools: [tool('pick_color')], interruptReply: 'resolve', interruptPayloads: { approval: 1 }, toolResults: { pick_color: 'teal' } }) })),
+  );
+  assert.deepEqual(automatic, plain);
 });
 
 test('export never carries credentials, even when handed an object that holds some', () => {

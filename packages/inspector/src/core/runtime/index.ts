@@ -1,11 +1,16 @@
 // The runtime (FR-003 to FR-005, FR-007, FR-009, FR-011, FR-014, FR-023 to FR-025, FR-028, FR-031,
-// FR-036). Framework-free: no React, no DOM beyond fetch and AbortController.
+// FR-036; spec 004 for automatic replies). Framework-free: no React, no DOM beyond fetch and AbortController.
 //
 // It owns what the views only display: the selected target, the volatile token, the current thread and
 // the replies a finished run is waiting for. It turns a message, a continuation or a surface action into
 // one ordinary conversation run:
 //
 //   resolve the preset -> compose the run input -> send the preparations -> send the run
+//
+// When a run ends owing replies, the profile may answer them (`automate`) and the continuation is sent at once,
+// by the same builder and the same dispatch a developer's last answer uses, so its input is the manual one. A
+// chain of such continuations stops after AUTOMATIC_REPLY_LIMIT in a row, when the developer presses Stop, and
+// whenever the profile does not cover what is owed.
 //
 // A failure at any step before the run is sent is shown and nothing after it happens. The run goes out
 // through the protocol client (HttpAgent) whose fetch is the recorder, which in turn sends through the
@@ -21,6 +26,7 @@ import { HttpAgent, type AgentSubscriber } from '@ag-ui/client';
 import type {
   A2uiAction,
   AgentConfig,
+  AutomaticReplies,
   ClientProfileSettings,
   FindingKind,
   InterruptAnswer,
@@ -36,7 +42,7 @@ import type {
   VolatileAuth,
   VolatileConnectionState,
 } from '../../contracts.ts';
-import { describeError, fail, isJsonValue, type Result } from '../config/validation.ts';
+import { describeError, fail, isJsonValue, ok, type Result } from '../config/validation.ts';
 import { createFrameSink } from '../frames/index.ts';
 import { preparePreset } from '../presets/index.ts';
 import { composeRunInput } from '../profiles/index.ts';
@@ -44,8 +50,11 @@ import { createRecorder, type CaptureRecorder, type RecorderClock } from '../rec
 import { canonicalizeLineEndings } from './line-endings.ts';
 import { runPreparations } from './prepare.ts';
 import {
+  AUTOMATIC_REPLY_LIMIT,
   NO_REPLIES,
   answerInterrupt as answerPending,
+  automate,
+  automaticReplies,
   checkA2uiAction,
   draftInterrupt as draftPending,
   draftToolResult as draftTool,
@@ -98,7 +107,10 @@ export interface RuntimeState {
   readonly error?: string;
   readonly interrupts: readonly InterruptAnswer[];
   readonly toolResults: readonly ToolResultDraft[];
-  /** Why no new message can start a run right now, when something is waiting for an answer. */
+  /**
+   * Why no new message can start a run right now, when something is waiting for an answer. It also says when
+   * automatic replies paused at the limit.
+   */
   readonly notice?: string;
 }
 
@@ -115,13 +127,13 @@ export interface Runtime {
   /** Use an endpoint typed by the user, without a preset. */
   setTarget(url: string): boolean;
   setAuth(auth: VolatileAuth | undefined): void;
-  /** An ordinary message, quick messages included. Resolves when the run has ended. */
+  /** An ordinary message, quick messages included. Resolves when the run, and every automatic continuation after it, has ended. */
   send(text: string): Promise<void>;
   /** Ends the connection of every request that is still being sent or recorded. Not a protocol answer. */
   stop(): void;
   newThread(): void;
   draftInterrupt(interruptId: string, draft: JsonValue): void;
-  /** Resolve or cancel. The last answer starts the continuation. */
+  /** Resolve or cancel. The last answer starts the continuation, and resolves when that run and any automatic ones after it have ended. */
   answerInterrupt(interruptId: string, status: 'resolved' | 'cancelled'): Promise<void>;
   draftToolResult(toolCallId: string, result: string): void;
   /** The last result starts the continuation. */
@@ -148,12 +160,16 @@ interface Turn {
   readonly resume?: readonly ResumeEntry[];
   readonly parentRunId?: string;
   readonly a2uiAction?: A2uiAction;
+  /** The replies this continuation carries that the inspector answered from the profile. */
+  readonly automatic?: AutomaticReplies;
 }
 
 const ABSOLUTE = /^[a-z][a-z0-9+.-]*:/i;
 const MAX_MESSAGE = 300;
 
 const clip = (text: string) => (text.length > MAX_MESSAGE ? `${text.slice(0, MAX_MESSAGE)}…` : text);
+
+const PAUSED_NOTICE = `Automatic replies paused after ${AUTOMATIC_REPLY_LIMIT} in a row. Answer by hand to continue the run.`;
 
 /** The client's own words for a rejected stream, kept short and free of the received values. */
 function clientFailure(error: unknown): { kind: FindingKind; message: string } | undefined {
@@ -188,6 +204,9 @@ export function createRuntime(options: RuntimeOptions): Runtime {
   let auth: VolatileAuth | undefined;
   let thread: Thread = { id: randomUUID(), messages: [], state: {} };
   let replies: PendingReplies = NO_REPLIES;
+  // Automatic continuations sent in a row, and whether the limit stopped the profile from answering.
+  let streak = 0;
+  let paused = false;
   let running = false;
   let error: string | undefined;
   let activeController: AbortController | undefined;
@@ -201,7 +220,7 @@ export function createRuntime(options: RuntimeOptions): Runtime {
   const listeners = new Set<() => void>();
   let state: RuntimeState;
   const snapshot = (): RuntimeState => {
-    const notice = waitingNotice(replies);
+    const notice = [waitingNotice(replies), paused ? PAUSED_NOTICE : undefined].filter(Boolean).join(' ') || undefined;
     return {
       connection: {
         ...(agent !== undefined && { agentId: agent.id }),
@@ -267,6 +286,8 @@ export function createRuntime(options: RuntimeOptions): Runtime {
       stop();
       thread = { id: randomUUID(), messages: [], state: {} };
       replies = NO_REPLIES;
+      streak = 0;
+      paused = false;
     }
     error = targetProblem(url);
     emit();
@@ -305,12 +326,31 @@ export function createRuntime(options: RuntimeOptions): Runtime {
   // One ordinary conversation run
   // -------------------------------------------------------------------------------------------
 
-  async function dispatch(turn: Turn): Promise<void> {
-    if (running) return problem('A run is already in progress. Stop it or wait for it to end');
-    if (isBlocked(replies)) return problem(waitingNotice(replies) ?? 'Answer what is waiting first');
-    const target = sendable();
-    if (!target.ok) return problem(target.error);
+  const refuse = (message: string): false => {
+    problem(message);
+    return false;
+  };
 
+  /**
+   * Sends the turn the developer started, then every automatic continuation the profile asks for. Each pass is one
+   * run; the loop ends when a run was not sent or was stopped, or when nothing owed is covered by the profile.
+   */
+  async function dispatch(turn: Turn): Promise<void> {
+    let next: Turn | undefined = turn;
+    for (let automatic = false; next !== undefined; automatic = true) {
+      const sent = await dispatchRun(next, automatic);
+      next = sent ? automaticTurn() : undefined;
+    }
+  }
+
+  /** True when the run was sent and was not stopped, so what it left waiting may be answered automatically. */
+  async function dispatchRun(turn: Turn, automatic: boolean): Promise<boolean> {
+    if (running) return refuse('A run is already in progress. Stop it or wait for it to end');
+    if (isBlocked(replies)) return refuse(waitingNotice(replies) ?? 'Answer what is waiting first');
+    const target = sendable();
+    if (!target.ok) return refuse(target.error);
+
+    let sent = false;
     running = true;
     error = undefined;
     const controller = new AbortController();
@@ -326,7 +366,7 @@ export function createRuntime(options: RuntimeOptions): Runtime {
       const turnMessages: Message[] = [...user, ...(turn.toolMessages ?? [])];
 
       const prepared = preparePreset(agent?.preset, settings.variables, ids, randomUUID);
-      if (!prepared.ok) return problem(prepared.error);
+      if (!prepared.ok) return refuse(prepared.error);
       const input = composeRunInput({
         ids,
         prepared: prepared.value,
@@ -338,7 +378,7 @@ export function createRuntime(options: RuntimeOptions): Runtime {
         ...(turn.resume !== undefined && { resume: turn.resume }),
         ...(turn.a2uiAction !== undefined && { a2uiAction: turn.a2uiAction }),
       });
-      if (!input.ok) return problem(input.error);
+      if (!input.ok) return refuse(input.error);
 
       const preparations = await runPreparations(prepared.value.preparations, {
         recorder: recorderFor(controller),
@@ -347,17 +387,22 @@ export function createRuntime(options: RuntimeOptions): Runtime {
         signal: controller.signal,
         ...(auth !== undefined && { auth }),
       });
-      if (!preparations.ok) return problem(preparations.error);
+      if (!preparations.ok) return refuse(preparations.error);
 
-      // Past this point the run is sent; whatever it was waiting for has been carried.
+      // Past this point the run is sent; whatever it was waiting for has been carried. A run the developer
+      // started starts the count of automatic continuations again, and one the inspector started adds to it.
       replies = NO_REPLIES;
-      await execute(current, target.value, input.value, turnMessages, controller, auth);
+      streak = automatic ? streak + 1 : 0;
+      paused = false;
+      await execute(current, target.value, input.value, turnMessages, controller, auth, turn.automatic);
+      sent = !controller.signal.aborted;
     } finally {
       running = false;
       release(controller);
       if (activeController === controller) activeController = undefined;
       emit();
     }
+    return sent;
   }
 
   async function execute(
@@ -367,6 +412,7 @@ export function createRuntime(options: RuntimeOptions): Runtime {
     turnMessages: readonly Message[],
     controller: AbortController,
     credentials: VolatileAuth | undefined,
+    automatic: AutomaticReplies | undefined,
   ): Promise<void> {
     const recordId: RunRecordId = `run-${(runs += 1)}`;
     let outcome: ObservedOutcome = { kind: 'unknown' };
@@ -386,6 +432,7 @@ export function createRuntime(options: RuntimeOptions): Runtime {
         exchangeId: exchange.id,
         startedAt: exchange.startedAt,
         outcome,
+        ...(automatic !== undefined && { automaticReplies: automatic }),
         ...patch,
       };
       try {
@@ -490,17 +537,49 @@ export function createRuntime(options: RuntimeOptions): Runtime {
     return true;
   };
 
-  async function continueRun(): Promise<void> {
-    if (!owesReplies(replies)) return problem('There is nothing waiting to continue');
+  /** The turn that carries every answer, built the same way for a developer's last answer and for an automatic reply. */
+  function continuation(): Result<Turn> {
+    if (!owesReplies(replies)) return fail('There is nothing waiting to continue');
     const resume = resumeEntries(replies);
-    if (!resume.ok) return problem(resume.error);
+    if (!resume.ok) return resume;
     const tools = toolMessages(replies, randomUUID);
-    if (!tools.ok) return problem(tools.error);
-    await dispatch({
+    if (!tools.ok) return tools;
+    const automatic = automaticReplies(replies);
+    return ok({
       toolMessages: tools.value,
       ...(resume.value !== undefined && { resume: resume.value }),
       ...(thread.lastRunId !== undefined && { parentRunId: thread.lastRunId }),
+      ...(automatic !== undefined && { automatic }),
     });
+  }
+
+  async function continueRun(): Promise<void> {
+    const turn = continuation();
+    if (!turn.ok) return problem(turn.error);
+    await dispatch(turn.value);
+  }
+
+  /**
+   * After a run that was sent and not stopped: answers what the profile covers, and returns the continuation when
+   * nothing is left to answer by hand. At the limit nothing is answered and the notice says why. Returns nothing
+   * when the profile covers none of what is owed, or only some of it: the developer finishes that.
+   */
+  function automaticTurn(): Turn | undefined {
+    if (!owesReplies(replies)) return undefined;
+    const answered = automate(replies, options.settings().profile);
+    if (answered === replies) return undefined;
+    if (streak >= AUTOMATIC_REPLY_LIMIT) {
+      paused = true;
+      emit();
+      return undefined;
+    }
+    replies = answered;
+    emit();
+    if (isBlocked(replies)) return undefined;
+    const turn = continuation();
+    if (turn.ok) return turn.value;
+    problem(turn.error);
+    return undefined;
   }
 
   return {
@@ -525,6 +604,8 @@ export function createRuntime(options: RuntimeOptions): Runtime {
       stop();
       thread = { id: randomUUID(), messages: [], state: {} };
       replies = NO_REPLIES;
+      streak = 0;
+      paused = false;
       error = undefined;
       emit();
     },

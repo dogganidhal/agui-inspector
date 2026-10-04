@@ -88,7 +88,10 @@ never saw it start) matches nothing, because validation rejects empty keys.
 Decision, in `parseProfileSettings`, so the settings panel, import, load and the saved profile all share one check:
 
 - `interruptReply` is absent, `"resolve"` or `"cancel"`. Anything else fails with `profile.interruptReply must be "resolve" or "cancel"`.
-- `interruptPayloads` is absent or a JSON object. Each key must be nonempty. Each value must be JSON (`isJsonValue`).
+- `interruptPayloads` is absent or a JSON object. Each key must be nonempty. Each value must be JSON (`isJsonValue`) and
+  not `null`: `RunAgentInputSchema` in `@ag-ui/core` rejects a `null` resume payload (checked against 1.0.1), so a `null`
+  payload could never be sent and would fail on every run. A manual `null` typed into the editor fails the same way, with
+  `Run input is invalid`.
   Errors name the field, as `profile.interruptPayloads: an interrupt reason cannot be empty`. An empty object is accepted
   and dropped.
 - `toolResults` is absent or a JSON object. Each key must be the name of a tool in the same profile. Each value must be a

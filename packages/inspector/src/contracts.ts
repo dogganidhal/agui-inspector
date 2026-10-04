@@ -128,7 +128,11 @@ export interface ConfigFile {
   readonly brand?: BrandConfig;
 }
 
-/** The seven persisted and exported client-profile settings. */
+/**
+ * The persisted and exported client-profile settings: seven that shape the run input, and three optional
+ * ones that say how the inspector answers a run's interrupts and client tool calls. The last three never
+ * reach the run input.
+ */
 export interface ClientProfileSettings {
   readonly protocolVersion: string;
   readonly tools: readonly Tool[];
@@ -139,7 +143,18 @@ export interface ClientProfileSettings {
   readonly messageMode?: MessageMode;
   /** Overrides same-named preset properties. */
   readonly forwardedProps: JsonObject;
+  /** Answers every interrupt of a run itself. Absent: by hand. */
+  readonly interruptReply?: InterruptReply;
+  /**
+   * With `interruptReply` of `resolve`: the payload sent for interrupts of a reason, as written. Absent, or no
+   * entry for a reason: the starting answer taken from the interrupt's response schema.
+   */
+  readonly interruptPayloads?: Readonly<Record<string, JsonValue>>;
+  /** The text a client tool's pending calls are answered with, by tool name. A tool without one is answered by hand. */
+  readonly toolResults?: Readonly<Record<string, string>>;
 }
+
+export type InterruptReply = 'resolve' | 'cancel';
 
 export interface ProfileEnvelope {
   readonly version: typeof FORMAT_VERSION;
@@ -326,6 +341,8 @@ export interface Run {
   readonly startedAt: number;
   readonly endedAt?: number;
   readonly outcome: ObservedOutcome;
+  /** Set when the inspector answered some of the replies this run's input carries. */
+  readonly automaticReplies?: AutomaticReplies;
 }
 
 export type DerivationKind = 'client-state' | 'chunk-expansion' | 'duration' | 'projection';
@@ -371,6 +388,8 @@ export interface InterruptAnswer {
   readonly responseSchema?: JsonObject;
   readonly draft: JsonValue;
   readonly status: InterruptAnswerStatus;
+  /** The inspector gave this answer from the profile. Absent when the developer did. */
+  readonly automatic?: true;
 }
 
 /** The upstream resume entry; nothing is invented for Resolve or Cancel. */
@@ -386,6 +405,14 @@ export interface ToolResultDraft {
   readonly argumentsError?: string;
   readonly resultDraft: string;
   readonly status: 'pending' | 'answered';
+  /** The inspector gave this result from the profile. Absent when the developer did. */
+  readonly automatic?: true;
+}
+
+/** The replies of a run's input that the inspector answered from the profile. Never part of the wire. */
+export interface AutomaticReplies {
+  readonly interruptIds: readonly string[];
+  readonly toolCallIds: readonly string[];
 }
 
 /** Carried unchanged in forwardedProps.a2uiAction.userAction. */

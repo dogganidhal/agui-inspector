@@ -8,8 +8,11 @@ import type { Interrupt } from '@ag-ui/core';
 import { RunAgentInputSchema } from '@ag-ui/core/schemas';
 import type { A2uiAction, JsonObject, ObservedOutcome } from '../../src/contracts.ts';
 import {
+  AUTOMATIC_REPLY_LIMIT,
   NO_REPLIES,
   answerInterrupt,
+  automate,
+  automaticReplies,
   checkA2uiAction,
   draftInterrupt,
   draftToolResult,
@@ -428,4 +431,153 @@ test('an action cannot start a run while interrupts are owed', async () => {
   await runtime.sendA2uiAction(action);
   assert.equal(net.on('/run').length, 1);
   assert.match(runtime.getState().error ?? '', /interrupts waiting/);
+});
+
+// ---------------------------------------------------------------------------------------------
+// Automatic replies (spec 004): what the profile answers, and what it leaves for the developer
+// ---------------------------------------------------------------------------------------------
+
+test('the limit of automatic continuations in a row is 10', () => {
+  assert.equal(AUTOMATIC_REPLY_LIMIT, 10);
+});
+
+test('resolve answers every interrupt as pressing Resolve unedited would: same status, same starting draft, marked automatic', () => {
+  const replies = owed();
+  const answered = automate(replies, { interruptReply: 'resolve' });
+  assert.deepEqual(
+    answered.interrupts.map((answer) => [answer.interruptId, answer.status, answer.draft, answer.automatic]),
+    [
+      ['i-1', 'resolved', { approved: false }, true],
+      ['i-2', 'resolved', {}, true],
+      ['i-3', 'resolved', {}, true],
+    ],
+  );
+  assert.equal(isBlocked(answered), false);
+  // The same entries a developer's own Resolve clicks produce.
+  let manual = owed();
+  for (const id of ['i-1', 'i-2', 'i-3']) manual = unwrap(answerInterrupt(manual, id, 'resolved'));
+  assert.deepEqual(unwrap(resumeEntries(answered)), unwrap(resumeEntries(manual)));
+  assert.deepEqual(replies.interrupts.map((answer) => answer.status), ['unanswered', 'unanswered', 'unanswered'], 'the input value is not changed');
+});
+
+test('cancel answers every interrupt with a cancellation and no payload', () => {
+  const answered = automate(owed(), { interruptReply: 'cancel', interruptPayloads: { approval: { approved: true } } });
+  assert.deepEqual(unwrap(resumeEntries(answered)), [
+    { interruptId: 'i-1', status: 'cancelled' },
+    { interruptId: 'i-2', status: 'cancelled' },
+    { interruptId: 'i-3', status: 'cancelled' },
+  ]);
+  assert.equal(answered.interrupts.every((answer) => answer.automatic === true), true);
+});
+
+test('the payload for an interrupt reason replaces the starting answer and is sent as written; other reasons keep theirs', () => {
+  const payload = { approved: true, note: ' as written\n', n: [1, { a: null }] };
+  const answered = automate(owed(), { interruptReply: 'resolve', interruptPayloads: { approval: payload } });
+  assert.deepEqual(unwrap(resumeEntries(answered)), [
+    { interruptId: 'i-1', status: 'resolved', payload },
+    { interruptId: 'i-2', status: 'resolved', payload: {} },
+    { interruptId: 'i-3', status: 'resolved', payload },
+  ]);
+  assert.notEqual(answered.interrupts[0]?.draft, payload, 'the reply holds its own copy');
+  assert.notEqual(answered.interrupts[0]?.draft, answered.interrupts[2]?.draft, 'two interrupts of one reason do not share one object');
+  // The entries equal what a developer who typed the same JSON into the editor sends.
+  let manual = owed();
+  manual = unwrap(draftInterrupt(manual, 'i-1', payload));
+  manual = unwrap(draftInterrupt(manual, 'i-3', payload));
+  for (const id of ['i-1', 'i-2', 'i-3']) manual = unwrap(answerInterrupt(manual, id, 'resolved'));
+  assert.deepEqual(unwrap(resumeEntries(answered)), unwrap(resumeEntries(manual)));
+});
+
+test('a payload is never checked against the interrupt response schema, and a list, text, a number and false are payloads too', () => {
+  assert.equal(checkAgainstSchema({ approved: 'yes' }, interrupts[0]?.responseSchema) !== undefined, true, 'the payload misses the schema');
+  const answered = automate(owed(), { interruptReply: 'resolve', interruptPayloads: { approval: { approved: 'yes' }, input: 'free text' } });
+  assert.deepEqual((unwrap(resumeEntries(answered)) ?? []).map((entry) => entry.payload), [{ approved: 'yes' }, 'free text', { approved: 'yes' }]);
+  for (const odd of [[], 'text', 0, false]) {
+    const next = automate(owed(), { interruptReply: 'resolve', interruptPayloads: { input: odd } });
+    assert.deepEqual(next.interrupts[1]?.draft, odd);
+  }
+});
+
+test('payloads alone answer nothing: they need the interrupt reply to be resolve', () => {
+  const replies = owed();
+  assert.equal(automate(replies, { interruptPayloads: { approval: 1 } }), replies);
+  assert.equal(automate(replies, { interruptReply: undefined }), replies);
+});
+
+test('a reason that the agent names like an object property never finds a payload', () => {
+  const odd = [{ id: 'i-a', reason: 'constructor' }, { id: 'i-b', reason: 'toString' }, { id: 'i-c', reason: '__proto__' }, { id: 'i-d', reason: 'hasOwnProperty' }];
+  const answered = automate(owed({ kind: 'interrupt', interrupts: odd }), { interruptReply: 'resolve', interruptPayloads: { approval: 1 } });
+  assert.deepEqual(answered.interrupts.map((answer) => answer.draft), [{}, {}, {}, {}]);
+  const own = JSON.parse('{"__proto__":{"own":true}}') as Record<string, never>;
+  const withOwn = automate(owed({ kind: 'interrupt', interrupts: odd }), { interruptReply: 'resolve', interruptPayloads: own });
+  assert.deepEqual(withOwn.interrupts[2]?.draft, { own: true }, 'a reason that the profile really names still matches');
+});
+
+test('automate answers only what is still waiting and returns the same value when it answers nothing', () => {
+  let replies = owed();
+  replies = unwrap(draftInterrupt(replies, 'i-2', 'typed'));
+  replies = unwrap(answerInterrupt(replies, 'i-2', 'resolved'));
+  const answered = automate(replies, { interruptReply: 'cancel' });
+  assert.deepEqual(answered.interrupts.map((answer) => [answer.status, answer.automatic]), [['cancelled', true], ['resolved', undefined], ['cancelled', true]]);
+  assert.equal(answered.interrupts[1]?.draft, 'typed', 'the developer\'s own answer is untouched');
+  assert.deepEqual(answered.source, replies.source);
+  assert.equal(automate(answered, { interruptReply: 'resolve' }), answered, 'nothing left to answer');
+  assert.equal(automate(NO_REPLIES, { interruptReply: 'resolve', toolResults: { a: 'b' } }), NO_REPLIES);
+});
+
+test('a scripted result answers the pending calls of its tool, byte for byte, and leaves the rest', () => {
+  const replies = toolsOwed();
+  const answered = automate(replies, { toolResults: { pick_color: ' "teal"\n', pick_size: '{"size":2}' } });
+  assert.deepEqual(
+    answered.toolResults.map((draft) => [draft.toolCallId, draft.status, draft.resultDraft, draft.automatic]),
+    [
+      ['c-1', 'answered', ' "teal"\n', true],
+      ['c-2', 'answered', '{"size":2}', true],
+      ['c-3', 'pending', '', undefined],
+    ],
+    'c-3 was never seen to start, so it has no name and no script',
+  );
+  assert.equal(isBlocked(answered), true);
+  let manual = toolsOwed();
+  manual = unwrap(draftToolResult(manual, 'c-1', ' "teal"\n'));
+  manual = unwrap(submitToolResult(manual, 'c-1'));
+  manual = unwrap(draftToolResult(manual, 'c-2', '{"size":2}'));
+  manual = unwrap(submitToolResult(manual, 'c-2'));
+  assert.deepEqual(
+    answered.toolResults.slice(0, 2).map(({ automatic: _mark, ...draft }) => draft),
+    manual.toolResults.slice(0, 2),
+    'the same drafts a developer produces, apart from the mark',
+  );
+});
+
+test('a call whose arguments are not valid JSON still gets its scripted result, and a tool without a script waits', () => {
+  const answered = automate(toolsOwed(), { toolResults: { pick_size: 'two' } });
+  assert.deepEqual(answered.toolResults.map((draft) => [draft.status, draft.automatic]), [['pending', undefined], ['answered', true], ['pending', undefined]]);
+  assert.match(answered.toolResults[1]?.argumentsError ?? '', /not valid JSON/);
+});
+
+test('a tool name that looks like an object property finds no script', () => {
+  const odd = { id: 'a-2', role: 'assistant' as const, toolCalls: ['constructor', 'toString', '__proto__'].map((name, at) => ({ id: `k-${at}`, type: 'function' as const, function: { name, arguments: '{}' } })) };
+  const replies = repliesFor('run-1', { kind: 'success', pendingToolCallIds: ['k-0', 'k-1', 'k-2'] }, [odd]);
+  const answered = automate(replies, { toolResults: { pick_color: 'x' } });
+  assert.equal(answered, replies);
+  assert.equal(answered.toolResults.every((draft) => draft.status === 'pending'), true);
+});
+
+test('interrupts follow their own setting and tool calls theirs', () => {
+  const replies = owed();
+  assert.equal(automate(replies, { toolResults: { pick_color: 'x' } }), replies, 'tool scripts do not answer interrupts');
+  const tools = toolsOwed();
+  assert.equal(automate(tools, { interruptReply: 'resolve', interruptPayloads: { approval: 1 } }), tools, 'an interrupt reply does not answer tool calls');
+});
+
+test('automaticReplies lists the ids the inspector answered, and is undefined when it answered none', () => {
+  assert.equal(automaticReplies(owed()), undefined);
+  assert.equal(automaticReplies(NO_REPLIES), undefined);
+  const mixed = automate(toolsOwed(), { toolResults: { pick_color: 'x' } });
+  assert.deepEqual(automaticReplies(mixed), { interruptIds: [], toolCallIds: ['c-1'] });
+  assert.deepEqual(automaticReplies(automate(owed(), { interruptReply: 'cancel' })), { interruptIds: ['i-1', 'i-2', 'i-3'], toolCallIds: [] });
+  let byHand = owed();
+  byHand = unwrap(answerInterrupt(byHand, 'i-1', 'resolved'));
+  assert.deepEqual(automaticReplies(automate(byHand, { interruptReply: 'resolve' })), { interruptIds: ['i-2', 'i-3'], toolCallIds: [] }, 'a reply the developer gave is not listed');
 });

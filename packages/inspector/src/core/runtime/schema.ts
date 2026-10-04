@@ -20,7 +20,8 @@ function typeOf(schema: Schema): string | undefined {
 /**
  * A starting answer for an interrupt: the schema's `default`, `const` or first `enum` value where it
  * names one, otherwise the empty value of the declared type, with object properties filled in. The
- * result is a draft the user edits, never an answer by itself.
+ * result is a draft the user edits. It becomes an answer when the user presses Resolve, or when the profile
+ * says to resolve and has no payload for the interrupt's reason.
  */
 export function seedFromSchema(schema: JsonObject | undefined, depth = 0): JsonValue {
   const spec = asSchema(schema);
