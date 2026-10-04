@@ -10,7 +10,7 @@
 // here keeps it in React state, storage, the store, a profile or a file.
 import { StrictMode, useCallback, useEffect, useState, useSyncExternalStore, type ReactElement, type ReactNode } from 'react';
 import { createRoot, type Root as ReactRoot } from 'react-dom/client';
-import type { A2uiAction, AppProps, ClientProfileSettings, DeploymentMode, EvidenceTarget, InspectionSession, SessionStore } from '../contracts';
+import type { A2uiAction, AppProps, BrandConfig, ClientProfileSettings, DeploymentMode, EvidenceTarget, InspectionSession, SessionStore } from '../contracts';
 import { loadCapabilities } from '../core/config/index';
 import { exportProfile, importProfile, saveProfile, type StorageLike } from '../core/profiles/index';
 import { publishChunkExpansions, type ActivityEntry } from '../core/projection/index';
@@ -28,6 +28,7 @@ import '../views/connection/connection.css';
 import '../views/conversation/conversation.css';
 import '../views/settings/settings.css';
 import './app.css';
+import { Brand, type LogoField } from './brand';
 import { PaneBoundary, describeError } from './boundary';
 import { startPage, type StartupEnvironment, type Started } from './startup';
 
@@ -54,6 +55,8 @@ export interface AppExtras {
   readonly renderActivity?: (entry: ActivityEntry) => ReactNode;
   /** Configuration problems that did not stop the page, such as rejected theme overrides. */
   readonly warnings?: readonly string[];
+  /** The adopter's name and logos for the top bar; the default mark and name without one. */
+  readonly brand?: BrandConfig;
 }
 
 type Pane = 'conversation' | 'inspection';
@@ -103,8 +106,11 @@ function ThemeSwitch(): ReactElement {
  * The app shell: a fixed top bar above two panes that scroll on their own, conversation left and
  * inspection right. Under 960 px one pane shows and a segmented control switches between them.
  */
-export function App({ settings, connection, conversation, inspection, mode, allowedOrigins = [], allowVisitorTargets = false, capabilities, capturing, notice, onPaneError, recording, renderActivity, warnings = [] }: AppProps & AppExtras): ReactElement {
+export function App({ settings, connection, conversation, inspection, mode, allowedOrigins = [], allowVisitorTargets = false, brand, capabilities, capturing, notice, onPaneError, recording, renderActivity, warnings: configWarnings = [] }: AppProps & AppExtras): ReactElement {
   const [pane, setPane] = useState<Pane>('conversation');
+  // A logo that does not load shows the default mark and a warning, so a missing file is not a silent no-op.
+  const [failedLogos, setFailedLogos] = useState<readonly LogoField[]>([]);
+  const warnings = [...configWarnings, ...failedLogos.map((field) => `brand.${field} could not be loaded; the default mark is shown`)];
   const [tab, setTab] = useState<Tab>('inspection');
   const [reveal, setReveal] = useState<EvidenceTarget>();
   // One navigation action for every run id and frame reference. It selects the inspection pane and tab; the frames
@@ -118,12 +124,7 @@ export function App({ settings, connection, conversation, inspection, mode, allo
   return (
     <div className="agui-app" data-pane={pane} {...(mode !== undefined && { 'data-mode': mode })}>
       <header className="agui-app-bar">
-        <span className="agui-app-brand">
-          <span className="agui-app-mark" aria-hidden="true">
-            <Icon name="mark" size={16} />
-          </span>
-          <h1>agui-inspector</h1>
-        </span>
+        <Brand brand={brand} failed={failedLogos} onFailed={(field) => setFailedLogos((known) => [...known, field])} />
         <div className="agui-app-target" role="group" aria-label="Connection target">
           {/* The same agents, selection and callback as Settings: choosing here is choosing there. */}
           <TargetControls
@@ -320,6 +321,7 @@ function Root({ started, storage }: { started: Started; storage?: StorageLike })
     capturing: state.capturing,
     onPaneError: paneFailed,
     warnings: started.warnings,
+    ...(started.brand !== undefined && { brand: started.brand }),
     renderActivity: (entry) => a2uiActivity(entry, { renderEnabled: profile.renderA2ui, onAction }),
     ...(recording ? { notice: RECORDING_NOTICE } : state.notice !== undefined && { notice: state.notice }),
     settings: {
