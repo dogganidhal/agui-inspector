@@ -77,10 +77,11 @@ packages/inspector/
 ├── package.json                                   # + "markdown-it": "14.3.2"
 ├── src/views/conversation/
 │   ├── markdown.tsx                               # NEW: mode context, control, text component, token walker
-│   ├── markdown-it.d.ts                           # NEW: the parts of markdown-it the walker uses
+│   ├── markdown-it.d.ts                           # NEW: the parts of markdown-it the walker uses (referenced from markdown.tsx)
 │   ├── index.tsx                                  # EDIT, small: two text lines, toolbar and provider, header comment
-│   └── conversation.css                           # EDIT: one block of .agui-md-* rules appended
+│   └── conversation.css                           # EDIT: one block of .agui-md-* rules, after the Reasoning rules
 └── tests/conversation/
+    ├── hostile.ts                                 # NEW: the hostile samples, shared with the browser spec
     ├── markdown.test.tsx                          # NEW: constructs, safety, limit, scope, timing
     └── docs.test.ts                               # EDIT: the new claims
 

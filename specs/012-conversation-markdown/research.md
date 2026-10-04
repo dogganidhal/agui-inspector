@@ -16,6 +16,8 @@ Every unknown from the plan's technical context is settled here. Each entry has 
   | `renderMarkdown` from `@a2ui/markdown-it` (adds DOMPurify) | 180,235 | 64,374 |
 
   The baseline build is 1,227,500 bytes minified and 308,758 gzipped (`npm run build && npm run check:bundle`, 2026-10-04), with 772,500 and 291,242 bytes of headroom. The parser alone costs about 12% of the minified headroom and 18% of the gzip headroom, before the mapping code. The mapping code is small.
+
+  Measured on the finished change (`npm run build && npm run check:bundle`, 2026-10-04): 1,382,491 bytes minified and 364,191 gzipped. The change adds 154,991 and 55,433 bytes. Headroom left: 617,509 and 235,809. The check passes.
 - **Alternatives considered**: see R2 for `@a2ui/markdown-it`. Another parser (`marked`, `micromark`, `remark`) is a new package for a job the installed one does. Writing a parser is not small or safe.
 
 ## R2. Reuse `@a2ui/markdown-it`, or build elements from tokens
@@ -40,7 +42,7 @@ Every unknown from the plan's technical context is settled here. Each entry has 
 ## R4. Which Markdown
 
 - **Decision**: `markdownit({ html: false, linkify: false, typographer: false, breaks: false })`, with markdown-it's own `default` rule set and its default `maxNesting` of 100.
-- **Why**: The default rule set is CommonMark plus tables and strikethrough, which is the list in FR-004. `html: false` makes raw HTML text, which is FR-005. `linkify: false` keeps a bare address as text. `typographer: false` keeps quotes and dashes as sent. `breaks: false` keeps the CommonMark meaning of a single newline. Footnotes, task lists, math and diagrams are plugins or absent, so they show as typed. Checked on 2026-10-04: `- [ ] task` gives a list item with the text `[ ] task`, and `<script>x</script>` gives a paragraph of text.
+- **Why**: The default rule set is CommonMark plus tables and strikethrough, which is the list in FR-004. `html: false` makes raw HTML text, which is FR-005. `linkify: false` keeps a bare address as text. `typographer: false` keeps quotes and dashes as sent. `breaks: false` keeps the CommonMark meaning of a single newline. Task lists, math and diagrams are plugins or absent, so they show as typed. Footnote syntax is absent too, and CommonMark reads `[^1]: text` as a link reference definition, so the spec does not claim it shows as typed. Checked on 2026-10-04: `- [ ] task` gives a list item with the text `[ ] task`, and `<script>x</script>` gives a paragraph of text.
 - **Alternatives considered**: `breaks: true` (chat tools often use it, but it changes meaning and the plain mode is one click away). `linkify: true` (turns text into links the agent did not write).
 
 ## R5. Links and images
@@ -71,14 +73,15 @@ Every unknown from the plan's technical context is settled here. Each entry has 
 
 - **Decision**: `MARKDOWN_LIMIT = 200_000` characters. Above it, or when parsing throws, the entry shows its plain text and a one-line note. The walker runs once per distinct text (`useMemo` on the text), so a live message is parsed once per update and finished messages are not parsed again.
 - **Why**: A hostile or runaway message must not freeze a tool people point at untrusted servers. `markdown-it` runs in linear time on ordinary input and caps nesting at 100, and the cap is cheap insurance. The spec lets the plan lower the number if a measurement says so. The task list measures it (SC-005) and records the figure here.
-- **Measured**: to be filled in by the task T016 and the figure copied here.
+- **Depth cap**: markdown-it stops block nesting at 100 but not run-on emphasis, and `*` repeated 5,000 times on each side of a letter nests about 2,500 elements. `fold` throws past 200 open elements (`MAX_DEPTH`), and the entry shows plain text with the failure note. The limit sits above the 100 block levels markdown-it allows plus ordinary inline nesting.
+- **Measured** (Node 24, one run beside other work, best of a few; the unit test prints them): a dense 199,920 character message formats in about 54 ms. A thousand messages of about a kilobyte each draw to markup in about 0.6 s. The 5,000-frame workload has only two message and reasoning entries, so it adds under a millisecond, and the long conversation is the meaningful figure. The limit stays at 200,000 characters. The unit test bounds are five times the figures in SC-005, because a bound at the measured time failed once on a busy machine.
 
 ## R10. Test approach
 
 - **Decision**:
   - Node unit tests with `renderToStaticMarkup`: every construct, every safety rule on a hostile sample list (at least 15), the length limit and failure notes, role scoping, the default mode, and the timing in SC-005 on the 5,000-frame workload generator.
   - Playwright on the existing conversation fixture page: the toggle, keyboard use, streaming growth, hostile samples with a request listener, a `securitypolicyviolation` listener and a script canary, and a SHA-256 over the recorded frames before, during and after.
-  - Playwright through the whole production app: a live run answered by a new reference-agent producer, `markdownRunResponse`, then export and import of the session. The page's own policy is in force there, so a policy violation or a stray request is real. The conversation fixture page is served with the production policy from `contentSecurityPolicy()`, because its current meta tag sets `script-src` only.
+  - Playwright through the whole production app: a live run answered by a new reference-agent producer, `markdownRunResponse`, then export and import of the session. The page's own policy is in force there, so a policy violation or a stray request is real. The conversation fixture page is served with the production policy from `contentSecurityPolicy()`, because its current meta tag sets `script-src` only. zod probes `new Function('')` once inside a try/catch and the policy reports the blocked probe as a `script-src eval` violation, so the checks leave that one report out, as `tests/e2e/hosted/support.ts` does, and fail on any other.
 - **Why**: Node tests are fast and need no DOM, because the output is React elements. The behaviors that need a browser (policy violations, requests, focus) are exactly the ones Playwright proves.
 - **Alternatives considered**: jsdom (not installed, and `dependencies.mdx` already rejects it for lack of real layout and network).
 

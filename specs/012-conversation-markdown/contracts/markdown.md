@@ -45,7 +45,9 @@ A formatted entry's text sits in a `div.agui-md` inside the entry's existing bod
 | Image | `span.agui-md-inert` reading `[image: <alt>]`, or `[image]` when the alt text is empty. Nothing is requested. |
 | Raw HTML | Text, exactly as typed |
 | Bare web address | Text |
-| Footnote, task list box, math, diagram syntax | Text, as typed |
+| Task list box, math, diagram syntax | Text, as typed |
+| Footnote syntax | Not supported. `[^1]: text` is a CommonMark link reference definition and `[^1]` a reference to it. |
+| Link reference (`[a][r]` with `[r]: https://...`) | As an inline link of the same address |
 
 Links are allowed only when the address parses as an absolute URL whose protocol is `http:`, `https:` or `mailto:`.
 
@@ -62,7 +64,7 @@ Links are allowed only when the address parses as an absolute URL whose protocol
 | When | Text |
 | --- | --- |
 | Text longer than `MARKDOWN_LIMIT` (200,000 characters) | `Too long to format as Markdown. Shown as plain text.` |
-| Any step threw | `Could not format this as Markdown. Shown as plain text.` |
+| Any step threw, or the elements would nest more than 200 deep | `Could not format this as Markdown. Shown as plain text.` |
 
 A note is a `p.agui-conv-muted` above the plain text, inside the entry. The text under it is the received text, unchanged.
 

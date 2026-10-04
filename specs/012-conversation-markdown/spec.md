@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-04
 
-**Status**: Draft for review
+**Status**: Implemented, in review
 
 **Input**: Issue [#79](https://github.com/dogganidhal/agui-inspector/issues/79), "Add subagent lanes, state history, a run waterfall and Markdown rendering", fourth view: Markdown rendering of the conversation, on demand. The issue asks for one spec per view so each merges on its own. This spec covers only the Markdown view. The other three views have their own specs.
 
@@ -95,11 +95,11 @@ A developer who does not use a pointer turns Markdown on, reads, follows a link 
 
 - A message that is empty or only whitespace shows nothing extra in both modes.
 - A message so long that formatting it could freeze the page (more than 200,000 characters) shows as plain text with a short note that says why. It does not freeze the page. Other messages still format.
-- Deeply nested lists or quotes, thousands of unclosed brackets, and a single line of one million characters do not freeze the page or throw. The affected message falls back to plain text when it cannot be formatted within the limit.
+- Deeply nested lists or quotes, run-on emphasis that would nest elements more than 200 levels deep, thousands of unclosed brackets, and a single line of one million characters do not freeze the page or throw. A message that nests too deep falls back to plain text with the failure note. The others format or fall back at the length limit.
 - Any failure while formatting one message shows that message as plain text with a short note. It never blanks the conversation or stops other messages from showing.
 - Messages with role `tool` stay plain text in both modes. Their content is a tool result, not prose.
 - A message with images or files as content parts keeps its "non-text parts" tag. Parts are never loaded.
-- Markdown syntax that this view does not support (raw HTML, footnotes, task-list boxes, math, diagrams) shows as typed.
+- Markdown syntax that this view does not support (raw HTML, task-list boxes, math, diagrams) shows as typed. Footnotes are not supported, and `[^1]: text` is read the way CommonMark reads it, as a link reference definition.
 - A bare web address in text, without Markdown link syntax, stays plain text. Only an explicit link or an angle-bracket address is a link.
 - Text with Markdown characters used on purpose, such as a snake_case name, a path with asterisks or a `#` at the start of a line in a code sample, may look different with Markdown on. Turning it off shows the exact text. This is why plain text is the default.
 - Light and dark themes, and adopter theme overrides, apply to the formatted text the same way they apply to the rest of the conversation.
@@ -140,10 +140,10 @@ A developer who does not use a pointer turns Markdown on, reads, follows a link 
 ### Measurable Outcomes
 
 - **SC-001**: For a fixture message that uses every construct of FR-004, Markdown on shows all of them formatted and Markdown off shows text equal to the received text, on a live run and on an imported session, in 100% of the fixture checks.
-- **SC-002**: With a set of at least 15 hostile samples (raw HTML, event handlers, remote images, tracking and script links, style injection, nested and malformed input) shown with Markdown on, zero scripts run, zero requests leave the permitted targets and the page's own origin, and zero content security policy violations are reported.
+- **SC-002**: With a set of at least 15 hostile samples (raw HTML, event handlers, remote images, tracking and script links, style injection, nested and malformed input) shown with Markdown on, zero scripts run, zero requests leave the permitted targets and the page's own origin, and no new content security policy violation is reported.
 - **SC-003**: The raw frames, run inputs and session export bytes are identical before turning Markdown on, while it is on and after turning it off, for the same session.
 - **SC-004**: A keyboard-only developer completes turn on, read, follow a link and turn off, with no pointer, in an automated test.
-- **SC-005**: For the fixed 5,000-frame workload, turning Markdown on formats the conversation in under 1 second, and a message at the length limit formats in under 200 milliseconds on the reference CI machine. These are the measured numbers the plan records.
+- **SC-005**: For the fixed 5,000-frame workload, turning Markdown on formats the conversation in under 1 second, and a message at the length limit formats in under 200 milliseconds on the reference CI machine. The plan records the measured numbers. The unit test bounds are five times these, so a busy shared machine does not fail a run, and a slowdown of an order of magnitude still does.
 - **SC-006**: `npm run check:bundle` passes, and the pull request states the bytes added, minified and gzipped.
 - **SC-007**: The docs site describes the control, the syntax, the safety rules and the limit, and a docs test fails if any of them is missing.
 

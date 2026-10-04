@@ -31,7 +31,7 @@ What `format(text)` returns. Derived on each draw, memoized on the text, never s
 | Variant | Fields | When |
 | --- | --- | --- |
 | `formatted` | `nodes: ReactNode` | The text is at most `MARKDOWN_LIMIT` characters and the parser and the walker finish. |
-| `plain` | `note: string` | The text is longer than `MARKDOWN_LIMIT`, or any step threw. The entry shows its text unchanged under the note. |
+| `plain` | `note: string` | The text is longer than `MARKDOWN_LIMIT`, any step threw, or the elements would nest more than 200 deep (`MAX_DEPTH`). The entry shows its text unchanged under the note. |
 
 `MARKDOWN_LIMIT` is 200,000 characters. R9 in the research may lower it.
 
