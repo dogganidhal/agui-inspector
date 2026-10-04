@@ -111,9 +111,10 @@ export const { GET, HEAD } = inspectorRoute({ agents, enabled: true, theme, bran
 });
 
 test('the npm tarball ships the compiled helpers and the page, and no source or test of the helpers', () => {
-  // For a workspace, `npm pack --json` prints an object keyed by package name.
-  const packed = JSON.parse(execFileSync('npm', ['pack', '--workspace', 'packages/inspector', '--dry-run', '--json'], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })) as Record<string, { files: Array<{ path: string }> }>;
-  const files = packed['agui-inspector']!.files.map((file) => file.path);
+  // `npm pack --workspace --json` prints an object keyed by package name in some npm versions and an array in others.
+  const output = JSON.parse(execFileSync('npm', ['pack', '--workspace', 'packages/inspector', '--dry-run', '--json'], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })) as unknown;
+  const [packed] = (Array.isArray(output) ? output : Object.values(output as object)) as Array<{ files: Array<{ path: string }> }>;
+  const files = packed!.files.map((file) => file.path);
   for (const required of ['lib/server/core.js', 'lib/server/express.js', 'lib/server/express.d.ts', 'lib/server/hono.js', 'lib/server/hono.d.ts', 'lib/server/next.js', 'lib/server/next.d.ts', 'lib/server/node.js', 'lib/static-path.js', 'dist/index.html', 'dist/app.js', 'src/static-path.js', 'package.json']) {
     expect(files, required).toContain(required);
   }
