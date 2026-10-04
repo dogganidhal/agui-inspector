@@ -4,7 +4,7 @@ description: A first edit-and-preview loop, the repository layout, every command
 ---
 
 This page is for working in the repository. Everything here runs locally or in pull request CI, and
-publishes, tags or releases nothing. The only workflow that publishes is the [Python release](./releases.mdx#python-release).
+publishes, tags or releases nothing. The only workflow that publishes is the [release workflow](./releases.mdx), for Python and npm.
 
 ## Prerequisites
 
@@ -188,22 +188,23 @@ package with no `test_*.py` file fails instead of passing an empty run. A missin
 budget step.
 
 Two other workflows run on `main` only. `pages.yml` [deploys the demo and these docs](./demo-internals.mdx#deployment)
-and never runs for a pull request. `ci.yml` has no deployment permission. `release-python.yml`
-[publishes the Python package](./releases.mdx#python-release).
+and never runs for a pull request. `ci.yml` has no deployment permission. `release.yml` publishes
+[the Python package](./releases.mdx#python-release) and [the npm package](./releases.mdx#npm-release).
 
 ## Changesets
 
-Changesets version the Python package. Add one to any pull request that changes what the package does or ships.
-The wheel includes the inspector assets, so user-visible inspector changes count too.
+Changesets version the Python package and the npm package, each on its own. Add a changeset to any pull request that
+changes what a package does or ships. The wheel and the npm package both include the inspector assets, so a
+user-visible inspector change belongs to both.
 
 ```sh
 npx changeset
 ```
 
-Pick `agui-inspector-python`, the bump type and the line the changelog will show. Before 1.0.0, use `minor` for a
+Pick the packages and the bump type, and write the line the changelog will show. `agui-inspector-python` is the wheel
+and `agui-inspector` is the npm package. Before 1.0.0, use `minor` for a
 change that needs a migration or adds a feature, and `patch` for a fix. Commit the Markdown file it writes under
-`.changeset/` with your change. A docs or test change with nothing to release needs none. Changesets ignores
-`agui-inspector` (the npm manifest) until its release is set up.
+`.changeset/` with your change. A docs or test change with nothing to release needs none.
 
 Never edit a version by hand. The version pull request updates `packages/python/package.json`, `pyproject.toml`,
 `uv.lock` and `CHANGELOG.md` together, and `tests/release/changeset.test.ts` fails when they differ.

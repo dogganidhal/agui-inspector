@@ -7,7 +7,7 @@ and planning input.
 
 ## Current status
 
-As of 2026-10-03. This is the one summary of where the release stands. The sections under
+As of 2026-10-04. This is the one summary of where the release stands. The sections under
 [Planning history](#planning-history) record how it got here and are not kept current.
 
 Built and merged on `main`:
@@ -22,7 +22,7 @@ Built and merged on `main`:
   visitor's own HTTPS or `localhost` server. See [public demo](https://dogganidhal.github.io/agui-inspector/docs/demo/).
 - The docs site, <https://dogganidhal.github.io/agui-inspector/docs/>, built from the MDX pages in `website/` and
   deployed with the demo by `pages.yml`.
-- The Python release workflow, `release-python.yml`. It published 0.1.0 to PyPI on 2026-10-03, through trusted
+- The release workflow, `release.yml` (named `release-python.yml` until 2026-10-04). It published 0.1.0 to PyPI on 2026-10-03, through trusted
   publishing with attestations, and keeps a `chore: version packages` pull request open for the next release. See
   [distribution](https://dogganidhal.github.io/agui-inspector/docs/releases/#python-release).
 
@@ -40,9 +40,10 @@ Publication gates:
 - Python: 0.1.0 is on [PyPI](https://pypi.org/project/agui-inspector/) since 2026-10-03
   (`pip install "agui-inspector[embedded]"`). Later releases take the same path: a changeset, the version pull
   request, and the maintainer's approval of the `pypi` deployment.
-- npm: nothing is published, and both npm manifests are private, so there is no npm install. The release is not set
-  up. FR-040 asks for a CI build from a tag with npm provenance, and Changesets ignores the npm package
-  until that exists.
+- npm: nothing is published, so there is no npm install yet. `release.yml` now also packs the npm package from
+  the tagged commit and publishes it with npm provenance through trusted publishing, and `packages/inspector` is no
+  longer private. The maintainer still has to publish the first version by hand, register the trusted publisher and
+  create the `npm` environment. The first release from CI is 0.1.0, through a changeset. See [distribution](https://dogganidhal.github.io/agui-inspector/docs/releases/#one-time-setup-for-npm).
 - G-03, whether upstream accepts the inspector under `apps/inspector`, is open. `@ag-ui/inspector` stays conditional on it.
 - Nothing in this repository authorizes publishing, tagging or releasing. Each remains the maintainer's decision.
 
@@ -176,6 +177,16 @@ publishing, with no stored token. At that date nothing had run it: the maintaine
 publisher, the `pypi` environment and the repository setting that lets the version pull request open, and the manifests
 stay private (the Python classifier included) until the first release PR. The npm release (provenance, a workflow of its
 own) is not set up. See [distribution](https://dogganidhal.github.io/agui-inspector/docs/releases/).
+
+### npm release workflow (2026-10-04)
+
+The npm package joins the Python release, and the workflow file is renamed from `release-python.yml` to `release.yml`.
+PyPI matches the trusted publisher to the file name, so the maintainer has to update it. Changesets versions and tags
+`agui-inspector` and `agui-inspector-python` separately, and a release publishes only the package it tagged. The build
+job packs the npm tarball from the same checked build as the wheel. A `publish-npm` job in `release.yml` publishes it with `--provenance` through npm
+trusted publishing, in the `npm` environment, with no stored token. npm cannot register a trusted publisher for a name
+that does not exist, so a placeholder 0.0.0 is the maintainer's to publish by hand. A pending `minor` changeset then
+takes the package to 0.1.0, which CI publishes with provenance. Nothing has been published, tagged or released. See [distribution](https://dogganidhal.github.io/agui-inspector/docs/releases/#npm-release).
 
 ### Public demo companion (2026-10-02)
 

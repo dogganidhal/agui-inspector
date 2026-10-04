@@ -491,7 +491,7 @@ test('the Pages workflow neither enables Pages, nor ships a package, tags or rel
 test('every one-line run step is a valid plain YAML value, so GitHub accepts the workflow file', () => {
   // A plain value ends at ": " (read as a nested mapping) or " #" (a comment). GitHub then rejects the whole file and
   // runs nothing, which no check above notices because they read the text. Such a command needs a block scalar.
-  for (const file of ['.github/workflows/ci.yml', PAGES, '.github/workflows/release-python.yml']) {
+  for (const file of ['.github/workflows/ci.yml', PAGES, '.github/workflows/release.yml']) {
     for (const [, value] of source(file).matchAll(/^\s*(?:-\s+)?run:[ \t]+(?![|>"'])(.+)$/gm)) {
       assert.doesNotMatch(value!, /: | #/, `${file}: ${value}`);
     }
