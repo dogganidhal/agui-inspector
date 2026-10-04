@@ -105,7 +105,7 @@ specs/006-js-server-helpers/
 
 ```text
 packages/inspector/
-├── package.json             # exports ./express ./hono ./next; files += lib
+├── package.json             # exports and typesVersions for ./express ./hono ./next; files += lib
 ├── tsconfig.server.json     # emit config: src/server + static-path.js to lib/
 ├── src/
 │   ├── static-path.js       # same value, no new URL(literal, import.meta.url)

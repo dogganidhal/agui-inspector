@@ -3,7 +3,7 @@
 // package needs no dependency on Hono. The contract is specs/006-js-server-helpers/contracts/public-api.md.
 import { resolveMount, warnMounted, type InspectorOptions } from './core.ts';
 
-export type { InspectorAgent, InspectorOptions, InspectorTheme } from './core.ts';
+export type { InspectorAgent, InspectorBrand, InspectorOptions, InspectorTheme } from './core.ts';
 
 /** The part of a Hono application that the helper uses. */
 export interface HonoLike {

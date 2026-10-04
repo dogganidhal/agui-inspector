@@ -33,7 +33,8 @@ Alternatives considered:
 
 ## 2. The npm package surface
 
-Decision: `exports` gains `./express`, `./hono` and `./next`, each with `types` and `default`. The `.` export stays
+Decision: `exports` gains `./express`, `./hono` and `./next`, each with `types` and `default`, and `typesVersions` maps the
+same three to their declarations for projects on the older `node` module resolution (see decision 14). The `.` export stays
 `./src/static-path.js`. `files` gains `lib`. The core is not exported. The command line tool of issue #75 lives in the
 same package and imports `src/server/core.ts` by relative path.
 
@@ -201,10 +202,49 @@ the package README stop saying the helpers are planned. No page claims a framewo
 
 The constitution says an enabled helper logs "a startup warning with the mount path". Express and Hono mount when the
 helper is called, so they log then. Next.js has no mount step: it loads a route module on the first request for that
-route (spike: `next start` printed nothing before the first request), and only a request tells the helper its path, a
-`basePath` included. The Next.js helper logs once at that point, the earliest moment the real path is known. This is a
+route (spike: `next start` printed nothing before the first request), and only a request tells the helper its path. The
+URL a route handler gets has the `basePath` stripped (Next.js 16.3.8 `next dev`: `/tools/probe/a/b` arrives as
+`/probe/a/b`), so the warning names the route's path without it. The Next.js helper logs once at that point, the earliest
+moment the real path is known. This is a
 reading of the principle, recorded in the spec's clarifications. It needs no amendment, and the pull request flags it
 for review.
+
+## 14. Verification of the built package
+
+Run on 2026-10-04 on the tarball of `npm pack --workspace packages/inspector` (the built `lib` and `dist`), installed from
+the file into scratch applications outside the repository, so each one resolves the package through `node_modules`. Every
+run checked: `/agui-inspector` answers 307 to `agui-inspector/index.html`; the page, `config.json` (with the `brand`
+argument) and `app.js` answer 200 with the policy header; `..%2f..%2fpackage.json` and an unknown file are not served; and
+the warning is logged once. Next.js applications used the default `next.config` unless a `basePath` is named.
+
+| Application | Run | Result |
+| --- | --- | --- |
+| Next.js 16.3.8 | `next dev` (Turbopack) | pass |
+| Next.js 16.3.8 | `next build` and `next start` (Turbopack) | pass |
+| Next.js 16.3.8 | `next build --webpack` and `next start` | pass, after the context type fix below |
+| Next.js 16.3.8 | `next dev` with `basePath: '/tools'` | pass |
+| Next.js 16.3.8 | `next dev` with `trailingSlash: true`: `/agui-inspector` is a 308 to `/agui-inspector/`, which serves the page | pass |
+| Next.js 16.3.8 | `next dev` with `skipTrailingSlashRedirect: true`: 307 to `index.html`, and `/agui-inspector/` serves the page | pass |
+| Next.js 15.5.27 | `next dev` | pass |
+| Next.js 15.5.27 | `next build` and `next start` | pass, after the `typesVersions` fix below |
+| Next.js 15.5.27 | `next dev` with `basePath: '/tools'` | pass |
+| Next.js 16.3.8 | Chromium opens `/agui-inspector`, lands on `/agui-inspector/index.html`, shows the brand heading and the agent endpoint, and requests only the app's origin | pass |
+| Express 5.2.1 | real server, the built package loaded as ES module and, in `tests/e2e/js-helpers/package.spec.ts`, with `require()` | pass |
+| Hono 4.13.13 | real application behind a `node:http` server | pass |
+
+The runs found three things that the unit tests had not, and each is fixed and now has a test:
+
+1. `next build --webpack` type checks the route file against a generated `RouteContext` of `{ params: Promise<...> }`. The
+   first `InspectorRouteContext` was a union of the promise and a plain object, which fails that check. The type is now the
+   promise (Next.js 15 and later), a plain object still works at run time, and `next.test.ts` has a type-level check of
+   the same constraint. A mutation of the type fails `npm run typecheck`.
+2. A Next.js 15 application without a `tsconfig.json` gets `moduleResolution: node`, which cannot read `exports`, so the
+   types of `agui-inspector/next` were not found. `package.json` has `typesVersions` for the three entries. TypeScript
+   5.8 resolves all three with it and none without it (a manual run, because the repository's TypeScript 7 has removed
+   `node10`). `package.spec.ts` checks the map equals the `exports` targets.
+3. Next.js gives a route handler a URL without its `basePath` (`/tools/probe/a/b` arrives as `/probe/a/b`). The warning
+   therefore names `/agui-inspector` under a `basePath`. The docs, the spec and the Next.js host of the browser tests
+   say and do the same.
 
 ## Open items
 

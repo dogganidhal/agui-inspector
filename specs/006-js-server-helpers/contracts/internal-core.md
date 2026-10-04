@@ -7,15 +7,16 @@ tool of issue #75 will call from its own `node:http` listener. A change to it is
 
 ```ts
 export const DEFAULT_PATH = '/agui-inspector';
-export interface InspectorOptions { agents: readonly InspectorAgent[]; theme?: InspectorTheme; assetsDir?: string }
+export interface InspectorBrand { name?: string; logo?: string; logoDark?: string }
+/** The helper arguments. `createInspectorHandler` reads `agents`, `theme`, `brand` and `assetsDir` (not in the published declarations). */
+export interface InspectorOptions { agents: readonly InspectorAgent[]; theme?: InspectorTheme; brand?: InspectorBrand; enabled?: boolean; path?: string; assetsDir?: string }
 export type InspectorHandler = (request: Request, asset: string) => Promise<Response>;
 
 /** The handler for one configuration. Throws if the files directory has no index.html. Reads nothing else until a request. */
 export function createInspectorHandler(options: InspectorOptions): InspectorHandler;
 
-export interface MountOptions extends InspectorOptions { enabled?: boolean; path?: string }
-/** null when `enabled` is not true. Otherwise the checked, normalized mount path and its handler. Logs nothing. */
-export function resolveMount(options: MountOptions): { mount: string; handle: InspectorHandler } | null;
+/** null when `enabled` is not exactly true. Otherwise the checked, normalized mount path and its handler. Logs nothing. */
+export function resolveMount(options: InspectorOptions): { mount: string; handle: InspectorHandler } | null;
 /** The one warning text. Express and Hono call it after registering; Next.js calls it on the first request. */
 export function warnMounted(mount: string): void;
 ```
@@ -34,9 +35,13 @@ export function warnMounted(mount: string): void;
 ## `src/server/node.ts`
 
 ```ts
-/** Method and URL of a node:http message as a Request. `message.originalUrl`, when set (Express), wins over `message.url`. */
-export function toRequest(message: IncomingMessage): Request;
-/** Writes status, headers and the whole body. HEAD keeps the headers and sends no body. */
+/**
+ * Method and URL of a node:http message as a Request. `message.originalUrl`, when set (Express), wins over `message.url`.
+ * A target that starts with `//` is a path, an absolute-form target keeps only its path and query, and CONNECT, TRACE
+ * and TRACK, which `Request` refuses, become OPTIONS (the core answers 405).
+ */
+export function toRequest(message: IncomingMessage & { originalUrl?: string }): Request;
+/** Writes status, headers and the whole body, adding Content-Length when the response has none. HEAD keeps the headers and sends no body. */
 export function sendResponse(response: Response, serverResponse: ServerResponse): Promise<void>;
 ```
 
@@ -51,5 +56,6 @@ createServer(async (req, res) => sendResponse(await handle(toRequest(req), asset
 1. Every response has the content security policy. Redirects and errors included.
 2. A path cannot leave the files directory by any spelling the callers can pass. Callers decode once. The core checks
    segments and the resolved path.
-3. `config.json` is the version 0 file built from the options, equal to the Python helper's for equal input.
+3. `config.json` is the version 0 file built from the options (`agents`, then `theme`, then `brand`), equal to the Python
+   helper's for equal input.
 4. No state, no cache, no timer, no request of its own. Each call reads at most one file.

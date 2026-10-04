@@ -5,7 +5,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { resolveMount, warnMounted, type InspectorOptions } from './core.ts';
 import { sendResponse, toRequest } from './node.ts';
 
-export type { InspectorAgent, InspectorOptions, InspectorTheme } from './core.ts';
+export type { InspectorAgent, InspectorBrand, InspectorOptions, InspectorTheme } from './core.ts';
 
 type Handler = (req: IncomingMessage, res: ServerResponse, next: (error?: unknown) => void) => void;
 

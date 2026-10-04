@@ -19,14 +19,17 @@ framework. A host needs the Node.js runtime: the helpers read files with `node:f
 ```ts
 interface InspectorAgent { id: string; url: string; name?: string; capabilities?: Record<string, unknown> | string; preset?: Record<string, unknown> }
 interface InspectorTheme { light?: Record<string, string>; dark?: Record<string, string> }
-interface InspectorOptions { agents: readonly InspectorAgent[]; enabled?: boolean; path?: string; theme?: InspectorTheme }
+interface InspectorBrand { name?: string; logo?: string; logoDark?: string }
+interface InspectorOptions { agents: readonly InspectorAgent[]; enabled?: boolean; path?: string; theme?: InspectorTheme; brand?: InspectorBrand }
 type InspectorRouteOptions = Omit<InspectorOptions, 'path'>
+interface InspectorRouteContext { params: Promise<{ path?: string[] }> }   // Next.js 15 and later; a plain object also works at run time
+type InspectorRouteHandler = (request: Request, context: InspectorRouteContext) => Promise<Response>
 ```
 
 Each entry exports the types it uses. The `app` parameter types are structural, so the package imports no framework:
 
 ```ts
-interface ExpressLike { use(path: string, handler: (req, res, next) => void): unknown }   // Express application or Router
+interface ExpressLike { use(path: string, handler: (req: IncomingMessage, res: ServerResponse, next: (error?: unknown) => void) => void): unknown }   // Express application or Router
 interface HonoLike { all(path: string, handler: (c: { req: { raw: Request; param(name: string): string | undefined } }) => Response | Promise<Response>): unknown }
 ```
 
@@ -50,7 +53,7 @@ export const { GET, HEAD } = inspectorRoute({ agents: [{ id: 'support', url: '/a
 
 - `enabled` not `true`: `GET` and `HEAD` answer `404` with no inspector content and log nothing. No file is read.
 - Otherwise: validates `agents` and the page at call time and throws on failure. Each handler takes `(request, { params })`
-  where `params` is a promise or a plain object with an optional `path` array. The first request logs the warning once,
+  where `params` is a promise of an object with an optional `path` array (a plain object works at run time too, and the type says promise because Next.js checks it when it builds). The first request logs the warning once,
   with the mount path worked out from the request URL minus the `path` segments.
 - Other methods are answered by Next.js itself (405).
 - Works in the default `next.config`, with `basePath`, and with either trailing slash setting.

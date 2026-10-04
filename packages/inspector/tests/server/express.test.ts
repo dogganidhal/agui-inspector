@@ -5,10 +5,10 @@ import { chmodSync, writeFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
-import { after, mock, test } from 'node:test';
+import { after, test } from 'node:test';
 import express, { type Express, type NextFunction, type Request, type Response, Router } from 'express';
 import { mountInspector } from '../../src/server/express.ts';
-import { AGENTS, APP_JS, CHUNK_JS, INDEX, pageDirectory, POLICY, SECRET } from './fixtures.ts';
+import { AGENTS, APP_JS, CHUNK_JS, INDEX, pageDirectory, POLICY, SECRET, warnings } from './fixtures.ts';
 
 const assetsDir = pageDirectory();
 const servers: Server[] = [];
@@ -20,17 +20,6 @@ async function listen(app: Express): Promise<string> {
   servers.push(server);
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-}
-
-/** Runs `fn` with the warning mocked, and returns what was logged. */
-function warnings<T>(fn: () => T): { result: T; logged: string[] } {
-  const warn = mock.method(console, 'warn', () => undefined);
-  try {
-    const result = fn();
-    return { result, logged: warn.mock.calls.map((call) => String(call.arguments[0])) };
-  } finally {
-    warn.mock.restore();
-  }
 }
 
 /** An application with the helper mounted and the warning kept out of the test output. */

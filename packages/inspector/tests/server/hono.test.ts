@@ -2,22 +2,12 @@
 // routes, the disabled case, the startup warning, the content security policy and a host guard.
 import assert from 'node:assert/strict';
 import path from 'node:path';
-import { mock, test } from 'node:test';
+import { test } from 'node:test';
 import { Hono } from 'hono';
 import { mountInspector } from '../../src/server/hono.ts';
-import { AGENTS, APP_JS, CHUNK_JS, INDEX, pageDirectory, POLICY, SECRET } from './fixtures.ts';
+import { AGENTS, APP_JS, CHUNK_JS, INDEX, pageDirectory, POLICY, SECRET, warnings } from './fixtures.ts';
 
 const assetsDir = pageDirectory();
-
-function warnings<T>(fn: () => T): { result: T; logged: string[] } {
-  const warn = mock.method(console, 'warn', () => undefined);
-  try {
-    const result = fn();
-    return { result, logged: warn.mock.calls.map((call) => String(call.arguments[0])) };
-  } finally {
-    warn.mock.restore();
-  }
-}
 
 function hosted(options: Partial<Parameters<typeof mountInspector>[1]> = {}, app: Hono = new Hono()): Hono {
   warnings(() => mountInspector(app, { agents: AGENTS, enabled: true, assetsDir, ...options }));

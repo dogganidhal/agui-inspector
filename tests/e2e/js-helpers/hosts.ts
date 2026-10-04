@@ -6,7 +6,7 @@
 // Express listens as it is. Hono and the Next.js handlers are Fetch-API code, so a small `node:http` server stands in for
 // what a real deployment brings (a Node adapter for Hono, the Next.js server). The Next.js stand-in follows the router's
 // default behavior that matters here: a trailing slash is redirected away (308), the way `trailingSlash: false` does,
-// and `request.url` keeps the `basePath`. research.md (4) records that behavior against a real Next.js.
+// and `request.url` has the `basePath` stripped. research.md (4) and (13) record that behavior against a real Next.js.
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { Readable } from 'node:stream';
@@ -42,6 +42,8 @@ export interface Host {
 }
 
 export const AGENT_REPLY = 'Hello from the reference agent.';
+/** The brand every host passes, so the specs can see it reach the page. */
+export const BRAND = { name: 'Acme Console' };
 
 const basic = (credentials: { user: string; password: string }) => `Basic ${Buffer.from(`${credentials.user}:${credentials.password}`).toString('base64')}`;
 
@@ -54,7 +56,7 @@ function runIds(text: string): { threadId: string; runId: string } {
 /** The reference agent's one reply, as the Fetch API `Response` a framework would return. */
 function agentResponse(ids: { threadId: string; runId: string }): Response {
   const reply = referenceRunResponse(ids);
-  return new Response(reply.chunks.map((chunk) => Buffer.from(chunk)).reduce((all, chunk) => Buffer.concat([all, chunk]), Buffer.alloc(0)), {
+  return new Response(Buffer.concat(reply.chunks), {
     status: reply.status,
     headers: { 'content-type': reply.contentType, 'cache-control': 'no-store' },
   });
@@ -91,7 +93,7 @@ export async function startHost(kind: HostKind, options: HostOptions = {}): Prom
     if (authorization) {
       app.use((req, res, next) => (req.headers.authorization === authorization ? next() : void res.status(401).set('www-authenticate', 'Basic realm="host"').send('host guard')));
     }
-    mountExpress(app, { agents, enabled });
+    mountExpress(app, { agents, enabled, brand: BRAND });
     app.post(agentUrl, async (req, res) => {
       let text = '';
       for await (const chunk of req) text += String(chunk);
@@ -102,14 +104,14 @@ export async function startHost(kind: HostKind, options: HostOptions = {}): Prom
   } else if (kind === 'hono') {
     const app = new Hono().basePath(basePath);
     if (authorization) app.use('*', async (c, next) => (c.req.header('authorization') === authorization ? next() : c.text('host guard', 401, { 'www-authenticate': 'Basic realm="host"' })));
-    mountHono(app, { agents, enabled });
+    mountHono(app, { agents, enabled, brand: BRAND });
     app.post('/agents/demo/stream', async (c) => agentResponse(runIds(await c.req.text())));
     server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
       await sendResponse(await app.fetch(fullRequest(`http://${req.headers.host}`, req)), res);
     });
   } else {
     // `app/agui-inspector/[[...path]]/route.ts` under the base path, with a guard standing for the middleware.
-    const { GET, HEAD } = inspectorRoute({ agents, enabled });
+    const { GET, HEAD } = inspectorRoute({ agents, enabled, brand: BRAND });
     const route = '/agui-inspector';
     server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
       const request = fullRequest(`http://${req.headers.host}`, req);
@@ -124,12 +126,14 @@ export async function startHost(kind: HostKind, options: HostOptions = {}): Prom
       }
       if (!url.pathname.startsWith(basePath)) return send(new Response('not found', { status: 404 }));
       const rest = url.pathname.slice(basePath.length);
+      // Next.js gives a route handler the URL without the `basePath`.
+      const routed = new Request(`${url.origin}${rest}${url.search}`, request);
       if (rest === '/agents/demo/stream' && request.method === 'POST') return send(agentResponse(runIds(await request.text())));
       if (rest === route || rest.startsWith(`${route}/`)) {
         if (request.method !== 'GET' && request.method !== 'HEAD') return send(new Response(null, { status: 405 }));
         const segments = rest.slice(route.length + 1).split('/').filter((segment) => segment !== '').map(decodeURIComponent);
         const context = { params: Promise.resolve(segments.length > 0 ? { path: segments } : {}) };
-        return send(await (request.method === 'HEAD' ? HEAD : GET)(request, context));
+        return send(await (request.method === 'HEAD' ? HEAD : GET)(routed, context));
       }
       return send(new Response('not found', { status: 404 }));
     });

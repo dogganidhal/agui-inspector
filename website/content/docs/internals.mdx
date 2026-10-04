@@ -13,6 +13,9 @@ The code under `packages/inspector/src` has three layers:
   events, and the runtime with its guarded transport.
 - `views` holds the React views (connection, conversation, inspection, A2UI and settings) and the theme's tokens and
   primitives.
+- `server` is the Node-side code of the Express, Hono and Next.js helpers: one core on the web-standard `Request` and
+  `Response`, a `node:http` bridge and one thin file per framework. It is not part of the page. The build compiles it to
+  `packages/inspector/lib` for the npm package, and a test checks that the page bundle has none of it.
 - `app` is the assembly that builds the page. `startup.ts` reads `hosting-config.json`, turns it into the transport
   policy and the content security policy, and only then creates the runtime. `index.tsx` keeps the page's state around
   one shared session store and turns each view callback into one call on a core module. `boundary.tsx` keeps a render
@@ -454,6 +457,25 @@ npm run typecheck
 npm run test:unit -- packages/inspector/tests/hosted packages/inspector/tests/runtime
 npm run test:e2e -- tests/e2e/hosted tests/e2e/visitor-policy
 npm run build && npm run check:bundle
+```
+
+## JavaScript helper tests
+
+| File | Covers |
+| --- | --- |
+| `packages/inspector/tests/server/core.test.ts` | The core: the page, the relative redirect, `config.json` (agents, `theme`, `brand`, key order), content types, `405` and `HEAD`, path traversal, the policy on every response, and the `enabled`, `path` and `agents` rules. |
+| `packages/inspector/tests/server/node.test.ts` | The `node:http` bridge: method and URL only, `originalUrl`, headers ignored, and the response written whole. |
+| `packages/inspector/tests/server/express.test.ts`, `hono.test.ts`, `next.test.ts` | Each helper with its real framework, or for Next.js called as Next.js calls a route handler: the routes, a `Router`, `basePath`, the disabled case, the warning, the policy, the types, and a guard in front of the routes and one behind them. |
+| `packages/inspector/tests/server/bundle.test.ts` | The page bundle has no helper code, and the helper sources import no React and no framework. |
+| `tests/e2e/js-helpers/embedding.spec.ts`, `guard.spec.ts` | The real page in Chromium behind an Express host, a Hono host and a Next.js route handler: the agent is listed, a run is recorded, only the host is contacted, the disabled helper mounts nothing and the host's authentication guards every route. The Next.js host redirects the slash form away, as Next.js does by default. |
+| `tests/e2e/js-helpers/package.spec.ts` | The built package: `exports`, `import()`, `require()`, a TypeScript project under `NodeNext`, the `npm pack` file list and one served page. Run it after `npm run build`. |
+
+The unit tests use a small stand-in for the page, so they run before the build. The helper tests need no Next.js: its
+handlers take a `Request` and the route parameters. Hosts for the browser tests are in `tests/e2e/js-helpers/hosts.ts`.
+
+```sh
+npm run test:unit -- packages/inspector/tests/server
+npm run build && npm run test:e2e -- tests/e2e/js-helpers
 ```
 
 ## Python package tests

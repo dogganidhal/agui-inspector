@@ -12,18 +12,12 @@ export const DEFAULT_PATH = '/agui-inspector';
 // Same policy as the page's own <meta>: own-origin scripts only, and no eval.
 const POLICY = "script-src 'self'; object-src 'none'; base-uri 'none'";
 
+// The page is html, js, css and json. Another extension is served as bytes.
 const CONTENT_TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
-  '.mjs': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
-  '.map': 'application/json; charset=utf-8',
-  '.svg': 'image/svg+xml',
-  '.png': 'image/png',
-  '.ico': 'image/x-icon',
-  '.woff2': 'font/woff2',
-  '.txt': 'text/plain; charset=utf-8',
 };
 
 // What a request for a name that does not exist raises. Anything else (permissions, a failing disk) is the host's to see.
@@ -44,16 +38,24 @@ export interface InspectorTheme {
   dark?: Record<string, string>;
 }
 
-/** What the handler is built from. */
-export interface HandlerOptions {
-  agents: readonly InspectorAgent[];
-  theme?: InspectorTheme;
-  /** The directory with the built page. Tests use a stand-in. @internal */
-  assetsDir?: string;
+/**
+ * The adopter's name and logos for the page's top bar. Every field is optional. A logo is a path on the page's own
+ * origin or a `data:` image URI, and `logoDark` is the logo for the dark theme. The helper serves no logo file: the host
+ * serves it from one of its own routes. The page checks the values.
+ */
+export interface InspectorBrand {
+  name?: string;
+  logo?: string;
+  logoDark?: string;
 }
 
-/** The helper arguments for Express and Hono, as in the Python `mount_inspector`. */
-export interface InspectorOptions extends HandlerOptions {
+/** The helper arguments, as in the Python `mount_inspector`. `createInspectorHandler` reads only the first four. */
+export interface InspectorOptions {
+  agents: readonly InspectorAgent[];
+  theme?: InspectorTheme;
+  brand?: InspectorBrand;
+  /** The directory with the built page. Tests use a stand-in. @internal */
+  assetsDir?: string;
   /** Mounts only when `true`. Default `false`. */
   enabled?: boolean;
   /** Where the page lives. Default `/agui-inspector`. It starts with `/` and is not `/` alone. */
@@ -70,13 +72,13 @@ export type InspectorHandler = (request: Request, asset: string) => Promise<Resp
  * The handler for one configuration. Throws when the files directory has no `index.html`. Reads no other file until
  * a request asks for it.
  */
-export function createInspectorHandler(options: HandlerOptions): InspectorHandler {
+export function createInspectorHandler(options: InspectorOptions): InspectorHandler {
   const root = path.resolve(options.assetsDir ?? staticAssetsPath);
   if (!existsSync(path.join(root, 'index.html'))) {
     throw new Error("the packaged inspector files are missing; build them with 'npm run build'");
   }
   // JSON.stringify leaves out the fields that are undefined, which is the file the Python helper writes.
-  const config = JSON.stringify({ version: 0, agents: options.agents, theme: options.theme });
+  const config = JSON.stringify({ version: 0, agents: options.agents, theme: options.theme, brand: options.brand });
 
   const reply = (body: BodyInit | null, status: number, headers: Record<string, string>) =>
     new Response(body, { status, headers: { 'content-security-policy': POLICY, ...headers } });

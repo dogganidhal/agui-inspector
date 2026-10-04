@@ -79,6 +79,21 @@ test('theme is served as given, either map may be missing, and no theme means no
   assert.deepEqual(Object.keys(await config(both)), ['version', 'agents', 'theme']);
 });
 
+test('brand is served as given: unset fields are left out, an empty brand is an empty object, and no brand means no field', async () => {
+  const config = async (brand?: object) =>
+    JSON.parse(await (await createInspectorHandler({ agents: AGENTS, assetsDir, ...(brand && { brand }) })(at('/agui-inspector/config.json'), 'config.json')).text());
+  const full = { name: 'Acme', logo: '/static/acme.svg', logoDark: '/static/acme-dark.svg' };
+  assert.deepEqual(await config(full), { version: 0, agents: AGENTS, brand: full });
+  for (const brand of [{ name: 'Acme' }, { logo: '/a.svg' }, { logo: '/a.svg', logoDark: '/b.svg' }, {}]) assert.deepEqual((await config(brand)).brand, brand);
+  assert.deepEqual((await config({ name: 'Acme', logo: undefined })).brand, { name: 'Acme' });
+  assert.equal('brand' in (await config()), false);
+  // The page judges the values and warns; the helper neither hides nor repairs them.
+  const odd = { name: '  ', logo: 'https://example.invalid/x.png', logoDark: 'javascript:alert(1)' };
+  assert.deepEqual((await config(odd)).brand, odd);
+  const withTheme = JSON.parse(await (await createInspectorHandler({ agents: AGENTS, assetsDir, theme: { light: {} }, brand: full })(at('/agui-inspector/config.json'), 'config.json')).text());
+  assert.deepEqual(Object.keys(withTheme), ['version', 'agents', 'theme', 'brand']);
+});
+
 test('packaged files are served, nested ones included, with a content type by extension', async () => {
   const cases = [
     ['app.js', APP_JS, 'text/javascript; charset=utf-8'],

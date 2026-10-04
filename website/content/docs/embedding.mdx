@@ -1,15 +1,17 @@
 ---
-title: Embed in Starlette or FastAPI
-description: Serve the inspector from your own Starlette or FastAPI application with one helper call.
+title: Embed in your server
+description: Serve the inspector from your own Starlette, FastAPI, Express, Hono or Next.js server with one helper call.
 ---
 
-Python is the first server language with an embedded helper, and it will not be the only one: JavaScript helpers for Express, Hono and Next.js are planned for [0.2.0](https://github.com/dogganidhal/agui-inspector/blob/main/ROADMAP.md#020). A server in any other language can already use the [hosted page](./hosted.mdx) or [serve the static assets](#serving-the-assets-from-another-server).
+A helper mounts the inspector in your own server, on the same origin as your agent routes, so your own authentication applies. There is one for Python (Starlette and FastAPI) and one each for Express, Hono and Next.js. This page covers the Python helper first, starting at [Quick start](#quick-start), and the JavaScript helpers from [JavaScript servers](#javascript-servers). A server in any other language can use the [hosted page](./hosted.mdx) or [serve the static assets](#serving-the-assets-from-another-server).
 
 The Python package `agui-inspector` (MIT) contains the prebuilt inspector files and one helper, `mount_inspector`, that serves them from your Starlette or FastAPI application. The host needs no Node toolchain, and the helper downloads nothing at startup. Version 0.1.0 is on [PyPI](https://pypi.org/project/agui-inspector/).
 
-The helper adds a separate page to your server. That page sends its own requests to your agent URLs, so it records the runs it starts. It does not attach to the agent that your own frontend runs, and it does not see that agent's requests. Watching your application's `AbstractAgent` would need an in-app mode. The inspector has none, and the [roadmap](https://github.com/dogganidhal/agui-inspector/blob/main/ROADMAP.md#decisions) does not plan one.
+A helper adds a separate page to your server. That page sends its own requests to your agent URLs, so it records the runs it starts. It does not attach to the agent that your own frontend runs, and it does not see that agent's requests. Watching your application's `AbstractAgent` would need an in-app mode. The inspector has none, and the [roadmap](https://github.com/dogganidhal/agui-inspector/blob/main/ROADMAP.md#decisions) does not plan one.
 
 ## Quick start
+
+This section and the ones up to [JavaScript servers](#javascript-servers) are about the Python helper.
 
 <Steps>
 <Step>
@@ -156,9 +158,137 @@ EXAMPLE_USER=dev EXAMPLE_PASSWORD=choose-a-password EXAMPLE_DEBUG=1 \
 
 Open `http://127.0.0.1:8000/agui-inspector/` and sign in with that user and password when the browser asks. The page lists Demo agent. Send any message, and the agent answers `Hello from the FastAPI example.` If port 8000 is taken, pass another `--port` and change the URL.
 
+## JavaScript servers
+
+The npm package `agui-inspector` (MIT) has one helper each for Express, Hono and Next.js. They do what `mount_inspector` does for Python: the same arguments, the same routes, the same warning and the same content security policy. The page comes from your own origin, so your own authentication applies.
+
+<Callout type="warn">
+The JavaScript helpers are new in `agui-inspector` 0.2.0. Version 0.1.0 on npm does not have them. Until 0.2.0 is released, build the package from a checkout and install the tarball: see [Trying the JavaScript helpers from a checkout](#trying-the-javascript-helpers-from-a-checkout).
+</Callout>
+
+### Install and requirements
+
+```sh
+npm install agui-inspector
+```
+
+- The helpers need Node.js 22.12 or newer. They read the page's files from disk, so they need the Node.js runtime. An edge runtime has no file system and cannot serve the page.
+- The package installs no web framework. Each helper uses the Express, Hono or Next.js that your project already has. They are tested with Express 5.2, Hono 4.13 and Next.js 15.5 and 16.3. The Express helper needs only `app.use(path, handler)` from your application, and the Hono helper needs only `app.all(path, handler)`.
+- The helpers are ES modules with type definitions. In a CommonJS file, load one with `require('agui-inspector/express')` on Node.js 22.12 or newer, or with `await import()`. TypeScript finds the types with `moduleResolution` set to `node16`, `nodenext` or `bundler`, which read the package's `exports`, and with the older `node` setting, through `typesVersions`.
+
+### Mount the inspector
+
+```ts tab="Express" tab-group="js-framework"
+import express from 'express';
+import { mountInspector } from 'agui-inspector/express';
+
+const app = express();
+app.use(requireLogin); // your own guard, if you have one, goes first
+
+mountInspector(app, {
+  agents: [{ id: 'support', url: '/agents/support/stream' }],
+  enabled: process.env.NODE_ENV !== 'production',
+});
+```
+
+```ts tab="Hono" tab-group="js-framework"
+import { Hono } from 'hono';
+import { mountInspector } from 'agui-inspector/hono';
+
+const app = new Hono();
+app.use('*', requireLogin); // your own guard, if you have one, goes first
+
+mountInspector(app, {
+  agents: [{ id: 'support', url: '/agents/support/stream' }],
+  enabled: process.env.NODE_ENV !== 'production',
+});
+```
+
+```ts tab="Next.js" tab-group="js-framework"
+// app/agui-inspector/[[...path]]/route.ts
+import { inspectorRoute } from 'agui-inspector/next';
+
+export const { GET, HEAD } = inspectorRoute({
+  agents: [{ id: 'support', url: '/api/agents/support' }],
+  enabled: process.env.NODE_ENV !== 'production',
+});
+```
+
+Start the server and open `/agui-inspector`. The page lists the `support` agent and calls its URL on the same origin.
+
+Express: `mountInspector` takes an application or a `Router`. On a `Router` that you mount at `/api`, the page is at `/api/agui-inspector`.
+
+Hono: run the application on Node.js, for example with `@hono/node-server`. Under `new Hono().basePath('/api')` or `app.route('/api', sub)`, the page is at `/api/agui-inspector`.
+
+Next.js: Next.js has no application object, so the helper returns the `GET` and `HEAD` handlers of a route file. The folder of the file sets the path. To serve the page at `/tools/inspect`, put the file at `app/tools/inspect/[[...path]]/route.ts`. Keep the segment name `path`, in double brackets, because the helper reads `params.path`. You do not change `next.config`: the page works with the default trailing slash setting and with a `basePath`. Next.js answers the methods the file does not export.
+
+### JavaScript arguments
+
+| Argument | Meaning |
+| --- | --- |
+| `agents` | The agents the page lists. Each needs `id` and `url`. `name`, `capabilities` (an object or a URL string) and `preset` are optional and mean the same as in the [configuration file](./configuration.mdx#configuration-file). Ids must be unique. |
+| `enabled` | Default `false`. Only the boolean `true` mounts. A string such as `'false'` does not, so an environment variable has to become a boolean first. A disabled call checks nothing, reads no file, adds no route and logs nothing. In Next.js the route file stays, and the route answers 404 with no inspector content. |
+| `path` | Express and Hono only. The page's path, default `/agui-inspector`. It must start with `/` and cannot be `/` alone. A trailing `/` is ignored. Next.js has no `path`, because the folder of the route file sets it. |
+| `theme` | Optional `{ light: {...}, dark: {...} }`. Each map is optional and maps the ten public `--agui-*` names to CSS values. The helper writes it into `config.json` as given. The page checks it, as described in [Theming the embedded page](#theming-the-embedded-page). |
+| `brand` | Optional `{ name, logo, logoDark }`. Every field is optional. The helper writes the set fields into `config.json` as given and serves no logo file. See [Branding the embedded page](#branding-the-embedded-page). |
+
+A call with a bad argument stops startup and names the problem, for example `every agent needs a unique nonempty id and a url`. Nothing is mounted then. The checks run only when `enabled` is `true`.
+
+### JavaScript debug guard
+
+The inspector shows request bodies, raw frames and your agent list to anyone who can reach the route. Tie `enabled` to something that is off in production.
+
+When enabled, the helper logs one warning with `console.warn`, for example `agui-inspector is enabled and mounted at /agui-inspector; disable it outside development`. Express and Hono log it when you call `mountInspector`. The warning names the path as you passed it, without an outer `Router` or `basePath` prefix.
+
+Next.js logs it once, when the route serves its first request, and names the route's path as Next.js reports it, without a `basePath`. Next.js loads a route file on its first request, and only a request tells the helper where the route lives. A Next.js development server can log it more than once, because it loads the route file again after a change.
+
+### JavaScript routes
+
+With the default path the helpers add:
+
+| Route | Response |
+| --- | --- |
+| `GET /agui-inspector` | A 307 redirect to `agui-inspector/index.html` that keeps the query string. The `Location` is relative, so it holds under any outer prefix, such as `/api`. |
+| `GET /agui-inspector/index.html` | The inspector page. |
+| `GET /agui-inspector/` | The inspector page, where your framework passes the slash form through. |
+| `GET /agui-inspector/config.json` | The version 0 configuration built from `agents`, `theme` and `brand`: `{"version": 0, "agents": [...], "theme": {...}, "brand": {...}}`. Fields you leave out are left out, and so are `theme` and `brand` when you pass none. |
+| `GET /agui-inspector/<file>` | A packaged file, including nested ones. Anything else under the path is a 404. |
+
+The page's scripts, styles and `config.json` are relative to its own address, so it must load from a URL inside the mount. The helpers redirect to `index.html`, not to the slash form, because Next.js redirects `/agui-inspector/` back to `/agui-inspector` by default and a redirect to the slash form would loop.
+
+Express and Hono answer other methods with 405 and `Allow: GET, HEAD`. `HEAD` gets the headers of `GET` and no body. The helpers add no session endpoints, no cookie, no storage and no proxy for the agent. The page calls your agent URL directly.
+
+Every response carries `Content-Security-Policy: script-src 'self'; object-src 'none'; base-uri 'none'`, the same policy as the page's own `<meta>` element, and the 307, 404 and 405 responses do too. The helpers serve only files from the package's `dist` directory. They answer `..`, encoded `..`, backslashes and null characters in a path with 404.
+
+### JavaScript authentication
+
+The helpers add no authentication. Whatever guards the rest of your application also guards the inspector, because the page and its files come from your routes. The page calls relative agent URLs on the same origin, so the browser sends the credentials it already has for your site.
+
+Where the guard goes depends on the framework:
+
+- Express: register the guard with `app.use` before you call `mountInspector`. A guard registered after it never runs for the inspector routes, because the inspector answers first.
+- Hono: register the middleware before you call `mountInspector`, for example `app.use('*', guard)`. A middleware registered after it does not run for those routes.
+- Next.js: guard with the Next.js middleware (`middleware.ts`, named `proxy.ts` from Next.js 16), with a matcher that covers the path, or check the request inside the route file. A reverse proxy in front of the path works for all three.
+
+The guard must accept what a browser sends when it opens a page, as the [Python section](#authentication) explains: cookies and saved HTTP Basic credentials, but no custom header. Your agent routes behind that guard can still require a bearer token, which you type in the page's Token field. See [the token](./runs.mdx#the-token).
+
+### Trying the JavaScript helpers from a checkout
+
+Until 0.2.0 is released, build the package yourself. You need git and Node.js 24 or newer:
+
+```sh
+git clone https://github.com/dogganidhal/agui-inspector.git
+cd agui-inspector
+npm ci --ignore-scripts
+npm run build
+npm pack --workspace packages/inspector
+```
+
+`npm run build` writes the page to `packages/inspector/dist` and the helpers to `packages/inspector/lib`. `npm pack` writes `agui-inspector-<version>.tgz` in the current directory. In your project, install that file with `npm install /path/to/agui-inspector-<version>.tgz`.
+
 ## Serving the assets from another server
 
-Any static file server can host the same inspector. The npm package exports `staticAssetsPath` from [`static-path.js`](https://github.com/dogganidhal/agui-inspector/blob/main/packages/inspector/src/static-path.js). Serve the directory it points at, put a `config.json` next to its `index.html`, and open the page. The npm package has no CLI and no server helper. Install it with `npm install agui-inspector`. See also [Host the static page](./hosted.mdx).
+Any static file server can host the same inspector. The npm package exports `staticAssetsPath` from [`static-path.js`](https://github.com/dogganidhal/agui-inspector/blob/main/packages/inspector/src/static-path.js). Serve the directory it points at, put a `config.json` next to its `index.html`, and open the page. For Express, Hono and Next.js, use the [JavaScript helpers](#javascript-servers) instead. The npm package has no CLI. Install it with `npm install agui-inspector`. See also [Host the static page](./hosted.mdx).
 
 ## Working from a source checkout
 

@@ -18,11 +18,11 @@ Version 0.1.0 (the minimum viable product) is implemented on `main`. The public 
 | Embedded in Starlette or FastAPI, through `mount_inspector` | 0.1.0 on PyPI: `pip install "agui-inspector[embedded]"` |
 | Static assets from the npm package's `staticAssetsPath`, served by any other server | 0.1.0 on npm: `npm install agui-inspector` |
 | CLI: a local command that serves the page and proxies to a target | Planned for [0.2.0](https://github.com/dogganidhal/agui-inspector/blob/main/ROADMAP.md#020) |
-| JS helpers: Express, Hono and Next.js route-handler integrations | Planned for [0.2.0](https://github.com/dogganidhal/agui-inspector/blob/main/ROADMAP.md#020) |
+| Embedded in Express, Hono or Next.js, through `agui-inspector/express`, `agui-inspector/hono` and `agui-inspector/next` | In 0.2.0, not released yet. See [Embed in your server](./embedding.mdx#javascript-servers) |
 | In-app: a custom element that watches an `AbstractAgent` your application already runs | Not planned. See the [roadmap decisions](https://github.com/dogganidhal/agui-inspector/blob/main/ROADMAP.md#decisions) |
 
-Python is the first language with an embedded helper, not the only one planned. Until the JavaScript helpers ship, a
-server in any language can use the hosted page or serve the static assets.
+Python has had an embedded helper since 0.1.0. The JavaScript helpers arrive with 0.2.0. A server in any other language
+can use the hosted page or serve the static assets.
 
 ## Release status
 

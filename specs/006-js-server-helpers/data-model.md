@@ -11,6 +11,7 @@ files that already exist. This page lists the shapes and the rules that tests ch
 | `enabled` | boolean | no, default `false` | Only `true` mounts. Any other value, a string included, is a disabled helper. |
 | `path` | string | no, default `/agui-inspector` | Starts with `/` and is not `/` alone. Trailing `/` is dropped. Express and Hono only. |
 | `theme` | `{ light?, dark? }` | no | Each map goes from a `--agui-*` name to a CSS value. Passed through unchecked. |
+| `brand` | `{ name?, logo?, logoDark? }` | no | The adopter's name and logos, added by issue #73 to the Python helper as `Brand`. Passed through unchecked. The helper serves no logo file. |
 | `assetsDir` | string | no, internal | The directory with the built page. Default `staticAssetsPath`. Not in the declarations. |
 
 Checks run only when `enabled` is `true`, in this order: `path`, then `agents`, then that the page exists in the files
@@ -34,12 +35,13 @@ The page validates `capabilities` and `preset`. The helper copies what it gets.
 The version 0 format of the configuration file, with no new field:
 
 ```json
-{ "version": 0, "agents": [ { "id": "support", "url": "/agents/support/stream" } ], "theme": { "light": { "--agui-accent": "#2563eb" } } }
+{ "version": 0, "agents": [ { "id": "support", "url": "/agents/support/stream" } ], "theme": { "light": { "--agui-accent": "#2563eb" } }, "brand": { "name": "Acme Console" } }
 ```
 
 It is built once, when the handler is created, with `JSON.stringify`. A field with the value `undefined` is left out,
-which gives the same file as the Python helper (a `None` field is left out too). `theme` is present only when given. The
-key order is `version`, `agents`, `theme`.
+which gives the same file as the Python helper (a `None` field is left out too). `theme` and `brand` are present only when
+given, and `brand: {}` is written as an empty object, as `Brand()` is. The key order is `version`, `agents`, `theme`,
+`brand`.
 
 ## Mount
 
@@ -66,5 +68,5 @@ key order is `version`, `agents`, `theme`.
 Every row carries `Content-Security-Policy: script-src 'self'; object-src 'none'; base-uri 'none'`. `HEAD` gets the
 headers of `GET`, including `Content-Length`, and no body. An `asset` is unsafe when a segment is empty, `.` or `..`, or
 contains `\` or a null character. The resolved file must also lie inside the files directory. A directory is not found.
-Content types: `html`, `js`, `mjs`, `css`, `json`, `map`, `svg`, `png`, `ico`, `woff2` and `txt`; any other extension is
+Content types: `html`, `js`, `css` and `json`, which is what the page is made of; any other extension is
 `application/octet-stream`.

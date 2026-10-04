@@ -93,7 +93,7 @@ Run them from the repository root.
 | `npm ci --ignore-scripts` | Installs exactly the versions in `package-lock.json`. |
 | `npm run typecheck` | Strict type check of the tooling and of `packages/inspector`, sources and tests. |
 | `npm run test:unit` | Compiles `*.test.ts(x)` with esbuild into `.build/tests` and runs them with `node --test`. Add paths (`-- packages/inspector/tests/foundation`) to run only those tests. If it finds no tests, it fails. |
-| `npm run build` | Writes `packages/inspector/dist` (`index.html`, `app.js`, `app.css`). `-- --outdir <dir>` builds elsewhere. |
+| `npm run build` | Writes `packages/inspector/dist` (`index.html`, `app.js`, `app.css`) and compiles the Express, Hono and Next.js helpers to `packages/inspector/lib`. `-- --outdir <dir>` builds the page elsewhere and skips `lib`. |
 | `npm run check:bundle` | Checks `packages/inspector/dist` against the [bundle budget](#bundle-budget). Run `npm run build` first. |
 | `npm run check:bundle:renderer` | Builds the scaffold plus the pinned A2UI v0.9 renderer into `.build/representative` and reports how much budget is left. |
 | `npm run test:benchmark` | Checks the 5,000-frame fixture and schedule and reports responsiveness as pending. `-- --strict` fails while it is pending. `-- --measure` runs the browser benchmark. |
@@ -121,7 +121,10 @@ end-to-end test can check that the inspector keeps target-sent bytes unchanged (
 syntax.
 
 `packages/inspector/src/static-path.js` exports `staticAssetsPath`, the absolute path of `dist`, so another server can
-serve that directory next to a configuration file. The npm package ships no CLI and no server helper.
+serve that directory next to a configuration file. The same package ships the Express, Hono and Next.js helpers, written
+in `packages/inspector/src/server` and compiled to `packages/inspector/lib` by the build (Node does not strip types from
+installed packages). They never enter the browser bundle. The npm package ships no CLI. See
+[Embed in your server](./embedding.mdx#javascript-servers).
 
 ## Bundle budget
 

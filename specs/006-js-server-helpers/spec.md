@@ -20,10 +20,14 @@ constitution and the code, and took the recommended option.
 
 ### Session 2026-10-04
 
+(Added during implementation: the branding of issue #73 merged into main, and `mount_inspector` gained `brand`. The
+helpers take `brand` too, so `config.json` is equal for equal input. No other answer below changed.)
+
 - Q: Next.js has no mount step, so when does the helper log its warning, and does it take a `path` argument? → A: It
   takes no `path`, because the route file's location sets the path. It logs the warning once per server process, when the
-  route first serves a request, and names the path of that request (a `basePath` included). Logging at module load would
-  also fire during `next build` and could not name the real path.
+  route first serves a request, and names the route's path as the request reports it. Next.js strips its `basePath` from
+  the URL it gives a route handler (checked on 16.3.8), so the name has no `basePath`. Logging at module load would also
+  fire during `next build` and could not name the real path.
 - Q: Where does a request for the bare mount path go, given that Next.js redirects `/agui-inspector/` back to
   `/agui-inspector` by default? → A: One rule for all three helpers: a 307 redirect, with the query kept, to the page's
   `index.html` under the mount path. The slash form also serves the page when the host lets it through. Redirecting to
@@ -111,7 +115,7 @@ in the default Next.js configuration and in a configuration that sets `basePath`
 3. **Given** a Next.js application with a `basePath`, **When** a browser opens the page under that base path, **Then** it
    loads the same way.
 4. **Given** the helper is enabled, **When** the route serves its first request, **Then** one warning is logged that
-   names the path of that request, and no further warning follows.
+   names the route's path, and no further warning follows.
 
 ---
 
@@ -199,10 +203,10 @@ documentation page.
 - **FR-001**: The `agui-inspector` npm package MUST provide one helper each for Express, Hono and Next.js route
   handlers. Each is imported from its own entry of the package, so a host loads only the helper for its own framework.
 - **FR-002**: Each helper MUST follow the contract of the Python `mount_inspector`: the same arguments (`agents`,
-  `enabled`, `path`, `theme`) with the same meaning, the default path `/agui-inspector`, the same path rules, and the same
+  `enabled`, `path`, `theme`, `brand`) with the same meaning, the default path `/agui-inspector`, the same path rules, and the same
   `config.json` content for the same arguments. Express and Hono mount on the host's application object. Express also
   accepts a `Router`, and the path is then relative to it. Next.js has no such object, so the helper takes `agents`,
-  `enabled` and `theme`, with no `path` because the route file's location sets it, and returns the handlers for that
+  `enabled`, `theme` and `brand`, with no `path` because the route file's location sets it, and returns the handlers for that
   route file.
 - **FR-003**: A helper MUST mount nothing unless `enabled` is true. The default is false. A disabled helper MUST add no
   route, log nothing, read no packaged file and need no framework API. In Next.js, where the route file exists anyway, a
@@ -210,15 +214,16 @@ documentation page.
 - **FR-004**: An enabled helper MUST log one warning when it mounts. The text MUST be
   `agui-inspector is enabled and mounted at <path>; disable it outside development`, with the mount path, as in the Python
   helper. In Next.js there is no mount step, so the warning is logged once per server process, when the route first
-  serves a request, with the path of that request.
+  serves a request, with the route's path as Next.js reports it (without its `basePath`).
 - **FR-005**: An enabled helper MUST serve, under its mount path: the page, `config.json`, and every packaged file
   including nested ones. A request for anything else under the path MUST be not found. A request for the bare path MUST
   get a 307 redirect, with the query kept, to the page's `index.html` under the mount path, so that the page's relative
   files resolve under the mount path. The slash form of the path MUST serve the page when the host lets the request
   through.
 - **FR-006**: `config.json` MUST be the version 0 configuration built from the arguments: `version`, `agents` with only
-  the fields that were given (`id`, `url`, `name`, `capabilities`, `preset`), and `theme` only when one was given.
-  Values MUST reach the file unchanged. The helpers add no field of their own.
+  the fields that were given (`id`, `url`, `name`, `capabilities`, `preset`), and `theme` and `brand` only when one was given.
+  Values MUST reach the file unchanged, and `brand` is written as `{ name, logo, logoDark }` with only the fields that
+  were given. The helpers add no field of their own.
 - **FR-007**: `agents` MUST have a nonempty unique `id` and a nonempty `url` for each entry. `path` MUST start with `/`
   and MUST NOT be `/` alone. A violation MUST stop startup with a message that names it, and nothing is mounted.
 - **FR-008**: Every response of the helper, redirects and errors included, MUST carry
@@ -248,8 +253,9 @@ documentation page.
   minified, 600,000 bytes gzipped) and the other modes MUST NOT change. The helper code MUST NOT import React, and MUST
   pass the repository's strict type check.
 - **FR-016**: Each helper entry MUST ship as an ES module with type definitions, so a TypeScript project checks the
-  arguments. There is no separate CommonJS build. The documentation MUST state Node.js 22.12 or newer as the minimum for
-  the helpers and show how a CommonJS host loads them.
+  arguments. There is no separate CommonJS build. The package MUST also map each helper's types for projects on the
+  older `node` module resolution, which cannot read `exports`. The documentation MUST state Node.js 22.12 or newer as
+  the minimum for the helpers and show how a CommonJS host loads them.
 - **FR-017**: A helper MUST NOT enable anything the page does not already allow. It adds no field to the configuration
   format, and the page keeps its own validation of `theme` and of the rest of the file.
 - **FR-018**: Tests for each framework MUST cover mounting, the disabled case, the startup warning and the content
@@ -263,7 +269,7 @@ documentation page.
 
 ### Key Entities
 
-- **Helper arguments**: `agents`, `enabled`, `path` and `theme`, as in the Python helper. The same set for Express and
+- **Helper arguments**: `agents`, `enabled`, `path`, `theme` and `brand`, as in the Python helper. The same set for Express and
   Hono. Next.js has no `path`, because the route file fixes it.
 - **Agent entry**: `id` and `url` are required. `name`, `capabilities` and `preset` are optional. It means what it means
   in the configuration file.
@@ -300,9 +306,9 @@ documentation page.
 
 ## Assumptions
 
-- The Python helper is the contract. Its arguments today are `agents`, `enabled`, `path` and `theme`. If another field,
-  such as the branding of issue #73, reaches the Python helper before this feature merges, the JavaScript helpers carry
-  it in the same way.
+- The Python helper is the contract. Its arguments are `agents`, `enabled`, `path`, `theme` and, since the branding of
+  issue #73 merged on 2026-10-04, `brand`. The JavaScript helpers take `brand` as `{ name, logo, logoDark }` and write it
+  as the Python helper does. A field that reaches the Python helper later is carried the same way.
 - The configuration format stays at version 0 and gains no field here.
 - Only Node.js servers are in scope. Edge runtimes and servers without file system access are not. Hono applications
   that run on Node.js are in scope, and the same code works on other runtimes that have a file system.

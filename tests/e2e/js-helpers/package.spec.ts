@@ -11,6 +11,7 @@ const packageDir = path.join(root, 'packages', 'inspector');
 const manifest = JSON.parse(readFileSync(path.join(packageDir, 'package.json'), 'utf8')) as {
   exports: Record<string, unknown>;
   dependencies: Record<string, string>;
+  typesVersions?: unknown;
   peerDependencies?: unknown;
   optionalDependencies?: unknown;
 };
@@ -28,6 +29,12 @@ test('exports lists the static path and the three helpers, each with types and a
   for (const name of ['express', 'hono', 'next']) {
     for (const extension of ['js', 'd.ts']) expect(readdirSync(path.join(packageDir, 'lib', 'server'))).toContain(`${name}.${extension}`);
   }
+});
+
+test('typesVersions points each helper at the same declarations as exports, for TypeScript projects on the older node resolution', () => {
+  expect(manifest.typesVersions).toEqual({
+    '*': { express: ['lib/server/express.d.ts'], hono: ['lib/server/hono.d.ts'], next: ['lib/server/next.d.ts'] },
+  });
 });
 
 test('the manifest adds no web framework and no peer dependency', () => {
@@ -80,11 +87,12 @@ import { inspectorRoute } from 'agui-inspector/next';
 
 const agents = ${agents};
 const theme = { light: { '--agui-accent': '#2563eb' } };
-mountExpress(express(), { agents, enabled: process.env.NODE_ENV !== 'production', path: '/tools/inspect', theme });
+const brand = { name: 'Acme Console', logo: '/static/acme.svg', logoDark: '/static/acme-dark.svg' };
+mountExpress(express(), { agents, enabled: process.env.NODE_ENV !== 'production', path: '/tools/inspect', theme, brand });
 mountExpress(express.Router(), { agents, enabled: true });
-mountHono(new Hono(), { agents, enabled: true, theme });
+mountHono(new Hono(), { agents, enabled: true, theme, brand });
 mountHono(new Hono().basePath('/api'), { agents, enabled: true });
-export const { GET, HEAD } = inspectorRoute({ agents, enabled: true, theme });
+export const { GET, HEAD } = inspectorRoute({ agents, enabled: true, theme, brand });
 `,
   );
   expect(good.status, good.stdout + good.stderr).toBe(0);

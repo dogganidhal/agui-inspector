@@ -2,16 +2,17 @@
 // it is; the Hono and Next.js hosts are Fetch-API code behind a `node:http` server (see hosts.ts). The agent is the
 // scripted reference agent on the same origin, so nothing outside the host is contacted.
 import { expect, test } from '@playwright/test';
-import { AGENT_REPLY, startHost, type HostKind, type HostOptions } from './hosts.ts';
+import { AGENT_REPLY, BRAND, startHost, type HostKind, type HostOptions } from './hosts.ts';
 
 const variants: Array<{ label: string; kind: HostKind; options: HostOptions; warningPath: (mount: string) => string }> = [
   { label: 'Express', kind: 'express', options: {}, warningPath: (mount) => mount },
   { label: 'Hono', kind: 'hono', options: {}, warningPath: (mount) => mount },
   // The warning names the path as it was passed to the helper, so a base path is not part of it.
   { label: 'Hono under /api', kind: 'hono', options: { basePath: '/api' }, warningPath: () => '/agui-inspector' },
-  // Next.js has no mount step: its warning names the path of the first request.
+  // Next.js has no mount step: its warning names the route's path as the first request reports it, and Next.js strips the
+  // `basePath` from the URL it gives a route handler.
   { label: 'Next.js', kind: 'next', options: {}, warningPath: (mount) => mount },
-  { label: 'Next.js with a basePath', kind: 'next', options: { basePath: '/tools' }, warningPath: (mount) => mount },
+  { label: 'Next.js with a basePath', kind: 'next', options: { basePath: '/tools' }, warningPath: () => '/agui-inspector' },
 ];
 
 for (const { label, kind, options, warningPath } of variants) {
@@ -29,6 +30,7 @@ for (const { label, kind, options, warningPath } of variants) {
 
       // The first configured agent is selected at the start, so its endpoint is the target.
       await expect(page.getByRole('textbox', { name: 'Endpoint URL' })).toHaveValue(host.agentUrl);
+      await expect(page.getByRole('heading', { name: BRAND.name, level: 1 }), 'the brand argument reached the top bar').toBeVisible();
       const box = page.getByRole('textbox', { name: 'Message' });
       await box.fill('hello');
       await box.press('Enter');
@@ -59,7 +61,7 @@ for (const { label, kind, options } of variants) {
       const config = await request.get(`${host.origin}${host.mount}/config.json`);
       expect(config.status()).toBe(200);
       expect(config.headers()['content-type']).toBe('application/json; charset=utf-8');
-      expect(await config.json()).toEqual({ version: 0, agents: [{ id: 'demo', url: host.agentUrl, name: 'Demo agent' }] });
+      expect(await config.json()).toEqual({ version: 0, agents: [{ id: 'demo', url: host.agentUrl, name: 'Demo agent' }], brand: BRAND });
       const redirect = await request.get(`${host.origin}${host.mount}?x=1`, { maxRedirects: 0 });
       expect(redirect.status()).toBe(307);
       expect(redirect.headers().location).toBe('agui-inspector/index.html?x=1');

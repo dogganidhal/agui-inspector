@@ -3,14 +3,17 @@
 // specs/006-js-server-helpers/contracts/public-api.md.
 import { resolveMount, warnMounted, type InspectorOptions } from './core.ts';
 
-export type { InspectorAgent, InspectorTheme } from './core.ts';
+export type { InspectorAgent, InspectorBrand, InspectorTheme } from './core.ts';
 
 /** Next.js has no `path` argument: the route file's location sets the path. */
 export type InspectorRouteOptions = Omit<InspectorOptions, 'path'>;
 
-/** What Next.js passes a route handler: `params` is a promise from Next.js 15 and a plain object before it. */
+/**
+ * What Next.js 15 and later passes a route handler: `params` is a promise. Next.js checks the type of this argument when
+ * it builds, so it is not a union. At run time a plain object, which earlier versions pass, works too.
+ */
 export interface InspectorRouteContext {
-  params: Promise<{ path?: string[] }> | { path?: string[] };
+  params: Promise<{ path?: string[] }>;
 }
 
 export type InspectorRouteHandler = (request: Request, context: InspectorRouteContext) => Promise<Response>;
@@ -22,7 +25,7 @@ export type InspectorRouteHandler = (request: Request, context: InspectorRouteCo
  *
  * Unless `options.enabled` is `true` the route answers 404 with no inspector content and logs nothing. Enabled, the first
  * request logs one warning that names the path, because Next.js loads a route module on its first request and only a
- * request tells the helper where the route lives (a `basePath` included).
+ * request tells the helper where the route lives. Next.js strips its `basePath` from `request.url`, so the name has none.
  */
 export function inspectorRoute(options: InspectorRouteOptions): { GET: InspectorRouteHandler; HEAD: InspectorRouteHandler } {
   const mounted = resolveMount(options);
@@ -32,7 +35,7 @@ export function inspectorRoute(options: InspectorRouteOptions): { GET: Inspector
   }
   let warned = false;
   const serve: InspectorRouteHandler = async (request, context) => {
-    const { path = [] } = (await context?.params) ?? {};
+    const { path = [] } = await context.params;
     if (!warned) {
       warned = true;
       warnMounted(mountOf(new URL(request.url).pathname, path.length));

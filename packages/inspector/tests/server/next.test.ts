@@ -5,20 +5,10 @@ import assert from 'node:assert/strict';
 import { chmodSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { mock, test } from 'node:test';
-import { inspectorRoute, type InspectorRouteHandler } from '../../src/server/next.ts';
-import { AGENTS, APP_JS, CHUNK_JS, INDEX, pageDirectory, POLICY, SECRET } from './fixtures.ts';
+import { inspectorRoute, type InspectorRouteContext, type InspectorRouteHandler } from '../../src/server/next.ts';
+import { AGENTS, APP_JS, CHUNK_JS, INDEX, pageDirectory, POLICY, SECRET, warnings } from './fixtures.ts';
 
 const assetsDir = pageDirectory();
-
-function warnings<T>(fn: () => T): { result: T; logged: string[] } {
-  const warn = mock.method(console, 'warn', () => undefined);
-  try {
-    const result = fn();
-    return { result, logged: warn.mock.calls.map((call) => String(call.arguments[0])) };
-  } finally {
-    warn.mock.restore();
-  }
-}
 
 const route = (options: Partial<Parameters<typeof inspectorRoute>[0]> = {}) => inspectorRoute({ agents: AGENTS, enabled: true, assetsDir, ...options });
 const request = (target: string, init?: RequestInit) => new Request(`http://host${target}`, init);
@@ -38,20 +28,16 @@ test('the page, its files and the configuration are served for the catch-all par
   assert.deepEqual(await config.json(), { version: 0, agents: AGENTS });
 });
 
-test('params may be a promise or a plain object, with path undefined, missing or empty', async () => {
+test('params may be a promise, as in Next.js 15 and later, or a plain object, as before, with path undefined, missing or empty', async () => {
   const { GET } = route();
   quiet(() => undefined);
-  for (const context of [
-    { params: Promise.resolve({ path: ['config.json'] }) },
-    { params: { path: ['config.json'] } },
-  ]) {
-    assert.equal((await GET(request('/agui-inspector/config.json'), context)).status, 200);
+  for (const context of [{ params: Promise.resolve({ path: ['config.json'] }) }, { params: { path: ['config.json'] } }]) {
+    assert.equal((await GET(request('/agui-inspector/config.json'), context as InspectorRouteContext)).status, 200);
   }
   for (const context of [{ params: Promise.resolve({}) }, { params: {} }, { params: { path: [] } }, { params: Promise.resolve({ path: undefined }) }]) {
-    const response = await GET(request('/agui-inspector/'), context);
+    const response = await GET(request('/agui-inspector/'), context as InspectorRouteContext);
     assert.equal(await response.text(), INDEX);
   }
-  assert.equal((await GET(request('/agui-inspector/'), undefined as never)).status, 200, 'a caller without a context is the mount itself');
 });
 
 test('the bare path redirects to index.html, which Next.js serves with its default trailing slash setting', async () => {
@@ -97,6 +83,16 @@ test('every response of the helper carries the policy: page, file, configuration
   }
 });
 
+test('the context type satisfies the check that `next build` generates for a catch-all route handler', () => {
+  // Next.js writes `RouteContext = { params: Promise<SegmentParams> }` into `.next/types` and requires the second
+  // argument of GET and HEAD to fit it. A union with a plain object does not, which failed `next build --webpack`.
+  type NextRouteContext = { params: Promise<{ [key: string]: string | string[] | undefined }> };
+  type Second = Parameters<InspectorRouteHandler>[1];
+  const fits: Second extends NextRouteContext ? true : false = true;
+  const first: Parameters<InspectorRouteHandler>[0] extends Request ? true : false = true;
+  assert.deepEqual([fits, first], [true, true]);
+});
+
 test('the handlers fit what a Next.js route file exports', () => {
   const { GET, HEAD } = route();
   // Next.js reads `GET` and `HEAD` as named exports of the route module, so `export const { GET, HEAD } = ...` is the use.
@@ -138,7 +134,7 @@ test('creating an enabled route logs nothing, and the first request logs one war
   }
 });
 
-test('the warning names the path of the route whatever the first request is, a basePath included', async () => {
+test('the warning names the path of the route whatever the first request is, with or without a prefix in the URL', async () => {
   for (const [target, segments, mount] of [
     ['/agui-inspector', [], '/agui-inspector'],
     ['/agui-inspector/', [], '/agui-inspector'],

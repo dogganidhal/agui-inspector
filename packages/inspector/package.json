@@ -32,6 +32,19 @@
       "default": "./lib/server/next.js"
     }
   },
+  "typesVersions": {
+    "*": {
+      "express": [
+        "lib/server/express.d.ts"
+      ],
+      "hono": [
+        "lib/server/hono.d.ts"
+      ],
+      "next": [
+        "lib/server/next.d.ts"
+      ]
+    }
+  },
   "files": [
     "dist",
     "lib",
