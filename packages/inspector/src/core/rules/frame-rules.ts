@@ -25,10 +25,9 @@ const RETIRED_THINKING: Readonly<Record<string, string>> = {
   THINKING_TEXT_MESSAGE_CONTENT: 'REASONING_MESSAGE_CONTENT',
   THINKING_TEXT_MESSAGE_END: 'REASONING_MESSAGE_END',
 };
-export const RETIRED_THINKING_TYPES: ReadonlySet<string> = new Set(Object.keys(RETIRED_THINKING));
 
 /** Every reasoning event of the baseline, and the retired types that the client reads as them. Fixed lists, so a hostile type name never reaches a message. */
-const REASONING_TYPES: ReadonlySet<string> = new Set([...Object.values(EventType).filter((type) => type.startsWith('REASONING_')), ...RETIRED_THINKING_TYPES]);
+const REASONING_TYPES: ReadonlySet<string> = new Set([...Object.values(EventType).filter((type) => type.startsWith('REASONING_')), ...Object.keys(RETIRED_THINKING)]);
 
 /**
  * The capability rules that a frame breaks. A rule fires only when the agent declares its flag as exactly `false`:
@@ -160,25 +159,11 @@ export function upgradeFrame(parsed: unknown): Upgraded {
 
   const upgradeInput = (input: Json, path: string): Json => {
     let next = setNull(input, 'forwardedProps', `${path}.forwardedProps`);
-    if (Array.isArray(next.tools)) {
-      let changed = false;
-      const tools = next.tools.map((tool, index) => {
-        if (!isObject(tool)) return tool;
-        const upgraded = setNull(tool, 'parameters', `${path}.tools[${index}].parameters`);
-        if (upgraded !== tool) changed = true;
-        return upgraded;
-      });
-      if (changed) next = { ...next, tools };
-    }
-    if (Array.isArray(next.resume)) {
-      let changed = false;
-      const resume = next.resume.map((entry, index) => {
-        if (!isObject(entry)) return entry;
-        const upgraded = setNull(entry, 'payload', `${path}.resume[${index}].payload`);
-        if (upgraded !== entry) changed = true;
-        return upgraded;
-      });
-      if (changed) next = { ...next, resume };
+    for (const [field, key] of [['tools', 'parameters'], ['resume', 'payload']] as const) {
+      const list = next[field];
+      if (!Array.isArray(list)) continue;
+      const upgraded = list.map((item, index) => (isObject(item) ? setNull(item, key, `${path}.${field}[${index}].${key}`) : item));
+      if (upgraded.some((item, index) => item !== list[index])) next = { ...next, [field]: upgraded };
     }
     return upgradeMessages(next, path);
   };

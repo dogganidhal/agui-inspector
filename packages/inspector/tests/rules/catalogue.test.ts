@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { ruleFixtures } from '../../../../examples/reference-agent/rule-fixtures.ts';
-import { RULE_ID_PATTERN, RULES, checkRuleId, ruleOf } from '../../src/core/rules/catalogue.ts';
+import { RULE_ID_PATTERN, RULES, checkRuleId } from '../../src/core/rules/catalogue.ts';
 
 const KINDS = ['json', 'schema', 'sequence', 'terminal', 'transport', 'capture', 'compat', 'capability'];
 
@@ -38,11 +38,6 @@ test('checkRuleId accepts each catalogue id with its family and rejects what the
   assert.match(checkRuleId('json', 'json.invalid.twice')!, /<family>\.<problem>/);
   assert.match(checkRuleId('schema', 'json.invalid')!, /family must match kind/);
   assert.match(checkRuleId('projection', 'json.invalid')!, /family must match kind/);
-});
-
-test('ruleOf finds a catalogue rule and says nothing about an id from a newer version', () => {
-  assert.equal(ruleOf('sequence.first-event')?.family, 'sequence');
-  assert.equal(ruleOf('sequence.from-the-future'), undefined);
 });
 
 const docs = (page: string) => readFileSync(path.join(process.cwd(), 'website', 'content', 'docs', page), 'utf8');

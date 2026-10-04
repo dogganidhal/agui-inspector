@@ -74,11 +74,6 @@ export const RULES = [
 
 export type CatalogueRuleId = (typeof RULES)[number]['id'];
 
-const BY_ID: ReadonlyMap<string, RuleDefinition> = new Map(RULES.map((rule) => [rule.id, rule]));
-
-/** The rule this version knows by that id, if any. An id from a newer version is well formed and unknown. */
-export const ruleOf = (id: string): RuleDefinition | undefined => BY_ID.get(id);
-
 /** The kind of every finding of the rule: its family. */
 export const kindOf = (rule: CatalogueRuleId): Family => rule.slice(0, rule.indexOf('.')) as Family;
 
