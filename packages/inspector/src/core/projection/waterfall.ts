@@ -42,7 +42,7 @@ export interface WaterfallRow {
   readonly frameCount: number;
   /** Text details that depend on the kind. */
   readonly facts: readonly { readonly name: string; readonly value: string }[];
-  /** In start order. */
+  /** In arrival order of their first frame, which is start order. */
   readonly children: readonly WaterfallRow[];
 }
 
@@ -120,8 +120,6 @@ export function buildWaterfall(session: InspectionSession, threadId?: string): W
         const frame = frameById.get(id);
         return frame !== undefined && frame.exchangeId === run.exchangeId ? [frame] : [];
       });
-    const firstIndex = (row: WaterfallRow): number => (row.firstFrame === undefined ? 0 : (frameById.get(row.firstFrame)?.index ?? 0));
-    const sorted = (rows: WaterfallRow[]): WaterfallRow[] => rows.sort((a, b) => (a.startMs ?? 0) - (b.startMs ?? 0) || firstIndex(a) - firstIndex(b));
 
     const row = (entry: { id: string }, kind: RowKind, label: string, subject: string, frames: readonly RawFrame[], rest: Partial<Mutable>): WaterfallRow => ({
       id: entry.id,
@@ -198,7 +196,7 @@ export function buildWaterfall(session: InspectionSession, threadId?: string): W
         // Subagent runs, activities, custom, raw and encrypted entries, snapshots and issues are not rows here.
         if (made !== undefined) rows.push(made);
       }
-      return sorted(rows);
+      return rows;
     }
 
     const frames = own(run);

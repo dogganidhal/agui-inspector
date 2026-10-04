@@ -18,8 +18,7 @@ export interface DelegationOptions {
   readonly subagents?: boolean;
 }
 
-/** The arrival offset of the last event, which is `RUN_FINISHED`. */
-export const DELEGATION_END_MS = 1800;
+const DELEGATION_END_MS = 1800;
 
 /**
  * The run, in arrival order.

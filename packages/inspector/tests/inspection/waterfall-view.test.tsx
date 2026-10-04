@@ -101,7 +101,7 @@ test('a closed row hides its children, and the selected row is marked and is the
 
 test('a row of one frame still has a bar and its duration as text', () => {
   const h = harness();
-  playRun(h, 'ex1', timed([RUN, { type: 'STEP_STARTED', stepName: 'blink' }, { type: 'STEP_FINISHED', stepName: 'blink' }, DONE], 0).map((entry) => ({ ...entry, atMs: entry.atMs === 0 ? 5 : 5 })), { runId: 'r1' });
+  playRun(h, 'ex1', [RUN, { type: 'STEP_STARTED', stepName: 'blink' }, { type: 'STEP_FINISHED', stepName: 'blink' }, DONE].map((event) => ({ atMs: 5, event })), { runId: 'r1' });
   const blink = items(html(h.session())).find(([, inner]) => inner.includes('>blink<'));
   assert.ok(blink);
   assert.match(blink[1], /data-part="span"/);

@@ -4,7 +4,7 @@
 //
 // The rows are an ARIA tree with one tab stop (a roving tabindex). Bars and axes are decoration: the label of each row
 // says everything they show.
-import { Fragment, memo, useCallback, useEffect, useMemo, useRef, type KeyboardEvent, type ReactElement, type ReactNode } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, type KeyboardEvent, type ReactElement, type ReactNode } from 'react';
 import type { EvidenceTarget, FrameId, InspectionSession, RawFrame } from '../../contracts.ts';
 import { buildWaterfall, type RowKind, type WaterfallRow, type WaterfallRun } from '../../core/projection/waterfall.ts';
 import { FamilyDot, Icon, Tag } from '../theme/index.ts';
@@ -129,7 +129,7 @@ interface RowProps {
   onToggle(row: WaterfallRow, open: boolean): void;
 }
 
-const Row = memo(function Row({ visible, selected, tabbable, setRef, onSelect, onToggle }: RowProps): ReactElement {
+function Row({ visible, selected, tabbable, setRef, onSelect, onToggle }: RowProps): ReactElement {
   const { row, run, depth, expandable, expanded, posInSet, setSize } = visible;
   const { family, hollow } = FAMILY[row.kind];
   const span = row.endMs !== undefined ? spanText(row, run) : undefined;
@@ -203,7 +203,7 @@ const Row = memo(function Row({ visible, selected, tabbable, setRef, onSelect, o
       </span>
     </div>
   );
-});
+}
 
 /** The ticks of one run's axis. Decoration: the rows carry every time as text. */
 function Axis({ run }: { run: WaterfallRun }): ReactElement {

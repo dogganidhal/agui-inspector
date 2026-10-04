@@ -1,11 +1,11 @@
 // Scaffolding for the waterfall tests: scripted runs played through the real frame reader and session store of
 // the conversation harness, so rows are checked against genuine recorded evidence. Not a test file.
-import { delegationRun, DELEGATION_END_MS, type DelegationOptions, type TimedEvent } from '../../../../examples/reference-agent/delegation-run.ts';
+import { delegationRun, type DelegationOptions, type TimedEvent } from '../../../../examples/reference-agent/delegation-run.ts';
 import type { InspectionSession, TransportState } from '../../src/contracts.ts';
 import type { Waterfall, WaterfallRow } from '../../src/core/projection/waterfall.ts';
 import { harness, type Harness, type ScriptedExchange } from '../conversation/support.ts';
 
-export { delegationRun, DELEGATION_END_MS, type TimedEvent };
+export { delegationRun, type TimedEvent };
 
 export interface PlayOptions extends ScriptedExchange {
   readonly threadId?: string;

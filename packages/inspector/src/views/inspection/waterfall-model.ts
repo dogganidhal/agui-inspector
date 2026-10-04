@@ -118,8 +118,9 @@ export function spanText(row: WaterfallRow, run: WaterfallRun): string | undefin
 export function rowLabel({ row, run, depth, expandable, expanded }: VisibleRow): string {
   const parts: string[] = [KIND_WORD[row.kind], row.label, `level ${depth + 1}`];
   if (row.startMs !== undefined) parts.push(`started ${formatOffset(row.startMs)}`);
+  const span = spanText(row, run);
   if (row.endMs !== undefined && row.startMs !== undefined) parts.push(`ended ${formatOffset(row.endMs)}`, formatDuration(row.endMs - row.startMs));
-  else if (row.open) parts.push(openWord(run), ...(spanText(row, run) !== undefined ? [spanText(row, run) as string] : []));
+  else if (row.open) parts.push(openWord(run), ...(span === undefined ? [] : [span]));
   for (const tag of row.tags) parts.push(tag.text);
   if (expandable) parts.push(expanded ? 'open' : 'closed');
   return parts.join(', ');
