@@ -13,6 +13,7 @@ import { defaultProfile, loadProfile, type StorageLike } from '../core/profiles/
 import { createRuntime, guardedFetchText, resolveTarget, type Runtime } from '../core/runtime/index.ts';
 import { createSessionStore } from '../core/store/index.ts';
 import { DEFAULT_CONFIG_FILE, EMBEDDED_DEFAULTS, HOSTING_CONFIG_FILE, installPolicy, parseHostingConfig, policyFor, type HostingConfig } from './security.ts';
+import { loadThemeChoice } from './theme-choice.ts';
 
 export interface StartupEnvironment {
   readonly document: Document;
@@ -21,7 +22,7 @@ export interface StartupEnvironment {
   /** Where the page was loaded from; `hosting-config.json` and `config.json` sit beside it. */
   readonly baseUrl: string;
   readonly fetch: typeof globalThis.fetch;
-  /** Browser storage for the saved profile, when the browser lets the page use it. */
+  /** Browser storage for the saved profile and the theme choice, when the browser lets the page use it. */
   readonly storage?: StorageLike;
   /**
    * Which file the initial agent configuration is read from, instead of the deployment's `config` or
@@ -80,6 +81,10 @@ async function loadHosting(env: StartupEnvironment): Promise<Result<HostingConfi
 const NOT_FOUND = /: 404\b/;
 
 export async function startPage(env: StartupEnvironment): Promise<StartResult> {
+  // First, before any request, so the first paint already has the theme the user chose.
+  const choice = env.storage === undefined ? undefined : loadThemeChoice(env.storage);
+  if (choice !== undefined) env.document.documentElement.dataset.theme = choice;
+
   const hosting = await loadHosting(env);
   if (!hosting.ok) return hosting;
 

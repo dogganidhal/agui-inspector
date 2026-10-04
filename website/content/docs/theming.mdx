@@ -44,6 +44,8 @@ This stylesheet override works in light and dark mode as written:
 
 Dark values apply when the root element has `data-theme="dark"`. They also apply when the system prefers a dark color scheme and the root element does not have `data-theme="light"`. The theme switch in the top bar sets `data-theme`.
 
+The switch remembers your choice in this browser. It keeps the word `light` or `dark` in browser storage under `agui-inspector.theme`, and the page applies it before it first appears, so a reload shows the same theme. Until you use the switch, the page follows the system preference. A missing, unreadable or other stored value counts as no choice, and storage that fails only means the choice is not remembered.
+
 Only `--agui-bg` and `--agui-fg` change between the modes, plus the internal lightness of the status and event-family colors. The inspector sets these two again in both dark rules:
 
 ```css

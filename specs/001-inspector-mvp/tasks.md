@@ -517,3 +517,14 @@ auth/config/storage/header/request-recording surface. No new credential-persiste
 **W3 count:** 3 PR slices, 11 tasks (T055-T065). Combined history: 16 slices, 65 tasks.
 Coverage is updated above; the maintainer's physical M2 SC-009 run and manual all-mode smoke are
 release verification, not a fourth W3 slice. Publishing still needs explicit authorization.
+
+## Follow-up fixes
+
+### Remember the light or dark choice (2026-10-04, issue #101)
+
+**Refs:** FR-041; clarification 2026-10-04; US2.5. **Owned paths:** `packages/inspector/src/app/theme-choice.ts`,
+`packages/inspector/src/app/startup.ts`, `packages/inspector/src/app/index.tsx`,
+`packages/inspector/tests/hosted/theme-choice.test.ts`, `tests/e2e/hosted/app.spec.ts`,
+`website/content/docs/theming.mdx`, `website/content/docs/status.mdx`.
+
+- [x] T066 [US2] Remember the light or dark choice across reloads: store only `light` or `dark` under one browser-storage key through the storage object startup already receives, apply it to the root element at the start of `startPage` before any request, start the theme switch from the root's `data-theme` with the system preference as the fallback, ignore missing, invalid or unreadable values, and never let failing storage break the page. Add unit tests for read, write, invalid and throwing storage and for the order at startup, an end-to-end switch, reload and same-theme test, a patch changeset for both packages, and the docs sentence in theming and status.

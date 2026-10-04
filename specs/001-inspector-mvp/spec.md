@@ -46,6 +46,14 @@ their priorities set implementation order, not optional release scope.
   bundled third-party license/NOTICE obligations in both distributions, and `agui-inspector` on
   npm and PyPI (both unregistered on 2026-10-02). Publishing remains unauthorized.
 
+### Session 2026-10-04
+
+- Q: Is the light or dark choice kept across reloads? A: Yes (issue #101). The top-bar switch
+  remembers an explicit choice in browser storage as the word `light` or `dark`, under one key, and the
+  page applies it before the first paint. Without a stored choice the page follows the system
+  preference. A missing, unreadable or other stored value is ignored, and storage that fails never
+  breaks the page. It is the only value besides the profile that the page writes to browser storage.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Inspect a live run (Priority: P1)
@@ -404,8 +412,12 @@ Its section 10 supplies the release baseline; the recorded clarifications resolv
   be rejected with a visible configuration warning, not a fatal error. Values MUST NOT start a
   request or escape their declaration: at minimum reject `url(`, `image-set(` (case-insensitive,
   including whitespace before `(`), `@`, `;`, `{`, `}` and backslash escapes. The CSP MUST remain
-  unchanged. Generic derived tokens MUST NOT collide with host CSS.
-  (Source: clarification 2026-10-02; [UI design](design/design.md).)
+  unchanged. Generic derived tokens MUST NOT collide with host CSS. The theme switch MUST remember an
+  explicit choice across reloads in every MVP mode: it stores only `light` or `dark` in browser storage under one
+  key and sets it on the root element before the first paint. Without a stored choice the page MUST follow the
+  system preference, a stored value that is neither is ignored, and unavailable or failing storage MUST NOT
+  break the page. The choice is the only value besides the profile that is written to browser storage.
+  (Sources: clarification 2026-10-02; clarification 2026-10-04, issue #101; [UI design](design/design.md).)
 
 ### Key Entities *(include if feature involves data)*
 
@@ -527,5 +539,6 @@ Story references use `USn.m` for story `n`, scenario `m`.
 | S10-AC8: privacy and network bounds | FR-004, FR-007, FR-008, FR-036 to FR-039 | US2.1, US5.3, US5.5; credential echo and network checks in SC-008 | SC-008 |
 | S10-AC9: responsiveness and bundle budget | FR-008; SC-009 defines release limits | US1.5 | SC-009 |
 | Clarification 2026-10-02: adopter theming and config delivery (not in section 10) | FR-006, FR-037, FR-038, FR-041 | US2.5, US2.6 | SC-010 |
+| Clarification 2026-10-04: theme choice kept across reloads (issue #101) | FR-041 | US2.5 | SC-010 |
 | Clarification 2026-10-02: built-in catalog alias | FR-020, FR-025, FR-037 | US3.4 | SC-003, SC-004 |
 | Clarification 2026-10-02: display-only render switch | FR-030 to FR-032 | US4.4 to US4.6 | SC-005 |

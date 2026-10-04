@@ -30,6 +30,7 @@ function page(files: Record<string, string | Response>, storage?: { items: Recor
   const seen: Seen[] = [];
   const policies: string[] = [];
   const document = {
+    documentElement: { dataset: {} as Record<string, string> },
     createElement: () => ({ httpEquiv: '', content: '' }),
     head: {
       append(meta: { httpEquiv: string; content: string }) {
@@ -372,6 +373,32 @@ test('a saved profile is restored at the start, and a saved profile that no long
   const bad = started(await startPage(page({}, storage).env));
   assert.match(bad.error ?? '', /profile/i);
   assert.equal(bad.settings.profile.protocolVersion, '1.0', 'defaults stay in force');
+});
+
+test('a stored light or dark choice is on the root before the first request', async () => {
+  for (const choice of ['light', 'dark']) {
+    const site = page({}, { items: { 'agui-inspector.theme': choice } });
+    let atFirstRequest: string | undefined;
+    const fetch = site.env.fetch;
+    started(await startPage({ ...site.env, fetch: (...args) => ((atFirstRequest ??= site.env.document.documentElement.dataset.theme ?? 'none'), fetch(...args)) }));
+    assert.equal(atFirstRequest, choice);
+  }
+});
+
+test('a missing or invalid stored choice, or storage that throws, leaves the root to the system preference', async () => {
+  const throwing = () => {
+    throw new Error('blocked');
+  };
+  const sites = [
+    page({}),
+    page({}, { items: {} }),
+    page({}, { items: { 'agui-inspector.theme': 'blue' } }),
+    { env: { ...page({}).env, storage: { getItem: throwing, setItem: throwing } } },
+  ];
+  for (const site of sites) {
+    started(await startPage(site.env));
+    assert.equal(site.env.document.documentElement.dataset.theme, undefined);
+  }
 });
 
 // ---------------------------------------------------------------------------------------------

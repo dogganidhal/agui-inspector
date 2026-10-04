@@ -42,6 +42,8 @@ published from the same workflow with provenance.
 - The page keeps the session (exchanges, frames and findings) in memory. No server stores it, and a reload clears it.
 - The page saves the client profile in browser storage under `agui-inspector.profile`. It saves `forwardedProps`,
   `context` and the tool schemas as you typed them, so do not put secrets in them.
+- The page saves the theme you pick with the top-bar switch in browser storage under `agui-inspector.theme`. It saves
+  only the word `light` or `dark`.
 - A recording exists only as a file you exported to your disk.
 - The token you type stays in memory, and the page sends it only in the header you choose. The page never writes it to
   browser storage, configuration, a profile, a recording, an export or a log. The recorder reads no headers, and a

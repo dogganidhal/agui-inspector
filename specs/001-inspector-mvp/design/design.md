@@ -74,7 +74,7 @@ FR-037 forbids it in the product. A font file shipped inside the bundle is allow
 bundle budget.
 
 Dark mode follows `prefers-color-scheme` and an explicit `data-theme="light"` or `"dark"` on the
-root element, which the top-bar theme switch sets. The inspector redefines `--agui-bg` and
+root element, which the top-bar theme switch sets and remembers in browser storage. The inspector redefines `--agui-bg` and
 `--agui-fg` in both dark rules. An adopter who overrides those two must also supply dark values in
 the same two rules; the other properties work in both themes unchanged.
 

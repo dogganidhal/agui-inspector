@@ -27,7 +27,7 @@ publication, tags and releases remain unauthorized, manifests remain private, an
 | Language/runtime | Strict TypeScript; Node 24 LTS for tooling; Python >=3.10, tested at 3.10 and 3.14 |
 | Runtime dependencies | Exact pins and purposes in [research](research.md#protocol-and-renderer-packages); core/client 1.0.1, A2UI renderer/core 0.12.0 with `/v0_9` imports, React/DOM 19.3.0, middleware 0.0.11, Zod 3.25.76 |
 | Build | esbuild 0.28.2, one production static asset set, npm workspaces/lockfile, uv Python builds/lockfile |
-| Storage | In-memory sessions/credentials; browser localStorage for version-0 profiles only; explicit local JSON import/export; no backend storage |
+| Storage | In-memory sessions/credentials; browser localStorage for version-0 profiles and the light or dark theme choice only; explicit local JSON import/export; no backend storage |
 | Testing | Compiled TypeScript with `node --test`; Playwright 1.63.0; Python `unittest`; deterministic model-free reference agent |
 | Target | Modern browser with Fetch streaming, TextDecoder, AbortController, CSP; Starlette/FastAPI embedding; static hosted deployments with explicit allowlist |
 | Performance | 5,000 original retained frames, >=95% of filters and >=95% of raw expansions visibly complete within 200 ms in the fixed profile |
