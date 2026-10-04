@@ -41,7 +41,7 @@ newest point with the projection's `current` and every point with an independent
 - anything else: equal when strictly equal, otherwise one `changed` difference at that path;
 - a key only in `before` is `removed` and a key only in `after` is `added`, each with its value and without
   recursion into it;
-- deeper than 100 levels, a subtree compares as one value through its JSON text.
+- deeper than 100 levels, a subtree compares as one value, with an equality check that keeps its own stack (no recursion and no serialization), so no depth can overflow the call stack. A serializer is not safe here: `JSON.stringify` of a 5,000-level subtree overflowed the stack on the Linux CI runner.
 
 Paths are JSON Pointers (RFC 6901), the same format as the paths in operations, so a reader can match a
 difference to an operation. The root is the empty path.

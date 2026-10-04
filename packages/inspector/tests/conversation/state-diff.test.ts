@@ -61,16 +61,43 @@ test('keys that look like pointer syntax are escaped, and __proto__ is data', ()
   assert.equal(({} as { polluted?: unknown }).polluted, undefined);
 });
 
-test('a subtree deeper than 100 levels compares as one value and cannot overflow the stack', () => {
-  const nest = (leaf: JsonValue, depth: number): JsonValue => {
+test('a subtree deeper than 100 levels compares without recursion, so no depth can overflow the stack', () => {
+  const nest = (leaf: JsonValue, depth: number, extra?: JsonValue): JsonValue => {
     let value = leaf;
-    for (let i = 0; i < depth; i += 1) value = { n: value };
+    for (let i = 0; i < depth; i += 1) value = extra === undefined ? { n: value } : { n: value, extra };
     return value;
   };
-  const differences = diffStates(nest(1, 5000), nest(2, 5000));
+  // Deep enough to overflow any call stack, so this fails with a RangeError on any runner if a comparison recurses.
+  const DEPTH = 200_000;
+  const differences = diffStates(nest(1, DEPTH), nest(2, DEPTH));
   assert.equal(differences.length, 1);
   assert.equal(differences[0]?.kind, 'changed');
-  assert.deepEqual(diffStates(nest(1, 5000), nest(1, 5000)), []);
+  assert.equal(differences[0]?.path.length > 0, true);
+  assert.deepEqual(diffStates(nest(1, DEPTH), nest(1, DEPTH)), [], 'equal deep values are not a difference, though they are different objects');
+  // Past the cap, key order still does not matter and a deep sibling that did not change is not reported.
+  const swapped = (value: JsonValue): JsonValue => ({ extra: 0, deep: value });
+  assert.deepEqual(diffStates({ deep: nest(1, DEPTH, 0), extra: 0, shallow: 1 }, { ...(swapped(nest(1, DEPTH, 0)) as object), shallow: 2 } as JsonValue), [{ kind: 'changed', path: '/shallow', before: 1, after: 2 }]);
+});
+
+test('past the depth cap nothing is serialized, so no runtime has to recurse through the subtree', () => {
+  const nest = (leaf: JsonValue): JsonValue => {
+    let value = leaf;
+    for (let i = 0; i < 1000; i += 1) value = { n: value };
+    return value;
+  };
+  const stringify = JSON.stringify;
+  let calls = 0;
+  JSON.stringify = ((...args: Parameters<typeof JSON.stringify>) => {
+    calls += 1;
+    return stringify(...args);
+  }) as typeof JSON.stringify;
+  try {
+    assert.equal(diffStates(nest(1), nest(2)).length, 1);
+    assert.deepEqual(diffStates(nest(1), nest(1)), []);
+  } finally {
+    JSON.stringify = stringify;
+  }
+  assert.equal(calls, 0);
 });
 
 // ---- applying a diff to `before` gives `after` (SC-002) ----
