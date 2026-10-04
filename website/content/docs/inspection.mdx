@@ -87,6 +87,45 @@ Hiding changes only the list. The recording, the counts and the run-to-exchange 
 
 The newest listed exchange opens first. When the session holds only hidden preparation exchanges, the list says so.
 
+## Waterfall
+
+The Waterfall tab sits between Frames and Raw request. It shows each run of the current thread as rows on a time axis, so you can see when things started, how long they took and what overlapped. It reads the recording only. It never changes it and never sends a request.
+
+Each run is a group, newest first. The newest run is open and older runs are closed. Open one with its arrow. Every group has its own axis. The axis starts when the request was sent, as the offsets in Frames do, and ends at the later of the last frame and the exchange's elapsed time. The space before the run's bar is the wait for the first event.
+
+A row is one of six kinds, written in the row as a word:
+
+| Word | What it is | Starts at | Ends at |
+| --- | --- | --- | --- |
+| `run` | A conversation run | `RUN_STARTED` | `RUN_FINISHED` or `RUN_ERROR` |
+| `step` | A step | `STEP_STARTED` | `STEP_FINISHED` |
+| `text` | A text message | First message event | `TEXT_MESSAGE_END`, or the last chunk once the next event closed it |
+| `reasoning` | A reasoning message | First reasoning event | `REASONING_END` or `REASONING_MESSAGE_END`, or the last chunk |
+| `tool` | A tool call | `TOOL_CALL_START` | `TOOL_CALL_RESULT`, or the end of its arguments for a call the application answers |
+| `subagent` | A subagent run | `SUBAGENT_STARTED` | `SUBAGENT_FINISHED` or `SUBAGENT_ERROR` |
+
+Rows are nested. A step holds what happened inside it. A subagent run is nested under the tool call that started it (its `parentToolCallId`). Otherwise it sits where the conversation puts its [lane](./event-views.mdx#subagent-lanes): in the subagent run that started it, or in the step or run where it began. The steps, messages, reasoning messages and tool calls that carry a subagent's id are inside its row, so a nested subagent shows as a tree. A subagent run that ended with an error, or that was suspended, says so. One that is continued in a later run has a row in each run it appears in, tagged `continued`. Each row shows its start, end and duration as text next to its bar. A tool call has two parts in its bar: the arguments, then the wait for the result. A call that the application answers, such as a client tool, ends where its arguments end and says `waiting for result`. If a later run carried the answer, the row says `answered by the client` and shows no time for it.
+
+A row whose end was not seen is open. Its bar is striped and runs to the latest frame of its run. While the run streams the row says `running`. After the stream stopped it says `no end seen`. The waterfall never makes up an end. A run that stopped without `RUN_FINISHED` or `RUN_ERROR` shows its status tag, such as Stopped by you or No terminal event.
+
+Times are arrival times: when the browser finished reading each frame, counted from the moment the request was sent. Network buffering can deliver several frames at once, so a bar shows when frames arrived and not when the server produced the events. Messages that only came in a run's input have no arrival time and are not rows. Messages that a messages snapshot removed from the conversation stay in the waterfall, because they streamed.
+
+Select a row to read its details under the tree: kind, id, start, end, duration and the frames it was built from. Use the frame buttons, or press Enter on a row, to show the row's first frame in Frames. The selection and the rows you closed stay when you go to another tab and come back. They start again for a new thread or an imported session.
+
+The tree works from the keyboard. Tab enters it at one row and one more Tab leaves it, so you do not tab through every row.
+
+| Key | Effect |
+| --- | --- |
+| Down, Up | Move to the next or previous visible row and select it |
+| Right | Open a closed row, or move to the first row inside an open one |
+| Left | Close an open row, or move to its parent |
+| Home, End | Move to the first or last row |
+| Enter | Show the row's first frame in Frames |
+
+A screen reader reads each row as its kind, label, level, start, end and duration, or `running` or `no end seen`, and whether it is open or closed. The bars only repeat what the text says.
+
+The waterfall works on a live run and on an imported session. It shows the runs of the thread that the conversation shows. Preparation and raw requests are not runs and are not listed.
+
 ## Arriving from the conversation
 
 A run id or a frame reference in the conversation opens its evidence here. The list opens the exchange and the frame's detail, scrolls the row to the middle of the pane, marks it with `aria-current` and gives it focus. A filter that lists the frame stays as it is. A filter that would hide the frame is cleared, and a toast says so. Nothing is sent and the recording does not change. A row of the subagent timeline whose lane left the transcript opens the start frame of its subagent the same way. See [following a reference](./event-views.mdx#following-a-reference).

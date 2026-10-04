@@ -35,6 +35,8 @@ In the frames list, run events also mark run boundaries. [Runs](#runs) explains 
 - `STEP_STARTED` opens a collapsible group with the step name. It holds the events that arrive until the step finishes.
 - `STEP_FINISHED` closes the group and gives it a duration.
 
+The [waterfall](./inspection.mdx#waterfall) draws each step as a bar from its start to its end, with its messages and tool calls inside it.
+
 ### Text messages
 
 - `TEXT_MESSAGE_START` opens a message.
@@ -74,6 +76,8 @@ In the frames list, run events also mark run boundaries. [Runs](#runs) explains 
 ### Subagents
 
 - `SUBAGENT_STARTED`, `SUBAGENT_FINISHED` and `SUBAGENT_ERROR` make a lane for each subagent in each run, with a line for each start, finish or error. Events that carry the subagent's `subagentRunId` go inside the lane. See [Subagent lanes](#subagent-lanes).
+
+The [waterfall](./inspection.mdx#waterfall) shows each subagent run as a row of its run, nested under the tool call that started it, with its messages and tool calls inside it.
 
 ### Custom and raw
 

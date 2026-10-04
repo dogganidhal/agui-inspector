@@ -234,6 +234,22 @@ A point is an index into `model.state.changes`, which is newest first. Index 0 i
 
 `StateView` keeps its props. It keeps the selection in component state, as the key of a change or none to follow the latest, and drops it when the store or the thread changes. `StateDetail` and `selectedIndex` are pure, so a test can render any point without state.
 
+## Waterfall wiring
+
+The [waterfall](./inspection.mdx#waterfall) is a tab of `InspectionView`. It comes from these modules:
+
+```ts
+import { buildWaterfall } from 'core/projection/waterfall';
+import { WaterfallPanel } from 'views/inspection/waterfall';
+import { treeKey, visibleRows } from 'views/inspection/waterfall-model';
+```
+
+`buildWaterfall(session, threadId)` is framework-free and pure. It runs `projectConversation` over the session without its `MESSAGES_SNAPSHOT` frames and builds one group per run, newest first. A messages snapshot replaces the transcript in the projection, which would drop messages and tool calls that streamed earlier, and keeps only the subagent lanes in `ConversationModel.subagents`. A timeline has to keep all of them. Subagent rows are the projection's lanes (`SubagentEntry`): which entries a subagent run holds, which lane it sits in, its status and its offsets are the projection's facts. The builder adds one rule, that a subagent started by a tool call sits under that call's row, and it refuses a move that would put a row inside its own subtree. Each row takes its start from the first frame the projection names for the entry in its own exchange, and its end from the frame that ends it by event type. A row with no such frame has no end and is open. The frames of another exchange are ignored, because offsets count from each request.
+
+`WaterfallPanel` is controlled. It takes the session, an optional `threadId`, the selected row, the closed rows and callbacks, and `InspectionView` holds that state. The state belongs to one store and one thread, so a new thread or an imported session starts it again. `InspectionView` takes the `threadId` as an extra prop next to `reveal`, and `App` passes the conversation's thread. A row's frame buttons and the Enter key call the same function that applies a `reveal` request, so the frames list opens the exchange and the frame and takes the focus.
+
+`visibleRows`, `treeKey`, `axisTicks` and `rowLabel` are plain functions with no DOM. The tree follows the ARIA tree pattern with a roving `tabindex`: one row is in the tab order, and a row that gets focus is selected. Bars are positioned boxes whose `left` and `width` are percentages of the run's axis, set through the element style object. `views/inspection/waterfall.css` uses only theme tokens and defines none.
+
 ## A2UI view wiring
 
 [A2UI surfaces](./a2ui.mdx) describes what users see. The view behind it works on its own or inside the conversation
@@ -444,6 +460,24 @@ timing on the 5,000-frame workload. `tests/e2e/conversation/markdown.spec.ts` se
 production content security policy and checks policy reports, requests, the recording around a toggle, the keyboard and
 contrast. `markdown-app.spec.ts` runs a live run, an export and an import through the production build, with the
 reference agent's `markdownRunResponse` as the reply.
+
+## Waterfall tests
+
+```sh
+npm run test:unit -- packages/inspector/tests/inspection
+npm run test:e2e -- tests/e2e/inspection/waterfall.spec.ts
+npm run test:e2e -- tests/e2e/hosted/waterfall.spec.ts
+```
+
+`waterfall.test.ts` builds the waterfall of scripted runs played through the real frame reader and store. The main run is
+`delegationRun` in `examples/reference-agent/delegation-run.ts`: three steps, a reasoning message, text messages, three tool
+calls and, unless a test leaves them out, three subagent runs. Every time in a row is compared with the arrival offsets of
+its frames. `waterfall-model.test.ts` covers the visible rows, every key of the tree, the axis ticks and the row labels.
+`waterfall-view.test.tsx` checks the markup, `waterfall-workload.test.ts` builds the frozen 5,000-frame workload, and
+`waterfall-docs.test.ts` and `waterfall-styles.test.ts` read the docs and the stylesheet. The browser spec streams into the
+fixture host `packages/inspector/tests/inspection/waterfall-fixture.tsx`: it checks live growth, the keyboard, contrast in
+both color schemes and the workload. The hosted spec runs the production build against a scripted target, exports and
+imports a session, and checks that no request leaves the page's origin and nothing is written to browser storage.
 
 ## A2UI tests
 
