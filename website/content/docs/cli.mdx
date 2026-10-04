@@ -1,0 +1,153 @@
+---
+title: Run it locally with the CLI
+description: Start the inspector on your machine with one command. It relays the page's runs to any AG-UI server, with no CORS setup and no helper.
+---
+
+The `agui-inspector` command serves the inspector on your machine and relays the page's requests to your server. Use it when your server does not allow the page's origin (CORS), or when it is not a Python, Express, Hono or Next.js server. It works with any AG-UI server over HTTP and Server-Sent Events (SSE), in any language. You change nothing on the server.
+
+The command needs Node.js 22.12 or newer.
+
+## Quick start
+
+<Steps>
+<Step>
+
+Start your AG-UI server. To try it without one, start the repository's reference agent from a checkout. It sends no CORS header, so the hosted page could not reach it.
+
+```sh
+node examples/reference-agent/server.ts --port 8787
+```
+
+</Step>
+<Step>
+
+Run the command with the address of the agent endpoint.
+
+```sh
+npx agui-inspector --target http://127.0.0.1:8787/agent
+```
+
+It prints where it listens and which proxy path stands for the target:
+
+```text
+agui-inspector listening on http://127.0.0.1:4747/
+  /proxy/1 -> http://127.0.0.1:8787
+```
+
+</Step>
+<Step>
+
+Open `http://127.0.0.1:4747/`. The agent list shows `http://127.0.0.1:8787/agent`. Type `Hello` and send it. The reply is "Hello from the reference agent." The Inspection tab shows one exchange with its frames.
+
+</Step>
+<Step>
+
+Press Ctrl+C to stop the command.
+
+</Step>
+</Steps>
+
+In a source checkout, run `npm run build` once and use `node packages/inspector/lib/cli/main.js` in place of `npx agui-inspector`.
+
+## Options
+
+| Option | What it does |
+| --- | --- |
+| `--target <url>` | An AG-UI endpoint to inspect. Repeat it for more than one. At least one is required. |
+| `--header "<Name>: <value>"` | A header to send to the target before it. Repeat it for more. See [headers](#headers). |
+| `--port <number>` | The port to listen on. The default is 4747. `0` picks any free port. |
+| `--help` | Prints the usage and stops. |
+| `--version` | Prints the version and stops. |
+
+No option sets the listening address. The command always listens on `127.0.0.1`.
+
+A target is an `http` or `https` URL. It has no `user:password@`, no query and no fragment, because they would be written into the page's configuration. Use `--header` for secrets.
+
+The default port is the same on every run because the page saves your client profile in browser storage, and browser storage belongs to the origin. A random port would lose it at each start.
+
+## What the page lists
+
+The command serves the page, its files and a `config.json` that has one agent for each target, in the order you gave them. The agent's `id` is `target-<n>`, its name is the target's URL, and its `url` is a path on the page's own origin: `/proxy/<n>` followed by the target's path.
+
+```json
+{
+  "version": 0,
+  "agents": [{ "id": "target-1", "name": "http://127.0.0.1:8787/agent", "url": "/proxy/1/agent" }]
+}
+```
+
+The page stays an embedded page. It reaches its own origin only, and the command relays what it sends to the target. If you type the target's real address in the endpoint field, the page refuses and names the address it may reach. Type a proxy path instead, for example `/proxy/1/agent?x=1`.
+
+Everything under `/proxy/<n>/` goes to the origin of target `n`, because presets and capability requests use other paths of the same server. Each target keeps its own proxy path and its own headers, also when two targets share an origin.
+
+## What the proxy relays
+
+- Request and response bodies pass through as the exact bytes, as streams. The command does not buffer, parse, decode or decompress them. A chunk the target writes reaches the page when it arrives, so the recorded frames, their order and their timing are the target's.
+- A stream the target cuts is a cut stream for the page, with the bytes that arrived before the cut. When you press Stop in the page, the command closes its connection to the target.
+- The status and the headers of the answer pass through. A redirect is passed on and not followed, and `Location` is not rewritten. The page shows a redirect as an error, as it does for any target.
+- The command removes headers that belong to one connection (`Connection`, `Keep-Alive`, `Transfer-Encoding`, `Upgrade` and the others of that kind). It also drops the browser's `Host`, `Cookie`, `Origin` and `Referer` from requests, and `Set-Cookie` from answers. Browsers share `localhost` cookies across ports, so a cookie of another local application would otherwise reach your target, and your target's cookie would land in a jar that other local applications read. To send a cookie, set it with `--header "Cookie: ..."`.
+- If the command cannot reach the target (nothing listens, the name is unknown, the certificate is not trusted), the page gets a 502 with one line of plain text that names the target's origin and the error code. The command writes the same line to standard error. It never prints the path, the query or a header.
+
+## Headers
+
+A header belongs to the `--target` before it. A token for one server never goes to another.
+
+```sh
+npx agui-inspector \
+  --target https://agent-a.example/run --header "Authorization: Bearer <token-a>" \
+  --target https://agent-b.example/run --header "X-Api-Key: <key-b>"
+```
+
+A `--header` before any `--target` is an error. A repeated name for one target replaces the earlier value. `Host`, `Content-Length`, `Transfer-Encoding` and `Connection` are refused, because the proxy sets them.
+
+If you type a token in the page's Authentication field with the same header name, the target receives the token from the page. You can still test what your server does with a wrong token.
+
+The command holds headers in memory. They go to their own target, and nowhere else. They are not in `config.json`, in a served file, in the command's output or errors, in a recording or in an export. The startup lines name a target's headers and never show a value. If your server repeats a value in its own answer, those bytes are the server's, and the recording keeps them as received.
+
+<Callout type="warn">
+A header on the command line is visible in the process list and in your shell history. Anyone who can read them on this machine can read the value. Use `--header` for development servers and short-lived tokens. For a long-lived credential, type the token in the page's Authentication field instead: it stays in memory and is cleared when you reload.
+</Callout>
+
+## Who can use the proxy
+
+The proxy can add your headers to a request, so it answers only your browser on this machine.
+
+- It listens on the IPv4 loopback address `127.0.0.1` and on nothing else, so another machine cannot connect. `http://localhost:4747/` reaches it too. An IPv6 address such as `[::1]` is not served and is not claimed.
+- It refuses a request whose `Host` is not `127.0.0.1` or `localhost` with its port. That stops a web page that points its own host name at your machine.
+- On proxy paths, it refuses a request with another `Origin` and a request that the browser marks as cross-site (`Sec-Fetch-Site`). A web page on another site cannot reach your target through it. A link from another site to the printed address still opens the page. Current browsers send these headers: Chrome from 76, Firefox from 90 and Safari from 16.4.
+- It connects only to the origins of the targets you gave. A request that names any other host is refused with a 403 and no connection is made. That covers an unknown proxy number, a full URL as the request target, `CONNECT`, upgrade requests, and path text such as `//host`, `@host` or `..`. After the proxy number, the text is only a path on the target's host.
+- Other programs of your own user can open the printed address, like any local server. The command does not defend against them. A request with no browser headers, such as one from `curl`, is served.
+
+The command sends no telemetry, checks for no update and makes no request except the relays. `npx` may download the package the first time you run it. npm makes that request.
+
+## Limits
+
+- The command speaks HTTP/1.1 to targets. HTTP/2-only servers, WebSocket and other transports are not supported.
+- Certificates of `https` targets are checked against the certificates Node.js trusts. There is no option to skip the check. To trust a development certificate or a private CA, set `NODE_EXTRA_CA_CERTS` to its file.
+- It does not open a browser. It prints the address.
+- It sets no theme, brand, preset or capability for the agents it lists. For those, use a [helper](./embedding.mdx) or the [static assets](./hosted.mdx).
+- A first argument that is not an option is reserved for commands that come later, such as `replay`. Today it stops the command with `unknown command "<name>"`.
+
+## Exit codes and output
+
+| Code | When |
+| --- | --- |
+| 0 | `--help`, `--version`, and a stop with Ctrl+C or `SIGTERM`. |
+| 1 | Startup failed for a reason that is not the arguments: the port is in use, or the page files are missing. |
+| 2 | The arguments are wrong, or a target points at the command's own address. |
+
+`--help`, `--version` and the startup lines go to standard output. A usage error, a startup failure and the failures to reach a target go to standard error. The command logs nothing about requests.
+
+## Troubleshooting
+
+| You see | What to check |
+| --- | --- |
+| `port 4747 is already in use; choose another with --port` | Another program uses the port, or another copy of the command runs. Stop it, or pass a free port with `--port`. The command does not pick another port by itself. |
+| `--target must not contain a query or a fragment` | Put the secret in `--header`. A query that your endpoint needs can be typed in the page, after the proxy path. |
+| A 403 from the command | Open the address the command printed, not another host name for the same machine. A request from another site, or one that names another host, is refused by design. |
+| A 502 that names an origin and a code | The command could not reach the target. `ECONNREFUSED` means nothing listens there. `ENOTFOUND` means the name is unknown. `DEPTH_ZERO_SELF_SIGNED_CERT` means the certificate is not trusted: see `NODE_EXTRA_CA_CERTS` above. |
+| `… is not an allowed destination` in the page | You typed the target's real address. Type the proxy path from the agent list, such as `/proxy/1/agent`. |
+| `the packaged inspector files are missing` | You run a source checkout that has not been built. Run `npm run build`. |
+| `unknown command "replay"` | Replay and the conformance suite are planned for the next minor. They are not in this release. |
+
+For the page's own messages, see [Troubleshooting](./troubleshooting.mdx).

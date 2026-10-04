@@ -68,6 +68,7 @@ uv.
 | Path | What it holds |
 | --- | --- |
 | `packages/inspector/src/core` | Framework-free TypeScript: recorder, frame reader, session store, configuration, presets, profiles, runtime and transport, A2UI lifecycle. No React. |
+| `packages/inspector/src/cli` | The `agui-inspector` command: argument parsing, the listener on `127.0.0.1` and the relay to the targets. It reuses the serving core of `src/server`. Compiled to `packages/inspector/lib/cli`, never in the browser bundle. |
 | `packages/inspector/src/views` | React views: connection, conversation, inspection, A2UI, settings, and the theme tokens and primitives. |
 | `packages/inspector/src/app` | The page entry, startup and the content security policy (`security.ts`). |
 | `packages/inspector/tests` | Unit tests, one directory per area. |
@@ -123,8 +124,10 @@ syntax.
 `packages/inspector/src/static-path.js` exports `staticAssetsPath`, the absolute path of `dist`, so another server can
 serve that directory next to a configuration file. The same package ships the Express, Hono and Next.js helpers, written
 in `packages/inspector/src/server` and compiled to `packages/inspector/lib` by the build (Node does not strip types from
-installed packages). They never enter the browser bundle. The npm package ships no CLI. See
-[Embed in your server](./embedding.mdx#javascript-servers).
+installed packages). They never enter the browser bundle. The command line tool, `agui-inspector`, is written in
+`packages/inspector/src/cli` and compiled to `packages/inspector/lib/cli` the same way, and the package's `bin` points at
+`lib/cli/main.js`. See [Embed in your server](./embedding.mdx#javascript-servers) and
+[Run it locally with the CLI](./cli.mdx).
 
 ## Bundle budget
 

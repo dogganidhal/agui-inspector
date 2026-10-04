@@ -43,7 +43,7 @@ Configuration and capabilities files, preparation requests, runs and raw submiss
 | Hosted | Endpoints must be absolute `http` or `https` URLs. Requests carry no cookies, not even to the page's own origin. See [hosted deployment](./hosted.mdx#visitor-chosen-targets). |
 | URLs with credentials | `https://user:password@host/` is refused, and the error does not repeat what you typed. Use the token field. |
 | Redirects | Never followed. A redirect shows the error "The target answered with a redirect", and no second request is sent. Enter the final URL as the target. |
-| Browser blocks | CORS (cross-origin resource sharing), private-network access, mixed content and an unreachable server all reach the page as one failed fetch. The error lists those causes and names the origin. There is no proxy or bypass: fix the target's headers or the allowlist. |
+| Browser blocks | CORS (cross-origin resource sharing), private-network access, mixed content and an unreachable server all reach the page as one failed fetch. The error lists those causes and names the origin. The page has no proxy or bypass of its own: fix the target's headers or the allowlist, or use the [CLI](./cli.mdx), which relays through a proxy on your machine. |
 | Request headers | The transport sets `Content-Type` and `Accept` and sends no referrer. The only other header is the token. |
 
 A refused or failed request is still an exchange in the session, with its error.

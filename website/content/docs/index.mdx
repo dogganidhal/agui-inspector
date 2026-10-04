@@ -29,6 +29,7 @@ For your own agent, pick one of these:
 
 <Cards>
   <Card title="Embed it in Python" href="/docs/embedding" description="Mount it beside your Starlette or FastAPI agent routes." />
+  <Card title="Run it with the CLI" href="/docs/cli" description="One command that serves the page and relays to any server." />
   <Card title="Host the static page" href="/docs/hosted" description="Serve the files anywhere and point them at your server." />
   <Card title="Read frames and findings" href="/docs/inspection" description="Exchanges, frames, findings and missing terminal events." />
 </Cards>
@@ -44,6 +45,7 @@ exists for Python (0.1.0) and for Express, Hono and Next.js
 | --- | --- | --- |
 | Hosted | A static page that you point at your server. The public demo is one. | Available: the [demo](./demo.mdx), or build the page from a checkout |
 | Embedded | A helper mounts it next to your agent routes, on the same origin: Python for Starlette and FastAPI, JavaScript for Express, Hono and Next.js. | Python: 0.1.0 on PyPI, [install it](./embedding.mdx#quick-start). JavaScript: [in 0.2.0](./embedding.mdx#javascript-servers) |
+| CLI | `npx agui-inspector --target <url>` serves the page on your machine and relays its requests to your server, so the server needs no CORS setup and no helper. | [In 0.2.0](./cli.mdx), not released yet |
 | Static assets | Any other server serves the directory that the npm package's `staticAssetsPath` points to. | 0.1.0 on npm: `npm install agui-inspector` |
 
 [Project status and privacy](./status.mdx) lists the planned modes and helpers.

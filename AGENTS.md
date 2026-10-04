@@ -6,7 +6,7 @@ Instructions for coding agents working in this repository. Humans should start w
 agui-inspector is a developer tool for AG-UI servers. It records every request and SSE frame as received, validates them
 against the protocol, drives runs like a client (interrupts, client tools, A2UI v0.8 and v0.9 surfaces) and sends raw requests no
 client would. One static bundle serves every mode: a hosted page, a Python helper for Starlette and FastAPI, helpers
-for Express, Hono and Next.js, and npm static assets. A public demo runs on GitHub Pages. Both packages are on their
+for Express, Hono and Next.js, a local command (`npx agui-inspector --target <url>`), and npm static assets. A public demo runs on GitHub Pages. Both packages are on their
 registries at 0.1.0: the Python package on PyPI and the npm package on npm.
 
 ## Development workflow
@@ -50,6 +50,7 @@ spec. Everything else does, including small bug fixes.
 | --- | --- |
 | `packages/inspector/src/core` | Framework-free TypeScript: recorder, frame reader, session store, config, presets, profiles, runtime and transport, A2UI lifecycle. No React here. |
 | `packages/inspector/src/server` | Node-side code for the Express, Hono and Next.js helpers, one core and thin adapters. Compiled to `packages/inspector/lib` by `npm run build`, never in the browser bundle. No React, no framework import. |
+| `packages/inspector/src/cli` | The `agui-inspector` command: argument parsing, the listener on `127.0.0.1` and the relay to the targets. It reuses the core in `src/server`. Compiled to `packages/inspector/lib/cli` with the helpers, never in the browser bundle. |
 | `packages/inspector/src/views` | React views: connection, conversation, inspection, A2UI, settings, and the theme tokens and primitives. |
 | `packages/inspector/src/app` | Page entry, startup and the content security policy (`security.ts`). |
 | `packages/inspector/src/contracts.ts` | Shared types. Must not import React. |
@@ -108,8 +109,11 @@ These come from the [constitution](.specify/memory/constitution.md). Read it bef
 
 - `website/content/docs/development.mdx` must mention every root `npm run` script. Add a script, document it.
 - `website/content/docs/event-views.mdx` maps each event type, and `website/content/docs/runs.mdx` covers each control.
-- The helper code in `packages/inspector/src/server` ships as compiled `lib/` and never enters the page bundle. Its
-  `exports` entries must exist after `npm run build` (the build checks), and a test reads the page bundle for it.
+- The helper code in `packages/inspector/src/server` and the command in `packages/inspector/src/cli` ship as compiled
+  `lib/` and never enter the page bundle. Their `exports` and `bin` entries must exist after `npm run build` (the build
+  checks), and a test reads the page bundle for them.
+- The command relays bytes unchanged and binds `127.0.0.1` only. A header from its command line is never printed, served
+  or exported, and no message of the command may echo one: tests search for a synthetic value.
 - The brand mark exists in four copies (`branding/mark.svg`, `branding/icon.svg`, `icons.mark` in
   `views/theme/primitives.tsx`, and the favicon data URI in both `index.html` files). Change all or none. Repo assets stay
   black and white; adopters recolor through `--agui-accent`.

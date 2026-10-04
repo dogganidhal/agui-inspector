@@ -28,17 +28,21 @@ function directDependencies(): Array<[name: string, version: string, manifest: s
 // agui-inspector is the one npm package that is published, from CI with provenance. Everything else is private.
 const published = 'packages/inspector/package.json';
 
-test('manifests are MIT, private unless published, with no bin, publish config or lifecycle scripts', () => {
+test('manifests are MIT, private unless published, with no publish config or lifecycle scripts, and only the published one has a bin', () => {
   for (const manifest of [...manifests, website]) {
     const pkg = json(manifest);
     assert.equal(pkg.private, manifest === published ? undefined : true, `${manifest} is ${manifest === published ? 'publishable' : 'private'}`);
     assert.equal(pkg.license, 'MIT', `${manifest} is MIT licensed`);
-    for (const forbidden of ['licenses', 'publishConfig', 'bin']) {
+    for (const forbidden of manifest === published ? ['licenses', 'publishConfig'] : ['licenses', 'publishConfig', 'bin']) {
       assert.equal(forbidden in pkg, false, `${manifest} has no ${forbidden}`);
     }
     for (const script of lifecycle) assert.equal(script in (pkg.scripts ?? {}), false, `${manifest} has no ${script} script`);
   }
   assert.equal(json('packages/inspector/package.json').name, 'agui-inspector');
+  // The command line tool (feature 005) is the one bin. It takes no argument parser or proxy from the registry.
+  assert.deepEqual(json('packages/inspector/package.json').bin, { 'agui-inspector': './lib/cli/main.js' });
+  const runtime = Object.keys(json('packages/inspector/package.json').dependencies);
+  assert.deepEqual(runtime.filter((name) => /^(commander|yargs|minimist|cac|meow|mri|http-proxy|http-proxy-middleware|node-fetch|undici)$/.test(name)), []);
   assert.deepEqual(json('package.json').workspaces, ['packages/inspector', 'packages/python']);
 });
 

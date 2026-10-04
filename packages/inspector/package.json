@@ -17,6 +17,9 @@
     "a2ui"
   ],
   "type": "module",
+  "bin": {
+    "agui-inspector": "./lib/cli/main.js"
+  },
   "exports": {
     ".": "./src/static-path.js",
     "./express": {

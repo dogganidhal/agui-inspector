@@ -22,11 +22,11 @@ test('staticAssetsPath names the absolute built-asset directory of the package',
   assert.ok(path.isAbsolute(printed));
 });
 
-test('the package keeps the static path as its main export and has no CLI', () => {
+test('the package keeps the static path as its main export, and its one bin is the command line tool', () => {
   const pkg = JSON.parse(readFileSync(path.join(root, 'packages/inspector/package.json'), 'utf8')) as {
     exports: Record<string, unknown>;
     bin?: unknown;
   };
   assert.equal(pkg.exports['.'], './src/static-path.js');
-  assert.equal(pkg.bin, undefined);
+  assert.deepEqual(pkg.bin, { 'agui-inspector': './lib/cli/main.js' });
 });
