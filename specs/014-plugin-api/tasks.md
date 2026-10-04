@@ -147,8 +147,8 @@ checks, and sends every other path to the shared core (`createInspectorHandler`)
 
 ## Phase 10: Polish and cross-cutting
 
-- [ ] T050 Run the full gate: `npm run build`, `npm run check:bundle`, `npm run test:e2e -- tests/e2e/plugins --workers=2` and then `npm run check:ci`. The bundle must stay within 2,000,000 B minified and 600,000 B gzip. No existing test may need an edit other than the ones named above.
-- [ ] T051 Close out: run `/speckit-converge` if the code and the spec disagree; run `/ponytail:ponytail-review` on the diff and fix what it finds; run the humanizer skill on the new docs text and on the pull request body; rebase on `origin/main`, push with `--force-with-lease`, update the pull request body with the closing line `Closes #81`, and mark it ready.
+- [x] T050 Run the full gate: `npm run build`, `npm run check:bundle`, `npm run test:e2e -- tests/e2e/plugins --workers=2` and then `npm run check:ci`. The bundle must stay within 2,000,000 B minified and 600,000 B gzip. No existing test may need an edit other than the ones named above.
+- [x] T051 Close out: run `/speckit-converge` if the code and the spec disagree; run `/ponytail:ponytail-review` on the diff and fix what it finds; run the humanizer skill on the new docs text and on the pull request body; rebase on `origin/main`, push with `--force-with-lease`, update the pull request body with the closing line `Closes #81`, and mark it ready.
 
 ## Dependencies and order
 
