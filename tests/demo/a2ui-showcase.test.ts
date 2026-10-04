@@ -18,7 +18,7 @@ import { createFrameReader } from '../../packages/inspector/src/core/frames/inde
 import { applyJsonPatch } from '../../packages/inspector/src/core/projection/patch.ts';
 import { createBundledCatalog, createBundledCatalogs } from '../../packages/inspector/src/views/a2ui/catalog.tsx';
 import type { Finding, JsonValue, RawFrame } from '../../packages/inspector/src/contracts.ts';
-import { BASIC_CATALOG_ID, continuation, formSurface, THIRD_PARTY_HOST, type UserAction } from '../../examples/reference-agent/a2ui-scenarios.ts';
+import { BASIC_CATALOG_ID, STANDARD_V08_CATALOG_ID, continuation, formSurface, THIRD_PARTY_HOST, v08Continuation, v08Surfaces, type UserAction } from '../../examples/reference-agent/a2ui-scenarios.ts';
 import {
   ACTIONS,
   MARKUP,
@@ -160,7 +160,7 @@ test('the showcase is pure: the same input gives the same bytes, and a run id ch
     assert.equal(bytes('r-aaaa', message), bytes('r-aaaa', message), message);
   }
   // Stories that go on over several runs keep one activity id, so a later run changes the surface in place.
-  for (const message of [SHOWCASE.findTable, SHOWCASE.supportTicket, SHOWCASE.deployBoard]) assert.equal(bytes('r-aaaa', message).replaceAll('r-aaaa', 'r-bbbb'), bytes('r-bbbb', message), message);
+  for (const message of [SHOWCASE.findTable, SHOWCASE.supportTicket, SHOWCASE.deployBoard, SHOWCASE.v08]) assert.equal(bytes('r-aaaa', message).replaceAll('r-aaaa', 'r-bbbb'), bytes('r-bbbb', message), message);
   // Stories that end in one run take their activity id from the run.
   for (const message of [SHOWCASE.selfRepair, SHOWCASE.neverValid, SHOWCASE.sandbox]) {
     assert.notEqual(bytes('r-aaaa', message), bytes('r-bbbb', message), message);
@@ -501,17 +501,59 @@ test('sandbox probe: every refusal is reported at its position, the rest still d
   clean(t);
 });
 
+// ---- expense report (A2UI v0.8) ---------------------------------------------------------------------
+
+test('expense report: two v0.8 surfaces, and each action answers with the same list extended, built from the action alone', async () => {
+  const t = thread();
+  await t.say(SHOWCASE.v08);
+  const id = 'a2ui-expense-v08';
+  assert.deepEqual(t.ops(id), json(v08Surfaces));
+  assert.equal(t.agent.messages.filter((message) => message.role === 'activity').length, 1);
+  clean(t);
+
+  // The inspector's session accepts every message as v0.8 and draws no v0.9 surface.
+  const first = draw(t.ops(id));
+  assert.deepEqual(first.issues, []);
+  assert.deepEqual(first.surfaces, []);
+  assert.equal(first.v08.messages.length, v08Surfaces.length);
+  assert.deepEqual(first.order, ['v0.8:expense', 'v0.8:status']);
+
+  const submit = action(ACTIONS.submitExpense, 'expense', 'submit', { amount: '42.50', category: ['meals'], receipt: true, urgency: 3 });
+  await t.act(submit);
+  const submitted = t.ops(id);
+  assert.deepEqual(submitted, json(v08Continuation(v08Surfaces, { ...submit, timestamp: '2026-10-03T09:00:00.000Z' })));
+  assert.deepEqual(submitted.slice(0, v08Surfaces.length), json(v08Surfaces));
+  assert.match(JSON.stringify(submitted), /Submitted 42\.50 for meals/);
+  assert.match(JSON.stringify(submitted), /Received submit_expense from submit on expense: .*42\.50/);
+  assert.deepEqual(draw(submitted).issues, []);
+
+  // A second action is built from itself alone: nothing is remembered between runs.
+  await t.act(action(ACTIONS.withdrawExpense, 'status', 'withdraw', { status: 'Waiting for review' }));
+  const withdrawn = t.ops(id);
+  assert.deepEqual(withdrawn.slice(0, v08Surfaces.length), json(v08Surfaces));
+  assert.deepEqual(withdrawn.slice(v08Surfaces.length), [{ deleteSurface: { surfaceId: 'expense' } }, { dataModelUpdate: { surfaceId: 'status', contents: [{ key: 'status', valueString: 'Withdrawn' }] } }]);
+  assert.deepEqual(draw(withdrawn).issues, []);
+  clean(t);
+});
+
+test('expense report: an action it does not know is acknowledged as text, like any other unknown action', async () => {
+  const t = thread();
+  await t.act(action('something_else', 'expense', 'x', {}));
+  assert.equal(t.agent.messages.filter((message) => message.role === 'activity').length, 0);
+});
+
 // ---- nothing else leaves the module -----------------------------------------------------------------
 
-test('no story names an address that could resolve, and outside the sandbox probe every operation speaks v0.9', async () => {
+test('no story names an address that could resolve, and outside the sandbox probe every operation speaks v0.9 or, in the v0.8 story, declares no version', async () => {
   for (const message of Object.values(SHOWCASE)) {
     const t = thread();
     await t.say(message);
     const everything = t.wires.join('');
-    const addresses = (everything.match(/https?:\/\/[^"\\\s)]+/g) ?? []).filter((address) => address !== BASIC_CATALOG_ID);
+    const addresses = (everything.match(/https?:\/\/[^"\\\s)]+/g) ?? []).filter((address) => address !== BASIC_CATALOG_ID && address !== STANDARD_V08_CATALOG_ID);
     assert.ok(addresses.every((address) => new URL(address).hostname.endsWith('.invalid')), `${message}: ${addresses.join(' ')}`);
     const versions = new Set(everything.match(/\\?"version\\?":\\?"[^"\\]*/g));
     assert.deepEqual([...versions].every((version) => version.endsWith('v0.9')), message !== SHOWCASE.sandbox, message);
+    if (message === SHOWCASE.v08) assert.equal(versions.size, 0, 'a v0.8 message carries no version at all');
   }
 });
 
@@ -524,13 +566,13 @@ test('the demo lists the showcase as the A2UI agent\'s quick messages, in order,
   assert.deepEqual(agent.preset!.quickMessages, [...Object.values(SHOWCASE), 'Show the order form']);
   assert.equal(agent.preset!.messages, 'turn');
   const bodies = agent.preset!.quickMessages!.map((message) => decoder.decode(Buffer.concat(a2uiResponse({ threadId: 't', runId: 'r-1', messages: [{ role: 'user', content: message }] }).chunks)));
-  assert.equal(new Set(bodies).size, bodies.length, 'seven different answers');
+  assert.equal(new Set(bodies).size, bodies.length, 'every quick message has its own answer');
   assert.match(String(agent.name), /^A2UI showcase/);
 
   // What it declares is what it does: it streams, calls no tool, and says what A2UI it speaks.
   const capabilities = agent.capabilities as Record<string, Record<string, unknown>>;
   assert.equal(capabilities.transport?.streaming, true);
   assert.equal(capabilities.tools?.supported, false);
-  assert.deepEqual(capabilities.custom?.a2ui, { version: 'v0.9', catalog: 'basic', activityType: 'a2ui-surface', activityDeltas: true });
+  assert.deepEqual(capabilities.custom?.a2ui, { versions: ['v0.8', 'v0.9'], catalogs: ['basic', 'standard'], activityType: 'a2ui-surface', activityDeltas: true });
   for (const group of ['state', 'humanInTheLoop', 'multiAgent', 'reasoning']) assert.equal(capabilities[group], undefined, `${group} is not declared`);
 });

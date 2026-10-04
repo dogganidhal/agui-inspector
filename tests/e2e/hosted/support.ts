@@ -76,6 +76,11 @@ export const formOperations = [
   { version: V, updateDataModel: { surfaceId: 'form', path: '/', value: { note: 'first draft' } } },
 ];
 
+const formerCatalogOperations = formOperations.map((operation) => ('createSurface' in operation ? { ...operation, createSurface: { ...operation.createSurface, catalogId: FORMER_CATALOG } } : operation));
+
+/** The id an agent still uses for the basic catalog, which only a config alias makes known. */
+export const FORMER_CATALOG = 'https://catalog.invalid/old/basic.json';
+
 /** A reply in five deltas, then a subagent that starts and finishes: every place the conversation shows an offset and a frame reference. */
 const evidenceEvents = [
   { type: 'TEXT_MESSAGE_START', messageId: 'msg-1', role: 'assistant' },
@@ -154,8 +159,8 @@ function answer(pathname: string, input: { threadId?: unknown; runId?: unknown; 
     return void response.end(sse(contradictionEvents({ threadId, runId })));
   }
   const activity =
-    pathname === '/surface'
-      ? [{ type: 'ACTIVITY_SNAPSHOT', messageId: 'activity-1', activityType: 'a2ui-surface', content: { a2ui_operations: formOperations }, replace: true }]
+    pathname === '/surface' || pathname === '/former-catalog'
+      ? [{ type: 'ACTIVITY_SNAPSHOT', messageId: 'activity-1', activityType: 'a2ui-surface', content: { a2ui_operations: pathname === '/surface' ? formOperations : formerCatalogOperations }, replace: true }]
       : pathname === '/evidence'
         ? evidenceEvents
         : pathname === '/reveal'
