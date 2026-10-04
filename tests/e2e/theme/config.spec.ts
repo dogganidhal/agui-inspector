@@ -5,13 +5,9 @@
 // by the switch; omitted values keep their defaults; every rejected override is a visible nonfatal
 // warning that applies nothing, starts no request and leaves the content security policy alone; valid
 // agents still run; and a host page's generic tokens neither reach the inspector nor are replaced by it.
-import { spawn, type ChildProcess } from 'node:child_process';
-import { createServer, type Server } from 'node:http';
-import { createServer as createSocketServer, type AddressInfo } from 'node:net';
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
 import type { Page } from '@playwright/test';
-import { AGENT_REPLY, expect, expectAllowlisted, open, root, send, test, type Site } from '../hosted/support';
+import { startPython, startStatic } from '../hosted/serving';
+import { AGENT_REPLY, expect, expectAllowlisted, open, send, test, type Site } from '../hosted/support';
 
 const THEME = {
   light: {
@@ -327,101 +323,11 @@ for (const scheme of ['light', 'dark'] as const) {
 // The Python helper, and generic static serving of its configuration
 // ---------------------------------------------------------------------------------------------
 
-async function freePort(): Promise<number> {
-  const server = createSocketServer();
-  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-  const { port } = server.address() as AddressInfo;
-  await new Promise((resolve) => server.close(resolve));
-  return port;
-}
-
-// A Starlette host that mounts the real helper over the build under test, with a scripted agent. The
-// packaged copy is not touched: other specs stage it, and two stagings must not meet.
-const PYTHON_HOST = `
-import json, pathlib, sys
-import uvicorn
-from starlette.applications import Starlette
-from starlette.responses import StreamingResponse
-from starlette.routing import Route
-import agui_inspector
-from agui_inspector import Agent, mount_inspector
-
-port, dist, theme = int(sys.argv[1]), pathlib.Path(sys.argv[2]), json.loads(sys.argv[3])
-agui_inspector._assets_root = lambda: dist
-
-async def stream(request):
-    run = await request.json()
-    ids = {"threadId": run["threadId"], "runId": run["runId"]}
-    events = [
-        {"type": "RUN_STARTED", **ids},
-        {"type": "TEXT_MESSAGE_START", "messageId": "m", "role": "assistant"},
-        {"type": "TEXT_MESSAGE_CONTENT", "messageId": "m", "delta": ${JSON.stringify(AGENT_REPLY)}},
-        {"type": "TEXT_MESSAGE_END", "messageId": "m"},
-        {"type": "RUN_FINISHED", **ids, "outcome": {"type": "success"}},
-    ]
-    return StreamingResponse((f"data: {json.dumps(e)}\\n\\n" for e in events), media_type="text/event-stream")
-
-app = Starlette(routes=[Route("/agents/demo/stream", stream, methods=["POST"])])
-mount_inspector(app, agents=[Agent(id="demo", name="Demo agent", url="/agents/demo/stream")], enabled=True, theme=theme)
-uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")
-`;
-
-async function startPython(dist: string, theme: unknown): Promise<{ origin: string; stop(): void }> {
-  const port = await freePort();
-  const child: ChildProcess = spawn(
-    'uv',
-    ['run', '--project', 'packages/python', '--locked', '--extra', 'embedded', '--group', 'test', 'python', '-c', PYTHON_HOST, String(port), dist, JSON.stringify(theme)],
-    { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] },
-  );
-  let stderr = '';
-  child.stderr?.on('data', (chunk) => (stderr += String(chunk)));
-  child.stdout?.resume();
-  let exited = false;
-  child.on('exit', () => (exited = true));
-  const origin = `http://127.0.0.1:${port}`;
-  for (let attempt = 0; attempt < 600; attempt++) {
-    if (exited) throw new Error(`the Python host exited early:\n${stderr}`);
-    if (await fetch(`${origin}/agui-inspector/config.json`).then((response) => response.ok, () => false)) return { origin, stop: () => void child.kill() };
-    await new Promise((resolve) => setTimeout(resolve, 200));
-  }
-  child.kill();
-  throw new Error(`the Python host did not start:\n${stderr}`);
-}
-
-/** A generic static server: the build's files and one adjacent config.json, nothing else. */
-async function startStatic(dist: string, config: string): Promise<{ origin: string; requested: string[]; close(): Promise<void> }> {
-  const types: Record<string, string> = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json' };
-  const requested: string[] = [];
-  const server: Server = createServer((request, response) => {
-    const { pathname } = new URL(request.url ?? '/', 'http://x');
-    requested.push(pathname);
-    const name = pathname === '/' ? 'index.html' : pathname.slice(1);
-    let body: string | Buffer | undefined;
-    if (name === 'config.json') body = config;
-    else if (/^[\w.-]+$/.test(name)) {
-      try {
-        body = readFileSync(path.join(dist, name));
-      } catch {
-        body = undefined;
-      }
-    }
-    if (body === undefined) return void response.writeHead(404).end();
-    response.writeHead(200, { 'content-type': types[path.extname(name)] ?? 'text/html' }).end(body);
-  });
-  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-  return { origin: `http://127.0.0.1:${(server.address() as AddressInfo).port}`, requested, close: () =>
-      new Promise((resolve) => {
-        server.close(() => resolve());
-        server.closeAllConnections();
-      }),
-  };
-}
-
 test.describe('the Python helper', () => {
   test.describe.configure({ mode: 'serial', timeout: 180_000 });
 
   test('serves the maps in config.json, the page applies them in both modes, and the same config works from a generic static server', async ({ page, dist, requested, violations }) => {
-    const python = await startPython(dist, THEME);
+    const python = await startPython(dist, { theme: THEME });
     try {
       const served = await fetch(`${python.origin}/agui-inspector/config.json`).then((response) => response.text());
       expect(JSON.parse(served)).toEqual({ version: 0, agents: [{ id: 'demo', url: '/agents/demo/stream', name: 'Demo agent' }], theme: THEME });
@@ -468,7 +374,7 @@ test.describe('the Python helper', () => {
   });
 
   test('delivers rejected overrides unchanged, and the page warns instead of failing', async ({ page, dist, requested, violations }) => {
-    const python = await startPython(dist, UNSAFE);
+    const python = await startPython(dist, { theme: UNSAFE });
     try {
       await page.emulateMedia({ colorScheme: 'light' });
       await page.goto(`${python.origin}/agui-inspector/`);

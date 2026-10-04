@@ -47,8 +47,8 @@ export interface SiteOptions {
   readonly hosting?: (origins: Pick<Site, 'agent' | 'foreign' | 'closed'>) => object | string | null;
   /** What `config.json` holds on the page's origin, from the origins; `null` serves none. */
   readonly config?: ((origins: Pick<Site, 'agent' | 'foreign' | 'closed'>) => object | string | null) | undefined;
-  /** Extra files on the page's origin, by path. */
-  readonly files?: Record<string, { type: string; body: string }>;
+  /** Extra files on the page's origin, by path. Read on every request, so a test may add one once the origins are known. `redirect` answers 302 to that URL instead. */
+  readonly files?: Record<string, { type: string; body: string; redirect?: string }>;
 }
 
 const TYPES: Record<string, string> = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json' };
@@ -202,6 +202,10 @@ async function openSite(dist: string, options: SiteOptions): Promise<{ site: Sit
     }
     pageSeen.push({ method: 'GET', path: pathname, body: '', cookie: request.headers.cookie, token: undefined });
     const extra = options.files?.[pathname];
+    if (extra?.redirect !== undefined) {
+      response.writeHead(302, { location: extra.redirect });
+      return void response.end();
+    }
     let content: string | Buffer | undefined = extra?.body;
     let type = extra?.type;
     if (content === undefined && (name === 'hosting-config.json' || name === 'config.json')) {
