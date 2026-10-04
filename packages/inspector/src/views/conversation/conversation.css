@@ -115,6 +115,49 @@ details[open] > .agui-conv-summary .agui-conv-chev { transform: rotate(90deg); }
   font-size: 13.5px;
 }
 
+/* Markdown: the control above the entries, and the formatted text inside a message or reasoning body.
+   Plain text adds none of this, so a page that never turns Markdown on is drawn as before. */
+.agui-conv-toolbar { display: flex; align-items: center; }
+.agui-md { white-space: normal; }
+.agui-md > * + *,
+.agui-md li > * + * { margin-top: calc(var(--u) * 2); }
+.agui-md :is(p, ul, ol, blockquote, h3, h4, h5, h6, hr) { margin: 0; }
+.agui-md :is(ul, ol) { padding-left: calc(var(--u) * 6); }
+.agui-md :is(h3, h4, h5, h6) { font-size: 1em; font-weight: 600; }
+.agui-md blockquote {
+  padding-left: calc(var(--u) * 3.5);
+  border-left: 1px solid var(--line-2);
+  color: var(--muted);
+}
+.agui-md hr { border: 0; border-top: 1px solid var(--line); }
+.agui-md code {
+  padding: 0 calc(var(--u) * 1);
+  border-radius: var(--r-xs);
+  background: var(--sunk);
+  font-family: var(--agui-font-mono);
+  font-size: 0.92em;
+}
+/* A wide table scrolls inside its own box and the box takes focus, so a keyboard can scroll it. A box that scrolls
+   still lends its content's width to the panes around it, so it has no width of its own and fills its parent instead. */
+.agui-md-scroll { width: 0; min-width: 100%; overflow-x: auto; }
+.agui-md table { border-collapse: collapse; }
+.agui-md :is(th, td) {
+  padding: calc(var(--u) * 1.5) calc(var(--u) * 3);
+  border: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+  /* The message body breaks words anywhere. A cell keeps its words whole, and the table scrolls in its box instead. */
+  overflow-wrap: normal;
+}
+.agui-md th { background: var(--sunk); font-weight: 600; }
+.agui-md :is(th, td)[data-align="center"] { text-align: center; }
+.agui-md :is(th, td)[data-align="right"] { text-align: right; }
+.agui-md-link { color: var(--fg); text-decoration: underline; text-underline-offset: 2px; }
+/* The address a link goes to, printed so a link cannot hide where it leads. */
+.agui-md-dest { color: var(--muted); font-family: var(--agui-font-mono); font-size: 12px; overflow-wrap: anywhere; }
+.agui-md-inert { color: var(--muted); font-style: italic; }
+.agui-md-note { margin: 0 0 calc(var(--u) * 1.5); font-size: 12px; }
+
 /* Deltas */
 .agui-conv-deltas { margin-top: calc(var(--u) * 1); }
 .agui-conv-deltalist {

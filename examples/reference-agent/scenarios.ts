@@ -90,6 +90,36 @@ export function referenceRunResponse(ids: RunIds): ScenarioResponse {
   return sse([started(ids), ...say('msg-1', 'Hello from the reference agent.'), finished(ids)]);
 }
 
+/**
+ * The text of `markdownRunResponse`: every construct the conversation's Markdown view draws, and the samples that matter
+ * under the page's policy (a remote image, a `javascript:` link, raw HTML with a handler). A constant, so tests can compare it.
+ */
+export const MARKDOWN_REPLY = [
+  '# Release notes',
+  '',
+  'The **agent** answered in *Markdown*, with ~~no~~ `inline code` and a [link](https://example.test/docs).',
+  '',
+  '- a list item',
+  '- another item',
+  '',
+  '| name | count |',
+  '|:-----|------:|',
+  '| apples | 3 |',
+  '',
+  '```ts',
+  'const answer = 42;',
+  '```',
+  '',
+  '![remote image](https://example.test/pixel.png) [unsafe link](javascript:window.__pwned=1)',
+  '',
+  '<img src=x onerror="window.__pwned=1">',
+].join('\n');
+
+/** One run with one assistant message that holds `MARKDOWN_REPLY`. For the whole-app end-to-end test of the Markdown view; not a demo example. */
+export function markdownRunResponse(ids: RunIds): ScenarioResponse {
+  return sse([started(ids), ...say('msg-md', MARKDOWN_REPLY), finished(ids)]);
+}
+
 function lastUserText(input: RunInput): string {
   const content = (input.messages ?? []).filter((message) => message.role === 'user').at(-1)?.content;
   return typeof content === 'string' ? content : '';

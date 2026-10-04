@@ -1,0 +1,31 @@
+// Text written to attack whoever reads it, shared by the unit test and the browser spec of the Markdown view
+// (spec 012, SC-002). Not a test file. Every sample is plain data: a real script in one would only ever run in the browser spec,
+// where `window.__pwned` is the canary.
+export const HOSTILE: readonly string[] = [
+  '<script>window.__pwned = 1</script>',
+  '<img src=x onerror="window.__pwned = 1">',
+  '<iframe src="https://example.test/"></iframe>',
+  '<svg onload="window.__pwned = 1"></svg>',
+  '<style>body { display: none }</style>',
+  '<a href="javascript:window.__pwned = 1">x</a>',
+  '<form action="https://example.test/"><input name=x></form>',
+  '[a](javascript:window.__pwned=1)',
+  '[a](JaVaScRiPt:window.__pwned=1)',
+  '[a](vbscript:x)',
+  '[a](data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==)',
+  '[a](file:///etc/passwd)',
+  '<javascript:alert(1)>',
+  '![t](https://example.test/p.png)',
+  '![t](data:image/png;base64,iVBORw0KGgo=)',
+  '![t][ref]\n\n[ref]: https://example.test/p.png',
+  '[a](//example.test/x) [b](/relative) [c](#frag) [d](ftp://example.test/f) [e](tel:+15550100)',
+  '[a](https://example.test/ "t\\" onmouseover=\\"window.__pwned=1")',
+  '| a |\n|:--|\n| <b onclick=x>y</b> |',
+  '&lt;script&gt;window.__pwned=1&lt;/script&gt; &#x3C;img src=x onerror=y&#x3E;',
+  '`<script>`\n\n```html\n<script>window.__pwned=1</script>\n```',
+  '['.repeat(5000),
+  '>'.repeat(5000),
+  '- '.repeat(500) + 'x',
+  '*'.repeat(5000) + 'a' + '*'.repeat(5000),
+];
+
