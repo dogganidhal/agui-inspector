@@ -68,7 +68,7 @@ A run without the field is read as "every reply was given by the developer", whi
 
 | Entity | New data | Source |
 | --- | --- | --- |
-| `RunEntry.carried` | one item `automatic · <interrupt ids>` when `automaticReplies.interruptIds` is not empty | the `Run` of the exchange |
+| `RunEntry.carried` | one item `automatic · <ids>` listing the interrupt ids and tool call ids that the input really carries and `automaticReplies` names. An id that matches nothing in the input is left out. | the `Run` of the exchange |
 | `ToolResult` | `automatic?: true` when the tool message answers a call in `automaticReplies.toolCallIds` | the `Run` of the exchange |
 
 State transitions of a reply, with the new edge:

@@ -25,6 +25,14 @@ export const SCENARIOS = {
   broken: 'broken',
 } as const;
 
+/**
+ * A user message that makes the interactive agent ask again on every run, a resume included: an agent that never
+ * stops asking, so a test can check the limit on automatic replies. It is not one of SCENARIOS, so it is not a quick
+ * message of the public demo. It finds its name in the last user message of the transcript, so it needs the
+ * full-transcript message mode, which is the default. A turn-only run carries no user message and the loop ends.
+ */
+export const INTERRUPT_FOREVER = 'interrupt forever';
+
 export const INTERRUPTS = [
   {
     id: 'i-approve',
@@ -127,7 +135,8 @@ function lastUserText(input: RunInput): string {
 
 /**
  * The interactive agent. A resume answers the interrupts, tool results answer the tool calls, a surface
- * action is acknowledged, and otherwise the last user message picks the scenario, in that order.
+ * action is acknowledged, and otherwise the last user message picks the scenario, in that order. The one
+ * exception is INTERRUPT_FOREVER, which interrupts again whatever the run carries.
  */
 export function interactiveResponse(input: RunInput): ScenarioResponse {
   const { runId } = input;
@@ -136,6 +145,10 @@ export function interactiveResponse(input: RunInput): ScenarioResponse {
   const tools = (input.messages ?? []).filter((message) => message.role === 'tool');
   const action = input.forwardedProps?.a2uiAction?.userAction as { name?: unknown } | null | undefined;
 
+  if (lastUserText(input) === INTERRUPT_FOREVER) {
+    const again = { id: `i-loop-${runId}`, reason: 'input', message: 'Ask again?' };
+    return sse([open, ...say(`m-${runId}`, 'Another question.'), finished(input, { type: 'interrupt', interrupts: [again] })]);
+  }
   if (input.resume !== undefined) {
     const answers = input.resume.map((entry) => `${entry.interruptId}=${entry.status}${entry.payload === undefined ? '' : `:${JSON.stringify(entry.payload)}`}`).join(', ');
     return sse([open, ...say(`m-${runId}`, `Resumed with ${answers}`), done]);

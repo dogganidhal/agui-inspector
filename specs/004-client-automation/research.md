@@ -118,8 +118,9 @@ calls, and files without it still import. Formats stay at version 0 as the 0.2.0
 
 Where the mark shows:
 
-- The run entry of the continuation: one `Carried` item, `automatic · i-approve, i-contact`, for interrupt answers. The
-  existing item `resume · 2 answers` stays as it is, so nothing that reads it changes.
+- The run entry of the continuation: one `Carried` item, `automatic · i-approve, i-contact`, with the interrupt ids and the
+  tool call ids that the input really carries. The existing items `resume · 2 answers` and `tool result · c-1` stay as
+  they are, so nothing that reads them changes.
 - The tool card whose result a script gave: the label `Result · entered by you` becomes `Result · automatic`. Today a
   result carried by an input message is always labelled "entered by you", which would be false for a script.
 - The reply cards while they show: a small tag `Automatic` on an answered interrupt card and on a tool card whose result

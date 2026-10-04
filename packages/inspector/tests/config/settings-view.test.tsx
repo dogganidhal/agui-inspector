@@ -151,3 +151,58 @@ test('there is nowhere to enter or keep a credential in the settings', () => {
   assert.doesNotMatch(markup, /aria-label="[^"]*(?:token|password|authorization|header)[^"]*"/i);
   assert.doesNotMatch(markup, /autocomplete="(?:current|new)-password"/);
 });
+
+// ---------------------------------------------------------------------------------------------
+// Automatic replies (spec 004): the three settings in the panel
+// ---------------------------------------------------------------------------------------------
+
+const withProfile = (patch: Partial<SettingsViewProps['profile']>) => render({ profile: { ...props().profile, ...patch } });
+const pressed = (markup: string, label: string): string[] => {
+  const group = markup.match(new RegExp(`<div class="agui-seg" role="group" aria-label="${label}">(.*?)</div>`))?.[1] ?? '';
+  return [...group.matchAll(/aria-pressed="(true|false)"[^>]*>([^<]*)</g)].filter((match) => match[1] === 'true').map((match) => match[2] as string);
+};
+
+test('Interrupt replies offers By hand, Resolve and Cancel, and shows the profile\'s choice; a profile with none is by hand', () => {
+  const markup = render();
+  const group = markup.match(/<div class="agui-seg" role="group" aria-label="Interrupt replies">(.*?)<\/div>/)?.[1] ?? '';
+  assert.deepEqual([...group.matchAll(/>([^<]+)<\/button>/g)].map((match) => match[1]), ['By hand', 'Resolve', 'Cancel']);
+  assert.deepEqual(pressed(markup, 'Interrupt replies'), ['By hand']);
+  assert.deepEqual(pressed(withProfile({ interruptReply: 'resolve' }), 'Interrupt replies'), ['Resolve']);
+  assert.deepEqual(pressed(withProfile({ interruptReply: 'cancel' }), 'Interrupt replies'), ['Cancel']);
+});
+
+test('each tool says how it is answered and has a labelled text area for a scripted result', () => {
+  const plain = render();
+  assert.match(plain, /Lists open returns · answered by hand/);
+  assert.match(plain, /<textarea[^>]*aria-label="Scripted result for get_open_returns"[^>]*><\/textarea>/);
+
+  const scripted = withProfile({ toolResults: { get_open_returns: '[{"id":1}]' } });
+  assert.match(scripted, /Lists open returns · answered with a scripted result/);
+  assert.match(scripted, /<textarea[^>]*aria-label="Scripted result for get_open_returns"[^>]*>\[\{&quot;id&quot;:1\}\]<\/textarea>/);
+  assert.match(scripted, /aria-label="Remove tool get_open_returns"/);
+});
+
+test('Interrupt payloads says what happens without one, lists a payload for each reason with a remove button, and has an add form', () => {
+  const none = render();
+  assert.match(none, /<h3>Interrupt payloads<\/h3>/);
+  assert.match(none, /No payloads\. Resolve sends the starting answer from each response schema\./);
+  assert.match(none, />Interrupt reason<\/label>/);
+  assert.match(none, />Payload<\/label>/);
+  assert.match(none, /Add payload/);
+  assert.doesNotMatch(none, /Payload for /);
+
+  const some = withProfile({ interruptReply: 'resolve', interruptPayloads: { approval: { approved: true }, input: 'free text' } });
+  assert.doesNotMatch(some, /No payloads\./);
+  for (const reason of ['approval', 'input']) {
+    assert.match(some, new RegExp(`<textarea[^>]*aria-label="Payload for ${reason}"`));
+    assert.match(some, new RegExp(`aria-label="Remove payload for ${reason}"`));
+  }
+  assert.match(some, /aria-label="Payload for approval"[^>]*>\{\n  &quot;approved&quot;: true\n\}<\/textarea>/);
+});
+
+test('the new controls hold no credential field and call nothing while rendering', () => {
+  const before = calls.length;
+  const markup = withProfile({ interruptReply: 'resolve', interruptPayloads: { approval: 1 }, toolResults: { get_open_returns: 'x' } });
+  assert.equal(calls.length, before);
+  assert.doesNotMatch(markup, /type="password"|aria-label="[^"]*(token|secret|password)/i);
+});

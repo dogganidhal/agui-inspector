@@ -9,10 +9,10 @@
 // Composes F06 primitives only. It never holds, asks for or shows a credential: the token field lives
 // in the connection view, and nothing here reaches storage.
 import { useId, useRef, useState, type ReactElement, type ReactNode } from 'react';
-import type { AgentConfig, ClientProfileSettings, JsonValue, SettingsViewProps } from '../../contracts';
+import type { AgentConfig, ClientProfileSettings, InterruptReply, JsonValue, SettingsViewProps } from '../../contracts';
 import { describeCapabilities, type CapabilityGroupView, type LoadedCapabilities } from '../../core/config/index';
 import { isJsonObject } from '../../core/config/validation';
-import { parseProfileSettings } from '../../core/profiles/index';
+import { parseProfileSettings, removeTool, setInterruptPayload, setInterruptReply, setToolResult } from '../../core/profiles/index';
 import { Button, CodeBlock, Editor, Field, Finding, Icon, Label, Popover, SegmentedControl, Switch, Tag } from '../theme/primitives';
 
 /** What the caller has learned about the selected agent's declared capabilities. */
@@ -43,7 +43,7 @@ interface Draft {
   error?: string;
 }
 
-function TextSetting({ label, value, commit, describedBy }: { label: string; value: string; commit: (text: string) => string | undefined; describedBy?: string }): ReactElement {
+function TextSetting({ label, value, commit, describedBy, rows }: { label: string; value: string; commit: (text: string) => string | undefined; describedBy?: string; rows?: number }): ReactElement {
   const errorId = useId();
   const [draft, setDraft] = useState<Draft>({ text: value, seen: value });
   let current = draft;
@@ -51,19 +51,20 @@ function TextSetting({ label, value, commit, describedBy }: { label: string; val
     current = { text: value, seen: value };
     setDraft(current);
   }
+  const control = {
+    'aria-label': label,
+    'aria-describedby': current.error ? errorId : describedBy,
+    invalid: current.error !== undefined,
+    value: current.text,
+    onChange: (event: { target: { value: string } }) => {
+      const text = event.target.value;
+      const error = commit(text);
+      setDraft(error ? { text, seen: value, error } : { text, seen: text });
+    },
+  };
   return (
     <div className="agui-settings-ctl">
-      <Field
-        aria-label={label}
-        aria-describedby={current.error ? errorId : describedBy}
-        invalid={current.error !== undefined}
-        value={current.text}
-        onChange={(event) => {
-          const text = event.target.value;
-          const error = commit(text);
-          setDraft(error ? { text, seen: value, error } : { text, seen: text });
-        }}
-      />
+      {rows === undefined ? <Field {...control} /> : <Editor {...control} rows={rows} />}
       {current.error && (
         <div id={errorId} role="alert">
           <Finding variant="err">{current.error}</Finding>
@@ -368,6 +369,47 @@ function AddContext({ profile, commit }: { profile: ClientProfileSettings; commi
   );
 }
 
+function AddPayload({ profile, commit }: { profile: ClientProfileSettings; commit: (next: ClientProfileSettings) => string | undefined }): ReactElement {
+  const [reason, setReason] = useState('');
+  const [payload, setPayload] = useState('{\n  "approved": true\n}');
+  const [error, setError] = useState<string>();
+  const ids = { reason: useId(), payload: useId() };
+  return (
+    <form
+      className="agui-settings-form"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (reason.trim() === '') return setError('Give the interrupt reason, for example approval.');
+        let parsed: JsonValue;
+        try {
+          parsed = JSON.parse(payload) as JsonValue;
+        } catch (cause) {
+          return setError(`The payload is not valid JSON: ${problem(cause)}`);
+        }
+        const failed = commit(setInterruptPayload(profile, reason.trim(), parsed));
+        setError(failed);
+        if (!failed) setReason('');
+      }}
+    >
+      <Label htmlFor={ids.reason}>Interrupt reason</Label>
+      <Field id={ids.reason} value={reason} onChange={(event) => setReason(event.target.value)} />
+      <Label htmlFor={ids.payload}>Payload</Label>
+      <Editor id={ids.payload} rows={3} value={payload} onChange={(event) => setPayload(event.target.value)} />
+      {error && (
+        <div role="alert">
+          <Finding variant="err">{error}</Finding>
+        </div>
+      )}
+      <div>
+        <Button type="submit" small>
+          <Icon name="plus" size={14} />
+          Add payload
+        </Button>
+      </div>
+    </form>
+  );
+}
+
 function ProfilePanel({ props, agent }: { props: SettingsViewProps; agent?: AgentConfig }): ReactElement {
   const { profile } = props;
   const [readError, setReadError] = useState<string>();
@@ -421,32 +463,68 @@ function ProfilePanel({ props, agent }: { props: SettingsViewProps; agent?: Agen
           <Row title="Inject render_a2ui tool" hint="Adds the tool through @ag-ui/a2ui-middleware">
             <Switch aria-label="Inject render_a2ui tool" checked={profile.injectA2uiTool} onChange={(injectA2uiTool) => commit({ ...profile, injectA2uiTool })} />
           </Row>
+          <Row title="Interrupt replies" hint="Resolve or cancel every interrupt for you, then continue the run. The next run is the one your own reply would send. After 10 automatic replies in a row the inspector waits for you.">
+            <SegmentedControl
+              label="Interrupt replies"
+              value={profile.interruptReply ?? 'manual'}
+              options={[
+                { value: 'manual', label: 'By hand' },
+                { value: 'resolve', label: 'Resolve' },
+                { value: 'cancel', label: 'Cancel' },
+              ]}
+              onChange={(choice) => commit(setInterruptReply(profile, choice === 'manual' ? undefined : (choice as InterruptReply)))}
+            />
+          </Row>
         </div>
       </Group>
 
-      <Group title="Client tools">
-        {profile.tools.length === 0 ? (
-          <p className="agui-settings-muted">No client tools. Replies to tool calls stay manual.</p>
+      <Group title="Interrupt payloads">
+        <p className="agui-settings-note">
+          Used when Interrupt replies is Resolve. Interrupts with the reason you name get this payload, sent as written whatever their response schema says. Other interrupts get the starting answer from their schema.
+        </p>
+        {Object.keys(profile.interruptPayloads ?? {}).length === 0 ? (
+          <p className="agui-settings-muted">No payloads. Resolve sends the starting answer from each response schema.</p>
         ) : (
           <div className="agui-settings-box">
-            {profile.tools.map((tool) => (
-              <Row
-                key={tool.name}
-                title={<span className="agui-settings-mono agui-settings-strong">{tool.name}</span>}
-                hint={`${tool.description || 'No description'} · answered by hand`}
-              >
-                {tool.parameters !== undefined && <Tag variant="line">JSON Schema</Tag>}
-                <Button
-                  variant="ghost"
-                  small
-                  iconOnly
-                  aria-label={`Remove tool ${tool.name}`}
-                  onClick={() => commit({ ...profile, tools: profile.tools.filter((candidate) => candidate.name !== tool.name) })}
-                >
+            {Object.entries(profile.interruptPayloads ?? {}).map(([reason, payload]) => (
+              <Row key={reason} title={<span className="agui-settings-mono agui-settings-strong">{reason}</span>} hint="Interrupt reason">
+                <JsonSetting label={`Payload for ${reason}`} value={payload} commit={(value) => commit(setInterruptPayload(profile, reason, value))} rows={3} />
+                <Button variant="ghost" small iconOnly aria-label={`Remove payload for ${reason}`} onClick={() => commit(setInterruptPayload(profile, reason, undefined))}>
                   <Icon name="x" size={14} />
                 </Button>
               </Row>
             ))}
+          </div>
+        )}
+        <AddPayload profile={profile} commit={commit} />
+      </Group>
+
+      <Group title="Client tools">
+        {profile.tools.length === 0 ? (
+          <p className="agui-settings-muted">No client tools. Add one to script its result. Replies to tool calls stay by hand.</p>
+        ) : (
+          <div className="agui-settings-box">
+            {profile.tools.map((tool) => {
+              const script = profile.toolResults !== undefined && Object.hasOwn(profile.toolResults, tool.name) ? (profile.toolResults[tool.name] as string) : '';
+              return (
+                <Row
+                  key={tool.name}
+                  title={<span className="agui-settings-mono agui-settings-strong">{tool.name}</span>}
+                  hint={`${tool.description || 'No description'} · ${script === '' ? 'answered by hand' : 'answered with a scripted result'}`}
+                >
+                  <TextSetting
+                    label={`Scripted result for ${tool.name}`}
+                    value={script}
+                    rows={2}
+                    commit={(text) => commit(setToolResult(profile, tool.name, text === '' ? undefined : text))}
+                  />
+                  {tool.parameters !== undefined && <Tag variant="line">JSON Schema</Tag>}
+                  <Button variant="ghost" small iconOnly aria-label={`Remove tool ${tool.name}`} onClick={() => commit(removeTool(profile, tool.name))}>
+                    <Icon name="x" size={14} />
+                  </Button>
+                </Row>
+              );
+            })}
           </div>
         )}
         <AddTool profile={profile} commit={commit} />

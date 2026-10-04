@@ -58,6 +58,7 @@ const runOut = (r: Run): Run => ({
   startedAt: r.startedAt,
   ...(r.endedAt !== undefined && { endedAt: r.endedAt }),
   outcome: r.outcome,
+  ...(r.automaticReplies !== undefined && { automaticReplies: { interruptIds: r.automaticReplies.interruptIds, toolCallIds: r.automaticReplies.toolCallIds } }),
 });
 
 const frameOut = (f: RawFrame): RawFrame => ({
@@ -306,7 +307,7 @@ function checkOutcome(value: unknown, at: string) {
 
 function checkRun(value: unknown, position: number): Run {
   const at = `runs[${position}]`;
-  const r = record(value, at, ['id', 'threadId', 'runId', 'input', 'exchangeId', 'startedAt', 'outcome'], ['parentRunId', 'endedAt']);
+  const r = record(value, at, ['id', 'threadId', 'runId', 'input', 'exchangeId', 'startedAt', 'outcome'], ['parentRunId', 'endedAt', 'automaticReplies']);
   text(r.id, at, 'id');
   text(r.threadId, at, 'threadId');
   text(r.runId, at, 'runId');
@@ -316,6 +317,13 @@ function checkRun(value: unknown, position: number): Run {
   const startedAt = time(r.startedAt, at, 'startedAt');
   if (r.endedAt !== undefined && time(r.endedAt, at, 'endedAt') < startedAt) fail(`${at}: endedAt is before startedAt`);
   checkOutcome(r.outcome, at);
+  // The replies the inspector answered from the profile. Their ids are not checked against the input: the projection ignores one that matches nothing.
+  if (r.automaticReplies !== undefined) {
+    const marked = record(r.automaticReplies, `${at}: automaticReplies`, ['interruptIds', 'toolCallIds']);
+    for (const field of ['interruptIds', 'toolCallIds']) {
+      if (stringList(marked[field], `${at}: automaticReplies`, field).includes('')) fail(`${at}: automaticReplies: ${field} must hold nonempty strings`);
+    }
+  }
   return r as unknown as Run;
 }
 

@@ -80,6 +80,41 @@ test('a run names what its input carried: resume answers and an A2UI action', ()
   assert.deepEqual(run.carried, ['resume · 2 answers', 'a2uiAction · approve']);
 });
 
+test('replies the inspector answered from the profile are named in the run that carried them, and on the tool result', () => {
+  const h = harness();
+  h.open('ex1', { input: { threadId: 't1', runId: 'r1' } });
+  for (const [i, event] of [started('r1'), { type: 'TOOL_CALL_START', toolCallId: 'c1', toolCallName: 'pick_color' }, { type: 'TOOL_CALL_END', toolCallId: 'c1' }, { type: 'TOOL_CALL_START', toolCallId: 'c2', toolCallName: 'pick_size' }, { type: 'TOOL_CALL_END', toolCallId: 'c2' }, finished('r1', { type: 'success', pendingToolCallIds: ['c1', 'c2'] })].entries()) h.push('ex1', event, (i + 1) * 10);
+  h.close('ex1');
+
+  h.open('ex2', {
+    input: { threadId: 't1', runId: 'r2', messages: [{ id: 'tr1', role: 'tool', toolCallId: 'c1', content: 'teal' }, { id: 'tr2', role: 'tool', toolCallId: 'c2', content: 'by hand' }] },
+    automaticReplies: { interruptIds: [], toolCallIds: ['c1'] },
+  });
+  h.push('ex2', started('r2'), 10);
+  h.close('ex2');
+  const model = projectConversation(h.session());
+  const [first, second] = model.entries.filter((entry): entry is ToolCallEntry => entry.kind === 'tool');
+  assert.deepEqual(first?.result, { content: 'teal', messageId: 'tr1', origin: 'entered', carriedBy: 'r2', automatic: true });
+  assert.deepEqual(second?.result, { content: 'by hand', messageId: 'tr2', origin: 'entered', carriedBy: 'r2' }, 'a result the developer typed carries no mark');
+  assert.deepEqual((model.entries.filter((entry): entry is RunEntry => entry.kind === 'run')[1] as RunEntry).carried, ['tool result · c1', 'tool result · c2', 'automatic · c1']);
+});
+
+test('automatic interrupt answers are named in the run that carried them, and an id that matches nothing is ignored', () => {
+  const h = harness();
+  h.open('ex1', {
+    input: { threadId: 't1', runId: 'r1', resume: [{ interruptId: 'i1', status: 'resolved', payload: {} }, { interruptId: 'i2', status: 'cancelled' }] },
+    automaticReplies: { interruptIds: ['i1', 'i-not-in-this-input'], toolCallIds: ['c-not-in-this-input'] },
+  });
+  h.push('ex1', started('r1'), 10);
+  const run = projectConversation(h.session()).entries[0] as RunEntry;
+  assert.deepEqual(run.carried, ['resume · 2 answers', 'automatic · i1']);
+
+  const manual = harness();
+  manual.open('ex1', { input: { threadId: 't1', runId: 'r1', resume: [{ interruptId: 'i1', status: 'resolved', payload: {} }] } });
+  manual.push('ex1', started('r1'), 10);
+  assert.deepEqual((projectConversation(manual.session()).entries[0] as RunEntry).carried, ['resume · 1 answer'], 'no recorded mark, no line');
+});
+
 test('starting a new thread clears the conversation, and the earlier exchanges stay in the session', () => {
   const h = harness();
   h.open('ex1', { input: { threadId: 'old', runId: 'r1', messages: [{ id: 'u1', role: 'user', content: 'old thread' }] } });

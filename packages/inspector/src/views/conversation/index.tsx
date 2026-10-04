@@ -224,7 +224,7 @@ function ToolBlock({ entry, frames }: { entry: ToolCallEntry; frames: Frames }):
         </div>
         {entry.result && (
           <div>
-            <Label>Result{entry.result.origin === 'entered' ? ' · entered by you' : ''}</Label>
+            <Label>Result{entry.result.origin === 'entered' ? (entry.result.automatic ? ' · automatic' : ' · entered by you') : ''}</Label>
             <Payload text={entry.result.content} label={`Result of ${entry.name}`} />
           </div>
         )}

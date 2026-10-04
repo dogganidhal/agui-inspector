@@ -22,6 +22,7 @@ import {
   FORMAT_VERSION,
   type A2uiAction,
   type ClientProfileSettings,
+  type InterruptReply,
   type JsonObject,
   type JsonValue,
   type ProfileEnvelope,
@@ -147,6 +148,46 @@ function envelope(settings: ClientProfileSettings): ProfileEnvelope {
 }
 
 export const exportProfile = (settings: ClientProfileSettings): string => JSON.stringify(envelope(settings), null, 2);
+
+// ---------------------------------------------------------------------------------------------
+// Edits the settings panel makes to the automation settings. Each returns the profile to validate and apply; an
+// unset setting is a missing key, so a profile never says "by hand".
+// ---------------------------------------------------------------------------------------------
+
+/** `map` with `key` set to `value`, or without it when `value` is undefined. Keeps the order; undefined once empty. */
+function withEntry<T>(map: Readonly<Record<string, T>> | undefined, key: string, value: T | undefined): Record<string, T> | undefined {
+  const entries = Object.entries(map ?? {});
+  const at = entries.findIndex(([name]) => name === key);
+  if (value === undefined) {
+    if (at >= 0) entries.splice(at, 1);
+  } else if (at >= 0) entries[at] = [key, value];
+  else entries.push([key, value]);
+  return entries.length === 0 ? undefined : Object.fromEntries(entries);
+}
+
+export function setInterruptReply(settings: ClientProfileSettings, interruptReply: InterruptReply | undefined): ClientProfileSettings {
+  const { interruptReply: _previous, ...rest } = settings;
+  return interruptReply === undefined ? rest : { ...rest, interruptReply };
+}
+
+/** Sets the payload for an interrupt reason, or removes it when `payload` is undefined. */
+export function setInterruptPayload(settings: ClientProfileSettings, reason: string, payload: JsonValue | undefined): ClientProfileSettings {
+  const { interruptPayloads: _previous, ...rest } = settings;
+  const next = withEntry(settings.interruptPayloads, reason, payload);
+  return next === undefined ? rest : { ...rest, interruptPayloads: next };
+}
+
+/** Sets the scripted result of a tool, or removes it when `text` is undefined. */
+export function setToolResult(settings: ClientProfileSettings, name: string, text: string | undefined): ClientProfileSettings {
+  const { toolResults: _previous, ...rest } = settings;
+  const next = withEntry(settings.toolResults, name, text);
+  return next === undefined ? rest : { ...rest, toolResults: next };
+}
+
+/** Removes a tool together with its scripted result, so the profile stays valid. */
+export function removeTool(settings: ClientProfileSettings, name: string): ClientProfileSettings {
+  return setToolResult({ ...settings, tools: settings.tools.filter((tool) => tool.name !== name) }, name, undefined);
+}
 
 /** Parses an exported or saved profile. The version must be exactly 0. */
 export function importProfile(text: string): Result<ClientProfileSettings> {

@@ -146,7 +146,7 @@ The composer is already disabled while a notice exists, and it is, because the r
 | Connection, answered interrupt card | A tag `Automatic` when `automatic` is set. |
 | Connection, answered tool card | A tag `Automatic` when `automatic` is set. |
 | Connection, tool card footer | `The next run starts once every pending call has a result, and carries each as a tool message. Calls without a scripted result wait for you.` |
-| Conversation, run entry | `Carried:` gains `automatic · <interrupt ids>`. |
+| Conversation, run entry | `Carried:` gains `automatic · <ids>`, the interrupt ids and tool call ids the input carries and the run record names. The existing items `resume · n answers` and `tool result · <id>` stay. |
 | Conversation, tool card | `Result · automatic` for a scripted result, `Result · entered by you` for the rest. |
 
 Every new control has an accessible name and works from the keyboard like its neighbors.

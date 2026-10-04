@@ -17,7 +17,11 @@ import {
   importProfile,
   loadProfile,
   parseProfileSettings,
+  removeTool,
   saveProfile,
+  setInterruptPayload,
+  setInterruptReply,
+  setToolResult,
 } from '../../src/core/profiles/index.ts';
 
 /** The error of a failed result; fails the test when the result succeeded. */
@@ -432,6 +436,48 @@ test('the automation keys are not run input: tools, context and properties are t
     composeRunInput(baseParams({ profile: profile({ tools: [tool('pick_color')], interruptReply: 'resolve', interruptPayloads: { approval: 1 }, toolResults: { pick_color: 'teal' } }) })),
   );
   assert.deepEqual(automatic, plain);
+});
+
+test('the panel\'s edits set and clear each automation setting, keep the order, and never leave an empty map or a "by hand" value', () => {
+  let settings = profile({ tools: [tool('pick_color'), tool('pick_size')] });
+  settings = setInterruptReply(settings, 'resolve');
+  assert.equal(settings.interruptReply, 'resolve');
+  settings = setInterruptReply(settings, undefined);
+  assert.equal('interruptReply' in settings, false);
+
+  settings = setInterruptPayload(settings, 'approval', { approved: true });
+  settings = setInterruptPayload(settings, 'input', 'text');
+  settings = setInterruptPayload(settings, 'approval', { approved: false });
+  assert.deepEqual(Object.entries(settings.interruptPayloads ?? {}), [['approval', { approved: false }], ['input', 'text']], 'an edit keeps its place');
+  settings = setInterruptPayload(settings, 'approval', undefined);
+  assert.deepEqual(settings.interruptPayloads, { input: 'text' });
+  settings = setInterruptPayload(settings, 'input', undefined);
+  assert.equal('interruptPayloads' in settings, false, 'the last payload takes the map with it');
+  assert.equal('interruptPayloads' in setInterruptPayload(settings, 'nothing', undefined), false, 'removing what is not there changes nothing');
+
+  settings = setToolResult(settings, 'pick_color', 'teal');
+  settings = setToolResult(settings, 'pick_size', '3');
+  assert.deepEqual(settings.toolResults, { pick_color: 'teal', pick_size: '3' });
+  settings = setToolResult(settings, 'pick_color', undefined);
+  assert.deepEqual(settings.toolResults, { pick_size: '3' });
+
+  // Every edit stays valid for the profile checks.
+  assert.equal(parseProfileSettings(settings).ok, true);
+  assert.equal(parseProfileSettings(setInterruptPayload(setInterruptReply(settings, 'cancel'), '__proto__', { x: 1 })).ok, true);
+});
+
+test('removing a tool removes its scripted result in the same edit, and the profile stays valid', () => {
+  const settings = profile({ tools: [tool('pick_color'), tool('pick_size')], toolResults: { pick_color: 'teal', pick_size: '3' } });
+  const without = removeTool(settings, 'pick_color');
+  assert.deepEqual(without.tools.map((entry) => entry.name), ['pick_size']);
+  assert.deepEqual(without.toolResults, { pick_size: '3' });
+  assert.equal(parseProfileSettings(without).ok, true);
+  const last = removeTool(without, 'pick_size');
+  assert.equal('toolResults' in last, false);
+  assert.equal(parseProfileSettings(last).ok, true);
+  assert.equal(parseProfileSettings({ ...settings, tools: settings.tools.filter((entry) => entry.name !== 'pick_color') }).ok, false, 'removing only the tool would have left a script with no tool');
+  // The edits do not change the profile they were given.
+  assert.deepEqual(settings.toolResults, { pick_color: 'teal', pick_size: '3' });
 });
 
 test('export never carries credentials, even when handed an object that holds some', () => {

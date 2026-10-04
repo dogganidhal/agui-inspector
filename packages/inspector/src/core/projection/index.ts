@@ -63,7 +63,7 @@ export interface RunEntry extends EntryBase {
   pendingToolCallIds: string[];
   interrupts: Interrupt[];
   error?: { message: string; code?: string };
-  /** What the run's input carried: resume answers, tool results, an A2UI action. */
+  /** What the run's input carried: resume answers, tool results, an A2UI action, and which replies were automatic. */
   carried: string[];
   /** Why the connection ended, when it ended badly. Independent of the protocol outcome. */
   transportError?: string;
@@ -108,6 +108,8 @@ export interface ToolResult {
   origin: 'stream' | 'entered' | 'snapshot';
   /** For an entered result: the run that carried it. */
   carriedBy?: string;
+  /** The inspector gave this result from the profile. The recorded run says so; the wire never does. */
+  automatic?: true;
 }
 
 export interface ToolCallEntry extends EntryBase {
@@ -372,6 +374,9 @@ export function projectConversation(session: InspectionSession, current?: string
   let run!: RunEntry;
   let frame!: RawFrame;
   let startedThisRun: ToolCallEntry[] = [];
+  // The tool results of this exchange's input that the inspector gave from the profile, and the ones the input really carried.
+  let automaticTools: ReadonlySet<string> = new Set();
+  let automaticToolsCarried: string[] = [];
 
   const container = (): ConversationEntry[] => stack[stack.length - 1]?.children ?? entries;
   const add = <T extends ConversationEntry>(entry: T): T => {
@@ -509,10 +514,18 @@ export function projectConversation(session: InspectionSession, current?: string
 
     if (role === 'tool') {
       const callId = str(fields.toolCallId);
-      const result: ToolResult = { content: text, messageId: id, origin: origin === 'input' ? 'entered' : 'snapshot', ...(origin === 'input' && run.runId !== undefined && { carriedBy: run.runId }) };
+      const given = origin === 'input' && callId !== undefined && automaticTools.has(callId);
+      const result: ToolResult = {
+        content: text,
+        messageId: id,
+        origin: origin === 'input' ? 'entered' : 'snapshot',
+        ...(origin === 'input' && run.runId !== undefined && { carriedBy: run.runId }),
+        ...(given && { automatic: true as const }),
+      };
       registry.set(id, { role, read: () => text });
       if (callId !== undefined && setResult(callId, result)) {
         if (origin === 'input') run.carried.push(`tool result · ${callId}`);
+        if (given) automaticToolsCarried.push(callId);
         return;
       }
     } else if (role === 'reasoning') {
@@ -630,6 +643,8 @@ export function projectConversation(session: InspectionSession, current?: string
     const input = inputOf(exchange, recorded);
     const frames = framesOf.get(exchange.id) ?? [];
     startedThisRun = [];
+    automaticTools = new Set(recorded?.automaticReplies?.toolCallIds ?? []);
+    automaticToolsCarried = [];
     lanes.clear();
 
     // Before the first frame is read, ids are made from the exchange.
@@ -661,6 +676,10 @@ export function projectConversation(session: InspectionSession, current?: string
         if (id !== undefined && !registry.has(id)) addMessage(message, 'input');
       }
     }
+    // Which carried replies the inspector answered from the profile: only ids the input really carries, never one that matches nothing.
+    const resumed = new Set(Array.isArray(input.resume) ? (input.resume as Fields[]).map((entry) => str(entry.interruptId)) : []);
+    const automatic = [...(recorded?.automaticReplies?.interruptIds.filter((id) => resumed.has(id)) ?? []), ...automaticToolsCarried];
+    if (automatic.length > 0) run.carried.push(`automatic · ${automatic.join(', ')}`);
 
     let terminal = false;
     let lastOffset: number | undefined;

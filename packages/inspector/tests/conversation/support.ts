@@ -2,7 +2,7 @@
 // and session store, so projections are checked against genuine F05 evidence, not hand-built frames.
 // Also used by the browser fixture host. Not a test file.
 import type { RunAgentInput } from '@ag-ui/core';
-import type { Exchange, InspectionSession, Run, Scheduler, SessionStore, TransportState } from '../../src/contracts.ts';
+import type { AutomaticReplies, Exchange, InspectionSession, Run, Scheduler, SessionStore, TransportState } from '../../src/contracts.ts';
 import { createFrameReader, type FrameReader } from '../../src/core/frames/index.ts';
 import { createSessionStore } from '../../src/core/store/index.ts';
 
@@ -12,6 +12,8 @@ export interface ScriptedExchange {
   readonly input?: Partial<RunAgentInput>;
   readonly kind?: Exchange['kind'];
   readonly transport?: TransportState;
+  /** The replies of the input that the inspector answered from the profile, as the recorded run says. */
+  readonly automaticReplies?: AutomaticReplies;
 }
 
 export interface Harness {
@@ -50,7 +52,7 @@ export function harness(schedule: Scheduler = (callback) => callback()): Harness
       });
       if (input && runRecordId) {
         const full: RunAgentInput = { threadId: 't1', runId: id, state: {}, messages: [], tools: [], context: [], forwardedProps: {}, ...input };
-        const run: Run = { id: runRecordId, threadId: full.threadId, runId: full.runId, input: full, exchangeId: id, startedAt: 1_700_000_000_000, outcome: { kind: 'unknown' } };
+        const run: Run = { id: runRecordId, threadId: full.threadId, runId: full.runId, input: full, exchangeId: id, startedAt: 1_700_000_000_000, outcome: { kind: 'unknown' }, ...(options.automaticReplies !== undefined && { automaticReplies: options.automaticReplies }) };
         store.upsertRun(run);
       }
       readers.set(id, createFrameReader(store, id));
