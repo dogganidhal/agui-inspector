@@ -18,7 +18,7 @@ import type { AddressInfo } from 'node:net';
 import { deliver, pace, sleepOn, type PaceProfile } from './pacing.ts';
 import { interactiveResponse, type RunInput } from './scenarios.ts';
 
-export { INTERRUPTS, SCENARIOS } from './scenarios.ts';
+export { INTERRUPT_FOREVER, INTERRUPTS, SCENARIOS } from './scenarios.ts';
 
 /** A route that only answers with a redirect to the agent, to show that the page refuses to follow one. */
 export const REDIRECT_PATH = '/redirect';

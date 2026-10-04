@@ -310,6 +310,7 @@ function InterruptCard({ answer, info, waiting, total, onDraft, onAnswer }: { an
           <b>Interrupt</b>
           <Tag variant="neutral">{answer.interruptId}</Tag>
           <Tag variant={answer.status === 'resolved' ? 'ok' : 'neutral'}>{answer.status === 'resolved' ? 'Resolved' : 'Cancelled'}</Tag>
+          {answer.automatic && <Tag variant="line">Automatic</Tag>}
           {answer.status === 'resolved' && <span className="agui-conn-mono agui-conn-clip">{JSON.stringify(answer.draft)}</span>}
         </CardHeader>
       </Card>
@@ -378,6 +379,7 @@ function ToolResultCard({ draft, waiting, total, onDraft, onSubmit }: { draft: T
           <b className="agui-conn-mono">{name}</b>
           <Tag variant="neutral">{draft.toolCallId}</Tag>
           <Tag variant="ok">Result entered</Tag>
+          {draft.automatic && <Tag variant="line">Automatic</Tag>}
           <span className="agui-conn-mono agui-conn-clip">{draft.resultDraft}</span>
         </CardHeader>
       </Card>
@@ -416,7 +418,7 @@ function ToolResultCard({ draft, waiting, total, onDraft, onSubmit }: { draft: T
           </Button>
         </div>
       </CardBody>
-      <CardFooter>The next run starts once every pending call has a result, and carries each as a tool message. Nothing is answered for you.</CardFooter>
+      <CardFooter>The next run starts once every pending call has a result, and carries each as a tool message. Calls without a scripted result wait for you.</CardFooter>
     </Card>
   );
 }

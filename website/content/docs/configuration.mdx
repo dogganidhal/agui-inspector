@@ -119,7 +119,7 @@ Capabilities show in the eleven documented groups: `identity`, `transport`, `too
 
 ## Client profile
 
-The profile is what the inspector declares and sends: seven settings, no others.
+The profile is what the inspector declares and sends: seven settings. Three more optional settings say how the inspector answers a run's interrupts and client tool calls. There are no others.
 
 | Setting | Effect on the next run input |
 | --- | --- |
@@ -130,6 +130,11 @@ The profile is what the inspector declares and sends: seven settings, no others.
 | `injectA2uiTool` | Adds the official `render_a2ui` tool from `@ag-ui/a2ui-middleware` to `tools`. It replaces a profile tool with the same name, so the name never appears twice. |
 | `messageMode` | `full` or `turn`. When set, it overrides the [preset's mode](./presets.mdx#forwarded-properties-and-message-mode). When absent, the preset decides. |
 | `forwardedProps` | Merged over the preset's properties. If both define a name, the profile wins. `a2uiAction` is reserved. |
+| `interruptReply` | `resolve` or `cancel`. None. When set, the inspector answers every interrupt of a finished run and sends the continuation. When absent, you answer by hand. |
+| `interruptPayloads` | None. An object from an interrupt `reason` to a JSON payload, never `null`. Resolve sends the payload for the interrupt's reason, as written. Without one it sends the starting answer from the response schema. It is kept when `interruptReply` is not `resolve`. |
+| `toolResults` | None. An object from the name of a tool in `tools` to a nonempty text. Each pending call to that tool gets the text as its result, exactly as written. A name that is not in `tools` is an error. |
+
+The last three settings never reach the run input. The continuation they cause is the one your own replies would send. [Automatic replies](./runs.mdx#automatic-replies) describes what the inspector does, the limit of 10 in a row and how the conversation marks them.
 
 `composeRunInput` builds the input from the profile, the resolved preset and what the runtime gives it: thread and run ids, the transcript and this turn's messages, the current state, the parent run, resume answers and an A2UI action. It checks the result against the protocol's `RunAgentInput` schema. An input that fails is not sent or repaired. It comes back as an error to show. This applies to ordinary runs only. The [raw request editor](./runs.mdx#raw-submissions) sends what you typed.
 
@@ -149,18 +154,21 @@ Export writes this envelope to a file. Browser storage keeps it under the key `a
     "renderA2ui": true,
     "injectA2uiTool": false,
     "messageMode": "turn",
-    "forwardedProps": {}
+    "forwardedProps": {},
+    "interruptReply": "resolve",
+    "interruptPayloads": { "approval": { "approved": true } },
+    "toolResults": {}
   }
 }
 ```
 
-`messageMode` is left out when the profile uses the preset's mode. The version must be exactly 0. A missing or different version is an error. Import and load check the whole file. A bad file shows its error and does not change the current profile. If the saved profile cannot be read, the inspector reports it and keeps the defaults.
+`messageMode` is left out when the profile uses the preset's mode. `interruptReply`, `interruptPayloads` and `toolResults` are left out when you answer by hand, and an empty `interruptPayloads` or `toolResults` counts as left out. A profile file from 0.1.0 has none of them and still loads. A 0.1.0 inspector rejects a file that has them, because it does not know the keys. The version must be exactly 0. A missing or different version is an error. Import and load check the whole file. A bad file shows its error and does not change the current profile. If the saved profile cannot be read, the inspector reports it and keeps the defaults.
 
 ## Credentials
 
-Authentication credentials stay in memory. The token and its header name belong to the connection state. No profile, configuration or export type refers to that state, and the profile has no field for either. Import rejects a field that looks like one. Export copies only the seven settings, even when it gets an object with more. Only the guarded transport receives the token.
+Authentication credentials stay in memory. The token and its header name belong to the connection state. No profile, configuration or export type refers to that state, and the profile has no field for either. Import rejects a field that looks like one. Export copies only the ten settings, even when it gets an object with more. Only the guarded transport receives the token.
 
-Keep secrets out of `forwardedProps`, `context` and tool schemas too. The browser saves those values, and exported profiles contain them as typed.
+Keep secrets out of `forwardedProps`, `context`, tool schemas, interrupt payloads and scripted results too. The browser saves those values, and exported profiles contain them as typed.
 
 ## Hosting file
 

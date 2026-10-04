@@ -7,164 +7,30 @@
 //
 // Every test also checks the network allowlist: the page may talk to its own origin and the loopback
 // servers this file started, and nothing else.
-import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import path from 'node:path';
-import { build } from 'esbuild';
-import { expect, test as base, type Locator, type Page } from '@playwright/test';
-import { bundleOptions } from '../../../scripts/build.mjs';
-import { createInteractiveServer, REDIRECT_PATH, type InteractiveServer, type RecordedRequest } from '../../../examples/reference-agent/interactive-scenarios.ts';
+import type { Page } from '@playwright/test';
+import { REDIRECT_PATH, type InteractiveServer } from '../../../examples/reference-agent/interactive-scenarios.ts';
+import {
+  COOKIE,
+  SYNTHETIC_TOKEN,
+  alert,
+  bodyOf,
+  card,
+  enterToken,
+  expect,
+  messageBox,
+  open,
+  preparations,
+  runs,
+  send,
+  sendButton,
+  session,
+  settled,
+  test,
+  toolCard,
+  type RunBody,
+  type Session,
+} from './support';
 
-declare global {
-  interface Window {
-    __harness: {
-      runtime: { sendRaw(text: string): Promise<void> };
-      session(): unknown;
-      setProfile(patch: Record<string, unknown>): void;
-      action: Record<string, unknown>;
-    };
-  }
-}
-
-const root = path.resolve(import.meta.dirname, '..', '..', '..');
-const SYNTHETIC_TOKEN = 'synthetic-token-7f3a91';
-const COOKIE = { name: 'host_session', value: 'synthetic-cookie-51d2' };
-
-interface Servers {
-  /** Serves the page, and also an agent for embedded use. */
-  site: InteractiveServer;
-  /** An agent on another origin that allows the page's origin (CORS). */
-  remote: InteractiveServer;
-  /** An agent on another origin that grants no CORS at all. */
-  closed: InteractiveServer;
-}
-
-interface Session {
-  exchanges: Array<{ id: string; kind: string; method: string; path: string; status?: number; transport: string; transportError?: string; requestBody?: string; responseBody?: string; runId?: string }>;
-  frames: Array<{ exchangeId: string; eventType?: string; jsonVerdict: string; schemaVerdict: string; data?: string }>;
-  runs: Array<{ id: string; runId: string; parentRunId?: string; input: Record<string, unknown>; outcome: { kind: string; [key: string]: unknown } }>;
-  findings: Array<{ kind: string; message: string; subject: { type: string; id: string } }>;
-}
-
-interface RunBody {
-  threadId: string;
-  runId: string;
-  parentRunId?: string;
-  protocolVersion?: string;
-  state: unknown;
-  messages: Array<{ id: string; role: string; content?: string; toolCallId?: string }>;
-  forwardedProps: Record<string, unknown>;
-  resume?: Array<{ interruptId: string; status: string; payload?: unknown }>;
-}
-
-const test = base.extend<{ requested: string[] }, { servers: Servers }>({
-  servers: [
-    async ({}, use) => {
-      mkdirSync(path.join(root, '.build'), { recursive: true });
-      const outdir = mkdtempSync(path.join(root, '.build', 'runtime-e2e-'));
-      await build({
-        ...bundleOptions(outdir),
-        entryPoints: { harness: path.join(root, 'packages', 'inspector', 'tests', 'runtime', 'harness.tsx') },
-      });
-      const page = `<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>runtime harness</title>
-    <link rel="stylesheet" href="/harness.css" />
-  </head>
-  <body><div id="root"></div><script type="module" src="/harness.js"></script></body>
-</html>`;
-      const site = await createInteractiveServer({
-        assets: {
-          '/': ['text/html', page],
-          '/harness.js': ['text/javascript', readFileSync(path.join(outdir, 'harness.js'), 'utf8')],
-          '/harness.css': ['text/css', readFileSync(path.join(outdir, 'harness.css'), 'utf8')],
-        },
-      });
-      const remote = await createInteractiveServer({ allowOrigin: site.origin });
-      const closed = await createInteractiveServer();
-      await use({ site, remote, closed });
-      await Promise.all([site.close(), remote.close(), closed.close()]);
-      rmSync(outdir, { recursive: true, force: true });
-    },
-    { scope: 'worker' },
-  ],
-
-  /** Every URL the page requests; after each test none may be outside the origins this file started. */
-  requested: [
-    async ({ page, servers }, use) => {
-      for (const server of Object.values(servers)) server.reset();
-      const urls: string[] = [];
-      page.on('request', (request) => urls.push(request.url()));
-      await use(urls);
-      const known = Object.values(servers).map((server) => `${server.origin}/`);
-      const outside = urls.filter((url) => !known.some((origin) => url.startsWith(origin)) && !url.startsWith('blob:') && !url.startsWith('data:'));
-      expect(outside, 'requests outside the page origin and the scripted targets').toEqual([]);
-    },
-    { auto: true },
-  ],
-});
-
-// ---------------------------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------------------------
-
-const runs = (server: InteractiveServer) => server.requests().filter((request) => request.kind === 'run');
-const preparations = (server: InteractiveServer) => server.requests().filter((request) => request.kind === 'preparation');
-const bodyOf = (request: RecordedRequest | undefined) => request?.body as RunBody;
-
-interface OpenOptions {
-  mode?: 'embedded' | 'hosted';
-  allow?: string[];
-  agentBase?: string;
-  agent?: 'support' | 'plain';
-  target?: string;
-}
-
-async function open(page: Page, servers: Servers, options: OpenOptions = {}): Promise<void> {
-  const query = new URLSearchParams();
-  if (options.mode) query.set('mode', options.mode);
-  if (options.allow?.length) query.set('allow', options.allow.join(','));
-  if (options.agentBase) query.set('agentBase', options.agentBase);
-  if (options.agent) query.set('agent', options.agent);
-  if (options.target) query.set('target', options.target);
-  await page.goto(`${servers.site.origin}/?${query}`);
-  await expect(page.getByRole('button', { name: /^Authentication/ })).toBeVisible();
-}
-
-const session = (page: Page): Promise<Session> => page.evaluate(() => window.__harness.session() as never);
-const messageBox = (page: Page) => page.getByLabel('Message', { exact: true });
-const sendButton = (page: Page) => page.getByRole('button', { name: 'Send message' });
-const alert = (page: Page) => page.getByRole('alert');
-
-async function send(page: Page, text: string): Promise<void> {
-  await messageBox(page).fill(text);
-  await sendButton(page).click();
-}
-
-async function enterToken(page: Page, token = SYNTHETIC_TOKEN, header?: string): Promise<void> {
-  await page.getByRole('button', { name: /^Authentication/ }).click();
-  const popover = page.locator('[popover]:popover-open');
-  if (header !== undefined) await popover.getByLabel('Header name').fill(header);
-  await popover.getByLabel('Token').fill(token);
-  await page.keyboard.press('Escape');
-}
-
-/** Waits until the page has recorded this many conversation exchanges and every exchange has ended. */
-async function settled(page: Page, conversations: number): Promise<Session> {
-  await expect
-    .poll(async () => {
-      const current = await session(page);
-      const ended = current.exchanges.every((exchange) => ['completed', 'transport-error', 'user-stopped'].includes(exchange.transport));
-      return ended && current.exchanges.filter((exchange) => exchange.kind === 'conversation').length === conversations;
-    })
-    .toBe(true);
-  return session(page);
-}
-
-const card = (page: Page, interruptId: string): Locator => page.locator(`[data-entry="interrupt"][data-interrupt="${interruptId}"]`);
-const toolCard = (page: Page, toolCallId: string): Locator => page.locator(`[data-entry="tool-result"][data-tool-call="${toolCallId}"]`);
 
 // ---------------------------------------------------------------------------------------------
 // US1.1: an embedded run, recorded

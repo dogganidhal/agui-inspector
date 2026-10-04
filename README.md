@@ -91,7 +91,7 @@ your server. Your server must allow the page's origin through CORS.
   drops, repairs or reorders a frame, even one that is not JSON.
 - Checks frames against the AG-UI schemas and the event order, and shows each problem on its frame and its run.
 - Shows all 31 AG-UI event types in a frames list with a timeline, a conversation view and a state view.
-- Lets you answer interrupts and client tool calls by hand, and draws A2UI v0.9 surfaces with the official renderer.
+- Lets you answer interrupts and client tool calls by hand, or set them in the client profile so they are answered for you, and draws A2UI v0.9 surfaces with the official renderer.
 - Sends raw JSON exactly as you type it, including run inputs that break the schema.
 - Reads agents and presets from a configuration file, saves sessions to a file and opens them again later, and restyles
   through ten CSS properties for light and dark mode, without a rebuild.

@@ -12,7 +12,7 @@ import { after, before, test } from 'node:test';
 import { EventType } from '@ag-ui/core';
 import { parseConfig } from '../../packages/inspector/src/core/config/index.ts';
 import { continuation, formSurface, type UserAction } from '../../examples/reference-agent/a2ui-scenarios.ts';
-import { createInteractiveServer, INTERRUPTS, REDIRECT_PATH, SCENARIOS, type InteractiveServer } from '../../examples/reference-agent/interactive-scenarios.ts';
+import { createInteractiveServer, INTERRUPT_FOREVER, INTERRUPTS, REDIRECT_PATH, SCENARIOS, type InteractiveServer } from '../../examples/reference-agent/interactive-scenarios.ts';
 import { baselineRun, eventFixtures, protocolScenarios, runError } from '../../examples/reference-agent/protocol-fixtures.ts';
 import { scenarioBytes } from '../../examples/reference-agent/recorder-fixtures.ts';
 import {
@@ -214,6 +214,24 @@ test('only the slow scenario asks for slow pacing, and only never finishes is he
   const answers = Object.values(SCENARIOS).map((content) => [content, interactiveResponse({ ...ids, ...user(content) })] as const);
   assert.deepEqual(answers.filter(([, answer]) => answer.pacing !== undefined).map(([content, answer]) => [content, answer.pacing]), [['slow', 'slow']]);
   assert.deepEqual(answers.filter(([, answer]) => answer.ending === 'hold-until-abort').map(([content]) => content), ['never finishes']);
+});
+
+test('interrupt forever interrupts on the first run and on a resume, with a new interrupt id each time, and is not a quick message', () => {
+  const first = interactiveResponse({ threadId: 't-1', runId: 'r-1', ...user(INTERRUPT_FOREVER) });
+  const again = interactiveResponse({
+    threadId: 't-1',
+    runId: 'r-2',
+    messages: [{ role: 'user', content: INTERRUPT_FOREVER }],
+    resume: [{ interruptId: 'i-loop-r-1', status: 'resolved', payload: {} }],
+  });
+  const outcome = (response: ScenarioResponse) =>
+    JSON.parse(bodyOf(response).trim().split('\n\n').at(-1)!.replace(/^data: /, '')) as { outcome: { type: string; interrupts: Array<{ id: string; reason: string }> } };
+  assert.deepEqual(outcome(first).outcome, { type: 'interrupt', interrupts: [{ id: 'i-loop-r-1', reason: 'input', message: 'Ask again?' }] });
+  assert.deepEqual(outcome(again).outcome.interrupts.map((interrupt) => interrupt.id), ['i-loop-r-2']);
+  assert.equal(Object.values(SCENARIOS).includes(INTERRUPT_FOREVER as never), false, 'not one of the seven scenarios');
+  assert.equal(first.ending, 'close', 'the stream ends, only the run keeps asking');
+  // Without the scenario's message a resume is answered as before.
+  assert.match(bodyOf(interactiveResponse({ threadId: 't-1', runId: 'r-3', ...user('hello'), resume: [{ interruptId: 'i', status: 'cancelled' }] })), /Resumed with i=cancelled/);
 });
 
 test('the interrupts the server declares are the ones exported for tests', () => {

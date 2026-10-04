@@ -56,6 +56,8 @@ normal HTTP responses. The page's own `fetch`, recorder and frame reader handle 
 server's. The answers come from `examples/reference-agent/scenarios.ts`. The Node reference agent uses the same
 module for its fixtures, so the browser and the Node tests always get the same events.
 
+One scenario is not a quick message. The message `interrupt forever` makes the agent end every run with a new interrupt, a resume included. It is for tests of the limit on [automatic replies](./runs.mdx#automatic-replies). It is `INTERRUPT_FOREVER` in `scenarios.ts` and is not part of `SCENARIOS`, so the demo shows seven quick messages as before. The agent finds the message in the last user message of the transcript, so it needs the full-transcript message mode, which is the default.
+
 The routes are in `demo/service-worker.ts`:
 
 | Request | Answer |

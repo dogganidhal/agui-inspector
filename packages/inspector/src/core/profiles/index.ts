@@ -1,10 +1,13 @@
 // Client profiles and run input (FR-030, FR-031, FR-032, FR-036). Framework-free.
 //
-// A profile is the seven settings that say what the inspector declares and sends: protocol version,
+// A profile is seven settings that say what the inspector declares and sends: protocol version,
 // client tools, context, whether A2UI renders, whether the render_a2ui tool is injected, the message
-// mode and forwarded properties. Nothing else is a profile field. In particular there is no place for
-// an authentication header or token: the token lives in volatile connection state and reaches the
-// guarded transport only, so it cannot enter a saved profile, an exported file or a run input.
+// mode and forwarded properties. Three optional settings say how the inspector answers a finished run's
+// interrupts and client tool calls for the developer: the interrupt reply, a payload per interrupt
+// reason and a result per tool. They never reach the run input. Nothing else is a profile field. In
+// particular there is no place for an authentication header or token: the token lives in volatile
+// connection state and reaches the guarded transport only, so it cannot enter a saved profile, an
+// exported file or a run input.
 //
 // A profile is saved in browser storage and exported as the same version-0 envelope. Import and load
 // validate the whole thing; a bad file is a visible error and the caller keeps what it had.
@@ -28,7 +31,7 @@ import { reservedPropertyProblem, selectMessages, type DispatchIds, type Prepare
 
 export const PROFILE_STORAGE_KEY = 'agui-inspector.profile';
 
-const SETTINGS = ['protocolVersion', 'tools', 'context', 'renderA2ui', 'injectA2uiTool', 'messageMode', 'forwardedProps'];
+const SETTINGS = ['protocolVersion', 'tools', 'context', 'renderA2ui', 'injectA2uiTool', 'messageMode', 'forwardedProps', 'interruptReply', 'interruptPayloads', 'toolResults'];
 
 /** The pinned protocol version, no tools or context, A2UI rendered but not injected, the preset's mode. */
 export function defaultProfile(): ClientProfileSettings {
@@ -42,13 +45,47 @@ export function defaultProfile(): ClientProfileSettings {
 const issueText = (issue: { path: PropertyKey[]; message: string } | undefined): string =>
   issue ? `${issue.path.map(String).join('.') || 'value'}: ${issue.message}` : 'invalid';
 
-/** Validates the seven settings. Only these fields are read, so nothing else can be carried along. */
+/**
+ * `interruptPayloads`: absent, or an object from a nonempty interrupt reason to a JSON value other than null.
+ * The protocol's run input schema refuses a null resume payload, so one could never be sent. An empty object
+ * is read as absent. The reasons come from the agent, so they are never checked against a list.
+ */
+function parseInterruptPayloads(raw: unknown, where: string): Result<Record<string, JsonValue> | undefined> {
+  if (raw === undefined) return ok(undefined);
+  if (!isRecord(raw)) return fail(`${where}.interruptPayloads must be an object from interrupt reason to JSON`);
+  const entries = Object.entries(raw);
+  for (const [reason, payload] of entries) {
+    if (reason === '') return fail(`${where}.interruptPayloads: an interrupt reason cannot be empty`);
+    if (!isJsonValue(payload)) return fail(`${where}.interruptPayloads.${reason} must be JSON`);
+    if (payload === null) return fail(`${where}.interruptPayloads.${reason} cannot be null: the protocol's run input does not accept a null answer`);
+  }
+  // fromEntries and structuredClone keep a reason named __proto__ as an own key.
+  return ok(entries.length === 0 ? undefined : (structuredClone(Object.fromEntries(entries)) as Record<string, JsonValue>));
+}
+
+/**
+ * `toolResults`: absent, or an object from the name of a tool of this profile to nonempty text. A name
+ * the profile does not have would never match and fail silently, so it is an error. An empty object is
+ * read as absent.
+ */
+function parseToolResults(raw: unknown, toolNames: ReadonlySet<string>, where: string): Result<Record<string, string> | undefined> {
+  if (raw === undefined) return ok(undefined);
+  if (!isRecord(raw)) return fail(`${where}.toolResults must be an object from tool name to text`);
+  const entries = Object.entries(raw);
+  for (const [name, text] of entries) {
+    if (!toolNames.has(name)) return fail(`${where}.toolResults: no tool named "${name}"`);
+    if (typeof text !== 'string' || text === '') return fail(`${where}.toolResults.${name} must be nonempty text`);
+  }
+  return ok(entries.length === 0 ? undefined : (Object.fromEntries(entries) as Record<string, string>));
+}
+
+/** Validates the settings. Only these fields are read, so nothing else can be carried along. */
 export function parseProfileSettings(value: unknown, where = 'profile'): Result<ClientProfileSettings> {
   if (!isRecord(value)) return fail(`${where} must be an object`);
   const extra = unexpectedKey(value, SETTINGS, where, 'a profile');
   if (extra) return fail(extra);
 
-  const { protocolVersion, tools, context, renderA2ui, injectA2uiTool, messageMode, forwardedProps } = value;
+  const { protocolVersion, tools, context, renderA2ui, injectA2uiTool, messageMode, forwardedProps, interruptReply } = value;
   if (typeof protocolVersion !== 'string' || protocolVersion === '') return fail(`${where}.protocolVersion must be a nonempty string`);
   if (!Array.isArray(tools)) return fail(`${where}.tools must be a list`);
   const names = new Set<string>();
@@ -69,6 +106,11 @@ export function parseProfileSettings(value: unknown, where = 'profile'): Result<
   if (!isJsonObject(forwardedProps)) return fail(`${where}.forwardedProps must be a JSON object`);
   const reserved = reservedPropertyProblem(forwardedProps, `${where}.forwardedProps`);
   if (reserved) return fail(reserved);
+  if (interruptReply !== undefined && interruptReply !== 'resolve' && interruptReply !== 'cancel') return fail(`${where}.interruptReply must be "resolve" or "cancel"`);
+  const payloads = parseInterruptPayloads(value.interruptPayloads, where);
+  if (!payloads.ok) return payloads;
+  const results = parseToolResults(value.toolResults, names, where);
+  if (!results.ok) return results;
 
   return ok({
     protocolVersion,
@@ -78,19 +120,68 @@ export function parseProfileSettings(value: unknown, where = 'profile'): Result<
     injectA2uiTool,
     ...(messageMode !== undefined && { messageMode }),
     forwardedProps: structuredClone(forwardedProps),
+    ...(interruptReply !== undefined && { interruptReply }),
+    ...(payloads.value !== undefined && { interruptPayloads: payloads.value }),
+    ...(results.value !== undefined && { toolResults: results.value }),
   });
 }
 
-/** The version-0 envelope, built from the seven settings alone. */
+/** The version-0 envelope, built from the settings alone. The automation settings are written only when set. */
 function envelope(settings: ClientProfileSettings): ProfileEnvelope {
-  const { protocolVersion, tools, context, renderA2ui, injectA2uiTool, messageMode, forwardedProps } = settings;
+  const { protocolVersion, tools, context, renderA2ui, injectA2uiTool, messageMode, forwardedProps, interruptReply, interruptPayloads, toolResults } = settings;
   return {
     version: FORMAT_VERSION,
-    profile: { protocolVersion, tools, context, renderA2ui, injectA2uiTool, ...(messageMode !== undefined && { messageMode }), forwardedProps },
+    profile: {
+      protocolVersion,
+      tools,
+      context,
+      renderA2ui,
+      injectA2uiTool,
+      ...(messageMode !== undefined && { messageMode }),
+      forwardedProps,
+      ...(interruptReply !== undefined && { interruptReply }),
+      ...(interruptPayloads !== undefined && { interruptPayloads }),
+      ...(toolResults !== undefined && { toolResults }),
+    },
   };
 }
 
 export const exportProfile = (settings: ClientProfileSettings): string => JSON.stringify(envelope(settings), null, 2);
+
+// ---------------------------------------------------------------------------------------------
+// Edits the settings panel makes to the automation settings. Each returns the profile to validate and apply; an
+// unset setting is a missing key, so a profile never says "by hand".
+// ---------------------------------------------------------------------------------------------
+
+/** `map` with `key` set to `value`, or without it when `value` is undefined. Keeps the order; undefined once empty. */
+function withEntry<T>(map: Readonly<Record<string, T>> | undefined, key: string, value: T | undefined): Record<string, T> | undefined {
+  const entries = Object.entries(map ?? {});
+  const at = entries.findIndex(([name]) => name === key);
+  if (value === undefined) {
+    if (at >= 0) entries.splice(at, 1);
+  } else if (at >= 0) entries[at] = [key, value];
+  else entries.push([key, value]);
+  return entries.length === 0 ? undefined : Object.fromEntries(entries);
+}
+
+/** Sets the payload for an interrupt reason, or removes it when `payload` is undefined. */
+export function setInterruptPayload(settings: ClientProfileSettings, reason: string, payload: JsonValue | undefined): ClientProfileSettings {
+  const { interruptPayloads: _previous, ...rest } = settings;
+  const next = withEntry(settings.interruptPayloads, reason, payload);
+  return next === undefined ? rest : { ...rest, interruptPayloads: next };
+}
+
+/** Sets the scripted result of a tool, or removes it when `text` is undefined. */
+export function setToolResult(settings: ClientProfileSettings, name: string, text: string | undefined): ClientProfileSettings {
+  const { toolResults: _previous, ...rest } = settings;
+  const next = withEntry(settings.toolResults, name, text);
+  return next === undefined ? rest : { ...rest, toolResults: next };
+}
+
+/** Removes a tool together with its scripted result, so the profile stays valid. */
+export function removeTool(settings: ClientProfileSettings, name: string): ClientProfileSettings {
+  return setToolResult({ ...settings, tools: settings.tools.filter((tool) => tool.name !== name) }, name, undefined);
+}
 
 /** Parses an exported or saved profile. The version must be exactly 0. */
 export function importProfile(text: string): Result<ClientProfileSettings> {

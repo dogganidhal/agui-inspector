@@ -3,7 +3,7 @@ title: Connect and send a run
 description: Connect the inspector to your agent, send a message, answer what a run waits for, and see what each request carries.
 ---
 
-Each message you send becomes one run: a request to your agent that streams AG-UI events back. The inspector checks each request before sending and refuses some. A run can end waiting for your answer to an interrupt or client tool call. The [event reference](./event-views.mdx) shows how the streamed events appear.
+Each message you send becomes one run: a request to your agent that streams AG-UI events back. The inspector checks each request before sending and refuses some. A run can end waiting for your answer to an interrupt or client tool call. You answer by hand, or the client profile answers for you. The [event reference](./event-views.mdx) shows how the streamed events appear.
 
 ## Send a message
 
@@ -108,7 +108,7 @@ A run's outcome comes from a valid terminal event: `success` with its result and
 
 ## Replies
 
-A finished run can wait for your answer. The inspector never answers for you.
+A finished run can wait for your answer. By default the inspector never answers for you. The client profile can answer for you: see [automatic replies](#automatic-replies).
 
 ### Interrupts
 
@@ -124,6 +124,30 @@ The next run starts when every interrupt has an answer. Until then nothing is se
 ### Client tool calls
 
 A run that finishes with unanswered client tool calls shows one card for each call, with the tool name, the arguments and a result editor. Arguments show parsed once complete, otherwise as streamed text with the parse error. Submit result marks the call answered. When every call has a result, the next run starts with one tool message for each call. Each holds your text exactly as typed, which the transcript card also shows.
+
+### Automatic replies
+
+Three optional settings in the [client profile](./configuration.mdx#client-profile) let the inspector answer for you. None is set by default, so you answer by hand.
+
+- Interrupt replies is By hand, Resolve or Cancel. With Resolve or Cancel, the inspector answers every interrupt of a run when the run ends, then sends the continuation.
+- Interrupt payloads maps an interrupt reason to a JSON payload. Resolve sends the payload for the interrupt's `reason`, exactly as written. The response schema does not check it, and a payload that does not match is sent anyway, as one you type would be. An interrupt whose reason has no payload gets the starting answer from its response schema. That is what pressing Resolve without editing sends. Cancel sends no payload and ignores the map. A payload cannot be `null`, because the protocol does not accept a null answer.
+- Scripted results maps the name of a client tool to a text. Each pending call to that tool gets the text exactly as written, with its spaces and line breaks.
+
+The continuation is the one your own replies would send. It has the same fields, the same parent run and the same preparations before it. Nothing in the request says that a reply was automatic.
+
+If a run leaves both scripted and unscripted tool calls, the inspector answers the scripted ones and waits for you to answer the rest. The next run starts when you answer the last one. If the profile covers nothing that a run owes, nothing is answered.
+
+The settings in force when a run ends decide. Changing a setting never answers replies that already wait. A surface action is never sent or answered for you.
+
+A continuation that cannot be sent, for example because a preparation fails, shows its error and keeps its answers. The inspector does not retry. The button that sends the continuation again works as before.
+
+The inspector stops after 10 automatic continuations in a row. This guards against an agent that asks again on every run. After the tenth, the next replies wait for you, and a notice says that automatic replies paused. Answer by hand to continue. The count starts again when you send a message, when your own answer starts a continuation, when you send the continuation, when you act on a surface, and when you start a new thread or change the agent or the endpoint. The limit is fixed.
+
+Stop ends a chain of automatic continuations, and a run you stopped is never answered automatically.
+
+The conversation shows which replies were automatic. The run that carried them lists their ids after `automatic ·` under Carried. A tool result reads "Result · automatic" instead of "Result · entered by you", and a reply card shows an Automatic tag while it is on screen. The mark is part of the recording, so an exported session keeps it. A session from 0.1.0 has no marks, and every reply in it reads as yours.
+
+A payload or a scripted result is saved with the profile in browser storage and written to an exported profile file. Do not put a secret in one.
 
 ### While something is waiting
 
@@ -144,7 +168,7 @@ The raw request editor (Inspection, then Raw request) sends valid JSON to the cu
 - One run at a time. Starting another while one streams is refused with a message.
 - Preparation responses are recorded but never used in a later request.
 - HTTP and SSE (Server-Sent Events) only. A dropped stream is not reconnected or resumed.
-- The inspector never answers an interrupt, runs a tool or retries a request automatically.
+- The inspector answers only what the client profile tells it to, at most 10 times in a row. It never runs a tool, never answers a surface action and never retries a request automatically.
 
 For the runtime calls behind each control, and how a page connects them to the views, see [Architecture and UI internals](./internals.mdx#runtime-api).
 

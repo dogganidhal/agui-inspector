@@ -88,10 +88,12 @@ A file is one JSON object with a version and a session:
 | Collection | Holds |
 | --- | --- |
 | `exchanges` | Every preparation request, conversation run and raw submission, in capture order: method, path, exact request body text, response status, any non-stream response body, wall-clock start, elapsed time, how the transport ended, and its frame ids. |
-| `runs` | Each run's thread, run and parent ids, the input as sent, start and end time, and the outcome the stream showed. |
+| `runs` | Each run's thread, run and parent ids, the input as sent, start and end time, and the outcome the stream showed. A run whose replies the inspector answered from the client profile also has `automaticReplies`, with the `interruptIds` and the `toolCallIds` it answered. |
 | `frames` | Every received frame in arrival order: the original envelope text with delimiters, the extracted data text, the offset in milliseconds from the request's start, the event type if known, the summary, the JSON and schema verdicts, and the parsed value. Control and partial frames are included and marked. |
 | `findings` | Judgements that point at a frame, run or exchange. They add to the evidence and never replace it. |
 | `derived` | Client-derived entries such as chunk expansions, each listing its source frames. They are marked `derived` and carry no frame index. |
+
+`automaticReplies` is optional and never part of the request. A file without it is valid, and every reply in it reads as given by you. A 0.1.0 inspector rejects a file that has it, because it does not know the key.
 
 Order is part of the format. Records are written in store order, and exporting an imported file again gives the same bytes.
 

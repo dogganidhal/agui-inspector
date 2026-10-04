@@ -46,6 +46,42 @@ test('a round trip preserves text, order, time and run input, and a second expor
   assert.equal(store.snapshot().exchanges.find((exchange) => exchange.kind === 'raw')?.requestBody, '{ "threadId" :17 }');
 });
 
+test('the replies the inspector answered are marked on the run, survive a round trip, and a file without the mark still imports', async () => {
+  const session = await richSession();
+  assert.equal(session.runs.some((run) => 'automaticReplies' in run), false, 'a session of replies the developer gave has no mark');
+  assert.equal(JSON.stringify(JSON.parse(serializeSession(session)).session.runs).includes('automaticReplies'), false, 'and exports none');
+
+  const marked = clone(session);
+  const first = marked.runs[0];
+  assert.ok(first);
+  (marked.runs as unknown as Array<Record<string, unknown>>)[0] = { ...first, automaticReplies: { interruptIds: ['i-approve', 'i-contact'], toolCallIds: ['c-1'] } };
+  const text = serializeSession(marked);
+  const result = parseSession(text);
+  assert.ok(result.ok);
+  assert.deepEqual(result.session.runs[0]?.automaticReplies, { interruptIds: ['i-approve', 'i-contact'], toolCallIds: ['c-1'] });
+  assert.deepEqual(result.session, marked);
+  assert.equal(serializeSession(result.session), text, 'a second export is byte-identical');
+  assert.deepEqual(restoreSession(result.session).snapshot().runs[0]?.automaticReplies, { interruptIds: ['i-approve', 'i-contact'], toolCallIds: ['c-1'] });
+
+  const plain = parseSession(serializeSession(session));
+  assert.ok(plain.ok, 'a file written before the mark existed imports');
+});
+
+test('import rejects an automaticReplies that is not two lists of nonempty strings, naming the run', async () => {
+  const bad = async (value: unknown) => {
+    const file = await fileOf();
+    file.session.runs![0] = { ...file.session.runs![0], automaticReplies: value };
+    return file;
+  };
+  rejects(await bad('i-1'), /runs\[0\]: automaticReplies must be an object/);
+  rejects(await bad(null), /runs\[0\]: automaticReplies must be an object/);
+  rejects(await bad({ interruptIds: [] }), /runs\[0\]: automaticReplies: missing "toolCallIds"/);
+  rejects(await bad({ interruptIds: [], toolCallIds: [], extra: [] }), /runs\[0\]: automaticReplies: unknown field "extra"/);
+  rejects(await bad({ interruptIds: [1], toolCallIds: [] }), /runs\[0\]: automaticReplies: interruptIds must be an array of strings/);
+  rejects(await bad({ interruptIds: [], toolCallIds: 'c-1' }), /runs\[0\]: automaticReplies: toolCallIds must be an array of strings/);
+  rejects(await bad({ interruptIds: [''], toolCallIds: [] }), /runs\[0\]: automaticReplies: interruptIds must hold nonempty strings/);
+});
+
 test('the file contains no header, credential or volatile connection field, even if a record carries one', async () => {
   const session = await richSession();
   const dirty = clone(session) as any;

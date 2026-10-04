@@ -79,6 +79,10 @@ In the frames list, run events also mark run boundaries. [Runs](#runs) explains 
 - `CUSTOM` shows a marker with its name and value.
 - `RAW` shows a marker with its source and value.
 
+## Replies the inspector answered
+
+A run that carried replies lists them under Carried, as `resume · 2 answers` or `tool result · c-1`. When the inspector answered some of them from the [client profile](./runs.mdx#automatic-replies), one more item reads `automatic ·` followed by their interrupt ids and tool call ids. The tool card of an automatic result reads "Result · automatic". One you typed reads "Result · entered by you". The mark comes from the recorded run and never from the request, so a session from 0.1.0 has none.
+
 ## Markdown
 
 By default the conversation shows message and reasoning text as plain text, exactly as received. HTML does not run and Markdown is not interpreted, so `[link](url)` and `<img>` appear as typed.

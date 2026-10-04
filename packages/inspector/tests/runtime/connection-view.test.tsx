@@ -235,7 +235,8 @@ test('each pending client tool call has a manual result editor beside its argume
   assert.match(markup, /aria-label="Result for pick_color \(c-1\)"/);
   assert.match(markup, /aria-label="Submit result for c-1"/);
   assert.match(markup, />2 of 2 waiting</);
-  assert.match(markup, /Nothing is answered for you\./);
+  assert.match(markup, /Calls without a scripted result wait for you\./);
+  assert.doesNotMatch(markup, /Automatic/, 'nothing was answered by the profile');
   assert.match(markup, /Arguments are not valid JSON/);
   assert.match(markup, /aria-label="Arguments of pick_size, as streamed"/);
 });
@@ -249,6 +250,29 @@ test('an answered tool call shows the result that was entered, with no editor', 
   assert.doesNotMatch(markup, /aria-label="Submit result for c-1"/);
   assert.match(markup, /aria-label="Submit result for c-2"/);
   assert.match(markup, />1 of 2 waiting</);
+});
+
+test('replies the profile answered say so on their cards, and the developer\'s own do not', () => {
+  const props = repliesProps();
+  const markup = renderToStaticMarkup(
+    <RepliesView
+      {...props}
+      interrupts={[
+        { ...(props.interrupts[0] as InterruptAnswer), status: 'resolved', automatic: true },
+        { ...(props.interrupts[1] as InterruptAnswer), status: 'cancelled' },
+      ]}
+      toolResults={[
+        { ...(tools[0] as ToolResultDraft), resultDraft: 'teal', status: 'answered', automatic: true },
+        { ...(tools[1] as ToolResultDraft), resultDraft: 'by hand', status: 'answered' },
+      ]}
+    />,
+  );
+  const cards = markup.split(/(?=<div[^>]*data-entry=)/);
+  const card = (attribute: string) => cards.find((chunk) => chunk.includes(attribute)) ?? '';
+  assert.match(card('data-interrupt="i-1"'), /Automatic/);
+  assert.doesNotMatch(card('data-interrupt="i-2"'), /Automatic/);
+  assert.match(card('data-tool-call="c-1"'), /Automatic/);
+  assert.doesNotMatch(card('data-tool-call="c-2"'), /Automatic/);
 });
 
 // ---------------------------------------------------------------------------------------------
