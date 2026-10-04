@@ -92,7 +92,7 @@ Edits `core/runtime/index.ts` after Phase 3 and 5, so it runs after them.
 - [x] T029 [P] Add the changesets: `.changeset/client-automation-npm.md` for `agui-inspector` and `.changeset/client-automation-python.md` for `agui-inspector-python`, both `minor`, each with one plain sentence about automatic replies for interrupts and client tools from the client profile. Check the exact package names in `packages/inspector/package.json` and `packages/python/package.json`.
 - [x] T030 Run `npm run check:ci` and fix what fails. Compare the sizes `check:bundle` prints with the ones written down in T001 and note the difference in the pull request. Run the new e2e specs once with `--workers=2` while iterating. Run every command of [quickstart.md](quickstart.md) that the tests do not already cover.
 - [x] T031 Run `/speckit-converge`. If the code and the spec disagree, the missing work goes into this file, not into chat. Update `spec.md`, `plan.md` and this file for any decision the implementation changed, including the spec's `Status`.
-- [ ] T032 Run `/ponytail:ponytail-review` on the diff and fix what it finds. Run the `humanizer` skill on the new docs text and on the pull request body. Rebase on `origin/main`, push with `--force-with-lease`, update the PR body, and mark the pull request ready.
+- [x] T032 Run `/ponytail:ponytail-review` on the diff and fix what it finds. Run the `humanizer` skill on the new docs text and on the pull request body. Rebase on `origin/main`, push with `--force-with-lease`, update the PR body, and mark the pull request ready.
 
 ## Dependencies and order
 
