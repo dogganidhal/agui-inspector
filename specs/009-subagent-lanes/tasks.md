@@ -105,6 +105,7 @@ some of these files too, so rebase on `origin/main` before the pull request leav
 - [x] T032 [P] Add `.changeset/subagent-lanes-and-timeline.md` with a minor bump for `agui-inspector` and for `agui-inspector-python` and one plain sentence of release notes. `tests/release/changeset.test.ts` must pass.
 - [ ] T033 Run `npm run typecheck`, `npm run test:unit`, `npm run build && npm run check:bundle` (compare with T001, SC-011), the three lane e2e specs and `tests/e2e/conversation/events.spec.ts` with `--workers=2`, then `npm run check:ci`. Fix what fails. If code and spec disagree, run `/speckit-converge`.
 - [ ] T034 Run `/ponytail:ponytail-review` on the diff and fix what it finds. Run the humanizer skill on the PR body. Rebase on `origin/main`, resolve conflicts with the other #79 branches in `core/projection/index.ts`, `views/conversation/index.tsx`, `shared.tsx` and `conversation.css` without dropping their features, run `npm run check:ci` again, push with `--force-with-lease`, update the PR body with the Open questions and the bundle comparison, and mark the PR ready.
+- [x] T035 Follow-up fix to #79: in `packages/inspector/src/views/conversation/timeline.tsx` leave out a whole-second tick whose label would touch the end label, so a 6.82 s axis shows `5s` and `6.82 s` and not `6s82 s`. The old rule only left out the last tenth. Add the 6.82 s case to `packages/inspector/tests/conversation/lanes-view.test.ts`. Add a patch changeset.
 
 ## Dependencies and order
 

@@ -115,6 +115,7 @@ first: rebase and keep what merged.
 - [x] T028 [P] Add a changeset `.changeset/run-waterfall.md` with `agui-inspector` and `agui-inspector-python` at `minor` and one plain sentence (the inspection pane gains a waterfall of runs, steps, messages, tool calls and subagent runs).
 - [x] T029 Run `npm run check:ci`. Record the measured bundle total (against 1,227,500 and 308,758 on main) in the PR body and in the Technical Context of plan.md. Fix what fails.
 - [ ] T030 Run `speckit-converge` if code and spec disagree. Run `/ponytail:ponytail-review` on the diff and fix its findings. Run the humanizer skill on the PR body. Rebase on `origin/main`, push with `--force-with-lease`, update the PR body, mark the PR ready.
+- [x] T031 Follow-up fix to #79: in `packages/inspector/src/views/inspection/waterfall-model.ts` `axisTicks` leaves out a tick whose label would touch the end label, so a 6.82 s axis shows `5 s` and `6.82 s` and not `6s82 s`. The old rule only left out the last tenth. Update the expectations of the axis test and add the 6.82 s case in `packages/inspector/tests/inspection/waterfall-model.test.ts`. Add a patch changeset.
 
 ## Dependencies
 

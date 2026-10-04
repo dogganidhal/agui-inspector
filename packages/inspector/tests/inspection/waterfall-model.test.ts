@@ -66,13 +66,17 @@ test('every key of the tree does what the pattern says', () => {
   assert.deepEqual(treeKey(rows, 99, 'Enter'), { type: 'none' });
 });
 
-test('the axis has round ticks, at most eight, none in the last tenth', () => {
-  assert.deepEqual(axisTicks(300), [50, 100, 150, 200, 250].map((ms) => ({ ms, label: `${ms} ms` })));
-  assert.deepEqual(axisTicks(1200).map((tick) => tick.label), ['200 ms', '400 ms', '600 ms', '800 ms', '1 s']);
-  assert.deepEqual(axisTicks(14_000).map((tick) => tick.label), ['2 s', '4 s', '6 s', '8 s', '10 s', '12 s']);
-  assert.deepEqual(axisTicks(180_000).map((tick) => tick.label), ['30 s', '60 s', '90 s', '120 s', '150 s']);
+test('the axis has round ticks, at most eight, none that would touch the end label', () => {
+  assert.deepEqual(axisTicks(300).map((tick) => tick.label), ['50 ms', '100 ms', '150 ms', '200 ms']);
+  assert.deepEqual(axisTicks(1200).map((tick) => tick.label), ['200 ms', '400 ms', '600 ms', '800 ms']);
+  assert.deepEqual(axisTicks(14_000).map((tick) => tick.label), ['2 s', '4 s', '6 s', '8 s', '10 s']);
+  assert.deepEqual(axisTicks(180_000).map((tick) => tick.label), ['30 s', '60 s', '90 s', '120 s']);
   for (const axis of [1, 10, 999, 5000, 61_000, 7_200_000]) assert.ok(axisTicks(axis).length <= 8, `${axis} ms`);
   assert.deepEqual(axisTicks(1), []);
+});
+
+test('the last whole-second tick of a 6.82 s axis is left out, so it does not run into the end label', () => {
+  assert.deepEqual(axisTicks(6820).map((tick) => tick.label), ['1 s', '2 s', '3 s', '4 s', '5 s']);
 });
 
 test('the label of a row says kind, label, level, times and state', () => {

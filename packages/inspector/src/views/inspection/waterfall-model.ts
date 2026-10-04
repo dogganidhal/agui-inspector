@@ -85,14 +85,18 @@ const MAX_TICKS = 8;
 
 const tickLabel = (ms: number): string => (ms < 1000 ? `${ms} ms` : `${+(ms / 1000).toFixed(1)} s`);
 
+/** Characters of the axis font (10.5 px mono) across the narrowest timeline track, 60 units. The waterfall's track is as wide or wider. */
+const AXIS_CHARS = 38;
+
 /**
- * The tick marks after 0: multiples of the smallest round step that gives at most eight, and none in the last tenth of the
- * axis, where its end label sits.
+ * The tick marks after 0: multiples of the smallest round step that gives at most eight, and none whose label would
+ * touch the end label, which is right-aligned at the end of the axis.
  */
 export function axisTicks(axisMs: number): { readonly ms: number; readonly label: string }[] {
   const step = STEPS_MS.find((candidate) => axisMs / candidate <= MAX_TICKS) ?? STEPS_MS[STEPS_MS.length - 1] ?? 1000;
+  const end = formatDuration(axisMs).length;
   const ticks: { ms: number; label: string }[] = [];
-  for (let ms = step; ms <= axisMs * 0.9; ms += step) ticks.push({ ms, label: tickLabel(ms) });
+  for (let ms = step; (1 - ms / axisMs) * AXIS_CHARS >= tickLabel(ms).length / 2 + end + 1; ms += step) ticks.push({ ms, label: tickLabel(ms) });
   return ticks;
 }
 
