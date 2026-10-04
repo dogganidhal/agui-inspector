@@ -56,7 +56,8 @@ keyboard moves show the new details within 200 ms. Building the rows takes under
 projection test already holds (it takes about 20 ms on this machine).
 
 **Constraints**: Production bundle at most 2,000,000 bytes minified and 600,000 bytes gzipped. Baseline on main at
-`5c21caa`, measured on 2026-10-04: 1,227,500 and 308,758. Expected addition: under 15 KB minified.
+`20eb7c4` (the base of this branch), measured on 2026-10-04: 1,238,710 and 312,106. The estimate was under 15 KB minified.
+Measured with the tab, without subagent rows: 1,257,480 and 317,133, which is +18,770 bytes minified and +5,027 gzipped.
 
 **Scale/Scope**: One tab, three new source files in `views/inspection` (model, view, stylesheet), one in
 `core/projection`, small edits to the Inspection view and the app shell, two docs pages, one reference-agent file and
