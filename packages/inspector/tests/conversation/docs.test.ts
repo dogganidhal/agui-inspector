@@ -27,3 +27,21 @@ test('the state history is described, with its keys, its diff kinds and its labe
   for (const key of ['Down arrow', 'Up arrow', 'Home', 'End']) assert.ok(doc.includes(`| ${key} |`), `${key} is missing from the key table`);
   for (const label of ['`+ added`', '`- removed`', '`~ changed`', 'Past state', 'Back to latest', 'No net change']) assert.ok(doc.includes(label), `${label} is missing`);
 });
+
+test('the document describes the Markdown view: the control, the scope, the syntax, the safety rules and the limit', () => {
+  assert.match(doc, /## Markdown/);
+  assert.match(doc, /Message text control/);
+  assert.match(doc, /Plain text and Markdown/);
+  assert.match(doc, /plain text, exactly as received/);
+  assert.match(doc, /not saved/);
+  assert.match(doc, /role `assistant`, `user`, `system` or `developer`/);
+  assert.match(doc, /role `tool`/);
+  for (const construct of ['Paragraphs', 'Headings', 'Block quotes', 'code blocks', 'Tables', 'Links']) assert.ok(doc.includes(construct), construct);
+  assert.match(doc, /Raw HTML is never interpreted/);
+  assert.match(doc, /Images are never loaded/);
+  assert.match(doc, /`http:`, `https:` and `mailto:`/);
+  assert.match(doc, /no referrer/);
+  assert.match(doc, /printed next to the link text/);
+  assert.match(doc, /200,000 characters/);
+  assert.match(doc, /keyboard/);
+});

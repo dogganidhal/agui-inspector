@@ -1,6 +1,7 @@
 // The conversation view (design.md: Conversation). Composes F06 primitives; every entry comes from the
-// projection, which builds it from valid received frames. Text is rendered as text: React escapes it,
-// there is no Markdown or HTML path. Encrypted reasoning shows metadata only.
+// projection, which builds it from valid received frames. Text is rendered as text: React escapes it and there
+// is no HTML path. Message and reasoning text is plain unless the developer turns Markdown on (./markdown.tsx), which
+// is a view of the same text. Encrypted reasoning shows metadata only.
 //
 // Replying (interrupt answers, tool results, the composer) is the connection lane's, so this view
 // shows outcomes and pending states but offers no reply controls; see website/content/docs/event-views.mdx.
@@ -25,6 +26,7 @@ import type {
 } from '../../core/projection/index';
 import { Card, CardBody, CardFooter, CardHeader, CodeBlock, FamilyDot, Finding, Icon, Label, SegmentedControl, Tag, type TagVariant } from '../theme/primitives';
 import { DERIVED_NOTE, Disclosure, FrameRef, RevealProvider, formatMs, formatOffset, useProjection, useReveal } from './shared';
+import { ConversationText, MarkdownModeProvider, MarkdownToggle, type TextMode } from './markdown';
 import { SnapshotMarker } from './state';
 
 /** Optional hooks for the assembly. */
@@ -143,7 +145,7 @@ function MessageBlock({ entry, frames }: { entry: MessageEntry; frames: Frames }
         {entry.origin === 'snapshot' && <Tag variant="dashed">from MESSAGES_SNAPSHOT</Tag>}
         {entry.extraParts > 0 && <Tag variant="line">{entry.extraParts} non-text {entry.extraParts === 1 ? 'part' : 'parts'}</Tag>}
       </div>
-      <div className={entry.live ? 'agui-conv-body agui-caret' : 'agui-conv-body'}>{entry.text}</div>
+      <div className={entry.live ? 'agui-conv-body agui-caret' : 'agui-conv-body'}><ConversationText text={entry.text} role={entry.role} /></div>
       <Deltas deltas={entry.deltas} frames={frames} label={`Deltas of ${entry.messageId}`} />
     </div>
   );
@@ -164,7 +166,7 @@ function ReasoningBlock({ entry, frames }: { entry: ReasoningEntry; frames: Fram
           </>
         }
       >
-        <div className={entry.live ? 'agui-conv-body agui-conv-reasontext agui-caret' : 'agui-conv-body agui-conv-reasontext'}>{entry.text}</div>
+        <div className={entry.live ? 'agui-conv-body agui-conv-reasontext agui-caret' : 'agui-conv-body agui-conv-reasontext'}><ConversationText text={entry.text} /></div>
         <Deltas deltas={entry.deltas} frames={frames} label={`Deltas of ${entry.messageId}`} />
       </Disclosure>
     </div>
@@ -397,15 +399,20 @@ function Entries({ list, frames, extras }: { list: readonly ConversationEntry[];
 export function ConversationView({ store, threadId, renderActivity, onReveal }: ConversationViewProps & ConversationViewExtras): ReactElement {
   const { model, frames } = useProjection(store, threadId);
   const extras: ConversationViewExtras = { ...(renderActivity && { renderActivity }) };
+  // Not saved: a reload starts in plain text, and so does a page that mounts only this view.
+  const [textMode, setTextMode] = useState<TextMode>('plain');
   return (
-    <section aria-labelledby="conversation-heading" data-view="conversation" className="agui-conv">
+    <section aria-labelledby="conversation-heading" data-view="conversation" data-text-mode={textMode} className="agui-conv">
       <h2 id="conversation-heading">Conversation</h2>
+      <MarkdownToggle mode={textMode} onChange={setTextMode} />
       {model.entries.length === 0 ? (
         <p className="agui-conv-empty">No conversation yet. Runs and messages appear here as events arrive.</p>
       ) : (
-        <RevealProvider value={onReveal}>
-          <Entries list={model.entries} frames={frames} extras={extras} />
-        </RevealProvider>
+        <MarkdownModeProvider value={textMode}>
+          <RevealProvider value={onReveal}>
+            <Entries list={model.entries} frames={frames} extras={extras} />
+          </RevealProvider>
+        </MarkdownModeProvider>
       )}
     </section>
   );

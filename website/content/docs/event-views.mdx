@@ -79,9 +79,36 @@ In the frames list, run events also mark run boundaries. [Runs](#runs) explains 
 - `CUSTOM` shows a marker with its name and value.
 - `RAW` shows a marker with its source and value.
 
-## Plain text
+## Markdown
 
-Conversation text is shown as plain text. HTML does not run and Markdown is not interpreted, so `[link](url)` and `<img>` appear as typed. Optional Markdown rendering is not in 0.1.0.
+By default the conversation shows message and reasoning text as plain text, exactly as received. HTML does not run and Markdown is not interpreted, so `[link](url)` and `<img>` appear as typed.
+
+The Message text control at the top of the conversation switches between Plain text and Markdown. Markdown is a view of the same text. It changes nothing in the recording, sends no request and is not saved, so a reload starts in plain text again. While the page stays open the choice stays, through new threads, new runs and imported sessions. It works on a live run, including text that is still streaming, and on an imported session. You can reach it with the keyboard: Tab to the control and press Enter or Space.
+
+Markdown applies to the text of messages with the role `assistant`, `user`, `system` or `developer`, and to reasoning text. These stay as they are: messages with the role `tool`, tool arguments and results, run results, activity content, `CUSTOM` and `RAW` values, the delta lists and the frames list.
+
+What it draws:
+
+- Paragraphs, emphasis, strong text, strikethrough and inline code.
+- Headings. A heading in a message starts at level 3, so the page's own headings stay first. Levels 4 to 6 all become level 6.
+- Block quotes, bullet lists, numbered lists and horizontal rules.
+- Fenced and indented code blocks, without highlighting.
+- Tables, with column alignment.
+- Links, including link references such as `[a][r]` with `[r]: https://example.com`.
+
+A code block or table that is wider than the pane scrolls inside its own box. The box takes keyboard focus, so the arrow keys scroll it.
+
+Anything else shows as typed. That includes task list boxes, math, diagrams and web addresses that are not written as links. Footnotes are not supported: `[^1]: text` is read as a link reference, as CommonMark does.
+
+Text can come from any agent, so these rules hold in Markdown mode:
+
+- Raw HTML is never interpreted. It shows as typed text.
+- Images are never loaded. An image shows as `[image: alt text]`, and nothing is requested.
+- Only `http:`, `https:` and `mailto:` addresses become links. Any other address shows as text, including relative ones and `javascript:` or `data:` ones.
+- A link opens only when you activate it. It opens in a new tab that cannot reach the inspector and gets no referrer. The address is printed next to the link text, so you can see where it goes.
+- The page's content security policy is the same in both modes. The output holds no script, no inline style and no element that loads anything.
+
+A message longer than 200,000 characters shows as plain text with a short note. So does a message that cannot be formatted, for example one that nests more than 200 levels deep. Other messages still format.
 
 ## Runs
 

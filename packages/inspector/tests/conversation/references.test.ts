@@ -45,7 +45,8 @@ test('the evidence token still colors the reference, so it keeps its contrast', 
 
 test('without a reveal action nothing is a button and the text is as before', () => {
   const html = renderToStaticMarkup(createElement(ConversationView, props(scripted())));
-  assert.doesNotMatch(html, /<button/);
+  // The Markdown control is a pair of buttons of its own; a reference is a button only when it can be revealed.
+  assert.doesNotMatch(html, /<button[^>]*aria-label="Show /);
   assert.match(html, /<span class="agui-conv-mono agui-conv-evidence">frame #2<\/span>/);
   assert.match(html, /<b class="agui-conv-mono">r1<\/b>/);
 });

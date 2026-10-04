@@ -19,6 +19,7 @@ repository uses npm workspaces and Node 24 LTS (`engines.node` is `>=24`).
 | `@ag-ui/a2ui-middleware` | 0.0.11 | Only the official `RENDER_A2UI_TOOL` declaration and the A2UI action types. | Re-declaring the tool schema would diverge from the middleware. |
 | `@a2ui/react` | 0.12.0 | The A2UI v0.9 React renderer (`@a2ui/react/v0_9`). | A custom renderer or a chat framework: the constitution requires the official renderer packages. |
 | `@a2ui/web_core` | 0.12.0 | `MessageProcessor` and the surface model that drive the v0.9 renderer. | Hand-written message processing. |
+| `markdown-it` | 14.3.2 | Parses Markdown for the conversation's Markdown view. The view uses `parse()` only and builds React elements from the tokens, so no HTML string exists and nothing needs a sanitizer. The A2UI packages already install it, so the lockfile gains no package. | `renderMarkdown` from `@a2ui/markdown-it`. It returns sanitized HTML as a string. Table alignment becomes an inline `style` attribute, which the page's `style-src 'self'` blocks. `![x](https://…)` becomes an `<img>` that DOMPurify keeps. Relative and protocol-relative links become anchors with no `rel` or `target`. It is asynchronous and needs a DOM, so `node --test` cannot test it. |
 | `react` | 19.3.0 | Views, and a peer of the renderer. | Plain DOM: the constitution requires React views. |
 | `react-dom` | 19.3.0 | Browser rendering, and server rendering in unit tests of the scaffold. | None: it is the React DOM target. |
 | `zod` | 3.25.76 | Peer of both `@ag-ui/core` and the renderer. Stays on 3.x because the renderer's peer range is `^3.25.76`. | Zod 4, which is outside the renderer's peer range. |
@@ -82,8 +83,9 @@ These come from the pinned baseline. They are recorded here, not worked around b
 `"overrides": { "dompurify": "3.4.16" }`, and the committed lockfile resolves exactly 3.4.16. Check it with
 `npm ls dompurify --all`. The override changes neither the required renderer nor the direct dependency list.
 
-The production bundle does not include DOMPurify or `@a2ui/markdown-it` today, because conversation Markdown is out
-of scope. So the override protects the installed tree and any future use of the renderer's Markdown path.
+The production bundle does not include DOMPurify or `@a2ui/markdown-it`. The conversation's Markdown view uses
+`markdown-it` directly and builds React elements, so it needs no sanitizer (see the `markdown-it` row above). The
+override protects the installed tree and any future use of the renderer's Markdown path.
 Remove it when A2UI ships a fixed pin, and review the lockfile in the same change. The lockfile was updated with
 `npm update dompurify --ignore-scripts`, so no lifecycle script ran.
 

@@ -176,6 +176,7 @@ import { publishChunkExpansions } from 'core/projection/index';
 `ConversationView` takes `ConversationViewProps`. It has no interrupt, tool-result or composer controls: those are in
 the connection lane (see [Connect and send a run](./runs.mdx)). Its optional `renderActivity(entry)` draws an
 activity's content, such as an [A2UI surface](./a2ui.mdx), and the card then gets a Rendered and JSON switch.
+`ConversationView` also draws the Message text control and keeps its [Markdown](./event-views.mdx#markdown) mode in its own state, which is never saved. The code is in `views/conversation/markdown.tsx`. It parses with `markdown-it` and folds the tokens into React elements, so no HTML string exists. A view mounted without the control shows plain text.
 `StateView` takes `{ store }` and the same optional `threadId`.
 
 `ConversationView` and `StateView` also take an optional `onReveal(target)`. The `target` is an `EvidenceTarget`: an `exchangeId` and, for a frame, a `frameId`. Without `onReveal`, run ids and frame references stay plain text. `InspectionView` takes an optional `reveal` target and applies it to its own filter and open rows. Each request must be a new object. `App` connects the three.
@@ -401,6 +402,13 @@ npm run test:e2e -- tests/e2e/conversation
 frozen 5,000-frame workload. The browser spec streams into the fixture host
 `packages/inspector/tests/conversation/fixture.tsx`. It covers every event family, plain-text safety and styling in
 both color schemes, and checks that no request goes outside the page's origin.
+
+`markdown.test.tsx` covers the Markdown view without a DOM, because the view builds React elements: every construct, the
+hostile samples in `hostile.ts` against an allowlist of tags and attributes, the link rule, the length limit and the
+timing on the 5,000-frame workload. `tests/e2e/conversation/markdown.spec.ts` serves the fixture host with the
+production content security policy and checks policy reports, requests, the recording around a toggle, the keyboard and
+contrast. `markdown-app.spec.ts` runs a live run, an export and an import through the production build, with the
+reference agent's `markdownRunResponse` as the reply.
 
 ## A2UI tests
 

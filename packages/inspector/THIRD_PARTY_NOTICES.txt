@@ -39,21 +39,21 @@ clarinet@0.12.6                          BSD-2-Clause                     bundle
 clsx@2.1.1                               MIT                              installed
 compare-versions@6.1.1                   MIT                              bundled
 dompurify@3.4.16                         (MPL-2.0 OR Apache-2.0)          installed
-entities@4.5.0                           BSD-2-Clause                     installed
+entities@4.5.0                           BSD-2-Clause                     bundled
 fast-json-patch@3.1.1                    MIT                              bundled
-linkify-it@5.0.2                         MIT                              installed
+linkify-it@5.0.2                         MIT                              bundled
 lit@3.3.3                                BSD-3-Clause                     bundled
 lit-element@4.2.2                        BSD-3-Clause                     bundled
 lit-html@3.3.3                           BSD-3-Clause                     bundled
-markdown-it@14.3.2                       MIT                              installed
-mdurl@2.1.0                              MIT                              installed
-punycode.js@2.3.1                        MIT                              installed
+markdown-it@14.3.2                       MIT                              bundled
+mdurl@2.1.0                              MIT                              bundled
+punycode.js@2.3.1                        MIT                              bundled
 react@19.3.0                             MIT                              bundled
 react-dom@19.3.0                         MIT                              bundled
 rxjs@7.8.1                               Apache-2.0                       bundled
 scheduler@0.28.0                         MIT                              bundled
 tslib@2.8.1                              0BSD                             bundled
-uc.micro@2.1.0                           MIT                              installed
+uc.micro@2.1.0                           MIT                              bundled
 untruncate-json@0.0.1                    MIT                              bundled
 uuid@11.1.1                              MIT                              bundled
 validate-color@2.2.4                     MIT                              bundled
