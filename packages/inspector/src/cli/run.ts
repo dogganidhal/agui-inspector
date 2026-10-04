@@ -3,7 +3,8 @@
 //
 // Exit codes: 0 for a normal stop, `--help` and `--version`; 1 when startup fails for a reason that is not the arguments
 // (the port is taken, the page files are missing); 2 when the arguments are wrong.
-import { readFileSync } from 'node:fs';
+import { accessSync, constants, readFileSync, statSync } from 'node:fs';
+import path from 'node:path';
 import { parseCli, USAGE, type Target } from './args.ts';
 import { listen } from './server.ts';
 
@@ -29,6 +30,16 @@ const HINT = 'Run agui-inspector --help for the options.';
 
 const packageVersion = (): string => (JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')) as { version: string }).version;
 
+/** The absolute paths of the plugin files, or nothing when one of them is not a file. Checked before the command listens. */
+function pluginFiles(files: readonly string[]): string[] | undefined {
+  const resolved = files.map((file) => path.resolve(file));
+  try {
+    return resolved.every((file) => statSync(file).isFile() && accessSync(file, constants.R_OK) === undefined) ? resolved : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 const describe = (target: Target): string => {
   const names = [...target.headers.values()].map((header) => header.name);
   return `  /proxy/${target.n} -> ${target.origin}${names.length > 0 ? ` (headers: ${names.join(', ')})` : ''}\n`;
@@ -45,12 +56,15 @@ export async function run(argv: readonly string[], io: Io, options: RunOptions =
     return 0;
   }
   if (cli.kind === 'error') return usage(cli.message);
+  const plugins = pluginFiles(cli.plugins);
+  if (plugins === undefined) return usage('--plugin must name a file that can be read');
 
   let listening;
   try {
     listening = await listen({
       port: cli.port,
       targets: cli.targets,
+      plugins,
       log: (line) => io.err(`${line}\n`),
       ...(options.assetsDir !== undefined && { assetsDir: options.assetsDir }),
     });

@@ -285,6 +285,9 @@ that is not an option. Check output and exit codes.
 - **FR-002**: The command MUST accept these options and no others: `--target <url>` (repeatable, at least one),
   `--header "<Name>: <value>"` (repeatable), `--port <number>` (default 4747, `0` for any free port), `--help` and
   `--version`. No option sets the listening address.
+  *Note, 2026-10-04: [feature 014](../014-plugin-api/spec.md) (issue #81, approved by the maintainer for 0.2.0) adds
+  one more option, `--plugin <file>` (repeatable), which makes the command serve a plugin file. "And no others" holds for
+  the options of this feature. The option list is now these six, and feature 014 FR-021 defines the sixth.*
 - **FR-003**: The first argument, when it does not start with `-`, MUST be treated as a command name. No command exists
   in this feature, so such an argument stops the command with `unknown command "<name>"` and exit code 2. Options without
   a command MUST keep their meaning when commands are added later. A stray argument anywhere else MUST be a usage error
@@ -408,7 +411,8 @@ that is not an option. Check output and exit codes.
 - The configuration format stays at version 0 and gains no field. The hosting policy of the packaged page stays
   `embedded`, so the page reaches its own origin only.
 - The command sets no theme, branding, preset or capability for the agents it lists. A later item can add flags. A
-  developer who needs them uses a helper or the static assets.
+  developer who needs them uses a helper or the static assets. *Note, 2026-10-04: feature 014 adds `--plugin`, the one
+  flag that this list left open. Theme, branding, presets and capabilities still have no flag.*
 - The command does not open a browser. It prints the address.
 - Replay and the conformance suite are subcommands of the next minor and are not part of this feature. The command layout
   of FR-003 only keeps room for them.

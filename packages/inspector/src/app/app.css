@@ -122,12 +122,15 @@ body,
   margin-inline-start: auto;
 }
 
-/* Configuration warnings sit under the bar on every tab: a rejected theme override is never hidden. */
+/* Configuration and plugin warnings sit under the bar on every tab: a rejected theme override is never hidden. Up to 20
+   plugin warnings can add to them, so the area scrolls before it takes the panes' room. */
 .agui-app-warnings {
   display: grid;
   gap: calc(var(--u) * 1.5);
   padding: calc(var(--u) * 2) 16px;
   border-bottom: 1px solid var(--line);
+  max-height: 30vh;
+  overflow-y: auto;
 }
 
 /* The pane switch exists only where one pane fits. */

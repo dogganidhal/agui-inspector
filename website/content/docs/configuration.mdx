@@ -8,7 +8,7 @@ Three things control a run:
 | Surface | Decides | Who edits it |
 | --- | --- | --- |
 | `hosting-config.json` | Where this deployment may connect. Read first, and nothing later can change it. See [Host the static page](./hosted.mdx#hosting-configjson). | The deployer |
-| `config.json` | The agents the page lists, their optional [presets](./presets.mdx), an optional theme, an optional brand and optional A2UI catalog aliases. | The deployer, or `mount_inspector`, which writes it from its arguments |
+| `config.json` | The agents the page lists, their optional [presets](./presets.mdx), an optional theme, an optional brand, optional A2UI catalog aliases and optional [plugins](./plugins.mdx). | The deployer, or `mount_inspector`, which writes it from its arguments |
 | The client profile | Your client settings: what the next run sends (protocol version, tools, context, message mode, forwarded properties) and whether A2UI surfaces render. Edit it under Settings. The browser stores it. | You, in the browser |
 
 A preset holds what one agent needs for a run: setup requests, variables, forwarded properties, a message mode and quick messages. The profile can override two of these. Its `messageMode` replaces the preset's mode when set. Its `forwardedProps` are merged over the preset's ([client profile](#client-profile)).
@@ -42,7 +42,8 @@ A configuration is JSON that lists agents. The embedded bundle reads `config.jso
   },
   "catalogAliases": {
     "https://catalogs.example.com/old/basic.json": "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json"
-  }
+  },
+  "plugins": ["plugins/sign-requests.js"]
 }
 ```
 
@@ -56,6 +57,7 @@ A configuration is JSON that lists agents. The embedded bundle reads `config.jso
 | `theme` | Optional. `light` and `dark` maps that give string values to the ten public `--agui-*` names. See [Theme](#theme). |
 | `brand` | Optional. The name and logos that replace the default ones in the top bar. See [Brand](#brand). |
 | `catalogAliases` | Optional. Maps an A2UI catalog id that an agent still uses to a catalog the inspector bundles. See [Catalog aliases](#catalog-aliases). |
+| `plugins` | Optional. A list of plugin modules on the page's own origin. See [Plugins](#plugins). |
 
 The agents appear in a picker beside the endpoint field in the top bar, on every pane and tab, and again under Settings. Both pickers change the same selection. The top-bar picker appears only when at least one agent is configured. An endpoint you type by hand matches no agent, so the picker then shows "Custom URL".
 
@@ -138,6 +140,32 @@ An alias problem causes a warning and never stops startup, like a theme problem.
 
 An alias changes only which bundled catalog a surface uses. The inspector fetches no catalog, rewrites no received message and sends no request for an alias. The content security policy is the same with or without aliases. `parseConfig` returns the accepted entries as `catalogAliases` and the messages in `warnings`.
 
+### Plugins
+
+`plugins` lists plugin modules: JavaScript files that add a run hook, header providers or renderers to the page. The field is optional and applies to every agent. [Plugins](./plugins.mdx) describes what a plugin can do and how to write one.
+
+```json
+{ "version": 0, "agents": [], "plugins": ["plugins/sign-requests.js", "/static/plugins/citations.js"] }
+```
+
+An entry is a nonempty string that resolves to the page's own origin: a path relative to the page, an absolute path, or a full URL with the page's origin. The page reads it against its own address, never against the address of a configuration file that came from somewhere else. A query or a fragment is allowed. Plugins load after the configuration is read and before the page accepts a message, in the order written.
+
+A plugin problem causes a warning and never stops startup, like a theme problem. The page shows a "Configuration" warning under the top bar, on every tab, drops that entry, and checks the others. The warning names the field and the position, and never repeats the value. The check runs before any request, so a rejected address causes none.
+
+| Input | Warning |
+| --- | --- |
+| `plugins` is not a list | `plugins must be a list of module addresses on this page's origin; it was ignored` |
+| An entry that is not a string, is empty or is only spaces | `plugins[<i>] must be a nonempty string; it was ignored` |
+| An entry with a backslash or a control character | `plugins[<i>] must not contain a backslash or a control character; it was ignored` |
+| An entry that is not a URL | `plugins[<i>] is not a valid URL; it was ignored` |
+| Another origin, `//host/x.js`, `data:`, `blob:`, `file:` or `javascript:` | `plugins[<i>] must be a path on this origin; it was ignored` |
+| A URL with `user:password@` | `plugins[<i>] must not contain credentials (user:password@); it was ignored` |
+| An address already listed | `plugins[<i>] repeats an earlier entry; it was ignored` |
+
+A module that fails to load or to run is a different case: it gives a "Plugin" warning. See [Failures](./plugins.mdx#failures). `parseConfig` returns the accepted entries as `plugins`, each as the full URL it resolves to, and the messages in `warnings` after the theme, brand and catalog alias messages.
+
+The plugin list is not part of a session export, a profile or browser storage. A profile, a session file, a query string and a typed endpoint cannot name a plugin. Only `config.json`, or the file that `hosting-config.json` names in its place, can. `hosting-config.json` is not read for plugins and nothing in it changes: a plugin loads from the page's own origin and adds no allowed origin. For the helper arguments, see [Plugins in the embedded page](./embedding.mdx#plugins-in-the-embedded-page).
+
 ### Declared capabilities
 
 Capabilities show in the eleven documented groups: `identity`, `transport`, `tools`, `output`, `state`, `multiAgent`, `reasoning`, `multimodal`, `execution`, `humanInTheLoop` and `custom`. A group the agent leaves out shows as "Not declared". An inline declaration needs no request. A URL is fetched once, through the callback. The inspector checks the shape against the protocol's `AgentCapabilitiesSchema`. The inspector does not discover capabilities. It compares each stream with the selected agent's declaration and adds a `capability` finding to a frame that contradicts a flag declared as `false`. A flag that is left out is not declared, so it never gives a finding. The [rule catalogue](./rules.mdx#capability) lists the four rules. A URL that has not loaded yet or failed to load gives no finding.
@@ -207,6 +235,7 @@ A page can mount the application itself instead of loading the shipped `index.ht
 - 0.1.0 adds the optional `allowVisitorTargets` field to `hosting-config.json`, version 0. A file without it works as before and needs no migration. Before 0.1.0, the field was an unknown key and the file was refused.
 - 0.1.0 adds the optional `theme` field to the version-0 configuration. A file without it reads as before and needs no migration. Before 0.1.0, `theme` was an unknown field and an error.
 - 0.2.0 adds the optional `brand` field to the version-0 configuration. A file without it reads as before and needs no migration. Before 0.2.0, `brand` was an unknown field and an error, so an older inspector refuses a file that has it.
+- 0.2.0 adds the optional `plugins` field to the version-0 configuration. A file without it reads as before and needs no migration. Before 0.2.0, `plugins` was an unknown field and an error, so an older inspector refuses a file that has it.
 
 No other format has changed since version 0. Any later change that breaks an existing file will appear here, with the steps to update it. Until 1.0.0, such a change may keep the version number, so this list is the record.
 

@@ -27,6 +27,7 @@ import {
   type TransportRequest,
   type VolatileAuth,
   type VolatileConnectionState,
+  type RenderContainer,
 } from '../../src/contracts';
 
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
@@ -200,3 +201,6 @@ test('a profile envelope holds the seven settings, the three optional automation
   ]);
   assert.doesNotMatch(JSON.stringify(envelope), /authorization|token|headers?"/i);
 });
+
+// A plugin renderer draws into an element wherever the DOM types are loaded (spec 014).
+export type RenderContainerIsAnElement = Expect<Equal<RenderContainer, HTMLElement>>;

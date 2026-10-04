@@ -251,3 +251,35 @@ test('the footer text is the same for the live page and the recording, which add
   const markup = build({ mode: 'hosted', allowVisitorTargets: true, recording: true }).markup;
   assert.match(markup, /headers never recorded · imported recording, inspection only/);
 });
+
+// Spec 014 (FR-017, FR-018): plugin warnings share the configuration warnings' place with the kind "Plugin", and the
+// footer says how many plugins are active.
+
+test('the footer counts active plugins and says nothing without any', () => {
+  assert.doesNotMatch(build({ mode: 'embedded' }, 1).markup, /plugin/);
+  assert.doesNotMatch(build({ mode: 'embedded', plugins: 0 }, 1).markup, /plugin/);
+  assert.match(build({ mode: 'embedded', plugins: 1 }, 1).markup, /1 exchange · 0 frames · 1 plugin · requests only to this origin · no telemetry · headers never recorded/);
+  assert.match(build({ mode: 'embedded', plugins: 2 }, 3).markup, /3 exchanges · 0 frames · 2 plugins · requests only to this origin · no telemetry · headers never recorded/);
+});
+
+test('plugin warnings render in the warnings region after the configuration ones, with the kind "Plugin"', () => {
+  const { markup } = build({ warnings: ['brand.name must be a nonempty string; it was ignored'], pluginWarnings: ['/plugins/a.js: activation failed: boom'] });
+  const region = /<div class="agui-app-warnings" role="status" aria-label="Configuration warnings" data-view="warnings">(.*?)<\/div><div class="agui-app-switch">/s.exec(markup)?.[1] ?? '';
+  assert.ok(region.includes('brand.name must be a nonempty string'), region);
+  assert.ok(region.includes('/plugins/a.js: activation failed: boom'), region);
+  assert.ok(region.indexOf('brand.name') < region.indexOf('/plugins/a.js'), 'configuration first');
+  assert.equal(region.match(/>Configuration</g)?.length, 1);
+  assert.equal(region.match(/>Plugin</g)?.length, 1);
+  assert.equal(region.match(/agui-finding--warn/g)?.length, 2);
+});
+
+test('plugin warnings alone open the region, and none leaves it out', () => {
+  assert.match(build({ pluginWarnings: ['/plugins/a.js: could not be loaded'] }).markup, /data-view="warnings"/);
+  assert.doesNotMatch(build({ pluginWarnings: [] }).markup, /data-view="warnings"/);
+});
+
+test('markup in a plugin message is shown as text', () => {
+  const { markup } = build({ pluginWarnings: ['/plugins/a.js: beforeRun threw: <img src=x onerror=alert(1)>'] });
+  assert.ok(markup.includes('&lt;img src=x onerror=alert(1)&gt;'));
+  assert.doesNotMatch(markup, /<img src=x/);
+});

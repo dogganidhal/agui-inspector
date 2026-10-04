@@ -247,6 +247,66 @@ class EnabledTest(StaticFixture):
         with self.assertRaises(AttributeError):
             Brand(name="Acme").name = "Other"  # type: ignore[misc]
 
+    def test_plugins_are_served_in_config_json_as_given_for_starlette_and_fastapi(self):
+        plugins = ["/static/sign.js", "plugins/other.js"]
+        for name, app in self.apps():
+            with self.subTest(name):
+                mount_inspector(
+                    app,
+                    agents=AGENTS,
+                    enabled=True,
+                    theme={"dark": {"--agui-bg": "#101418"}},
+                    brand=Brand(name="Acme"),
+                    catalog_aliases={"old": "new"},
+                    plugins=plugins,
+                )
+                body = TestClient(app).get("/agui-inspector/config.json").json()
+                self.assertEqual(plugins, body["plugins"])
+                self.assertEqual(["version", "agents", "theme", "brand", "catalogAliases", "plugins"], list(body))
+
+    def test_no_plugins_serves_the_bytes_it_served_before_and_an_empty_list_is_an_empty_list(self):
+        for name, app in self.apps():
+            with self.subTest(name):
+                mount_inspector(app, agents=AGENTS, enabled=True, plugins=None)
+                text = TestClient(app).get("/agui-inspector/config.json").text
+                self.assertEqual(json.dumps({"version": 0, "agents": [{"id": "support", "url": "/agents/support/stream"}]}), text)
+        app = Starlette()
+        mount_inspector(app, agents=AGENTS, enabled=True, plugins=[])
+        self.assertEqual([], TestClient(app).get("/agui-inspector/config.json").json()["plugins"])
+
+    def test_plugins_follow_a_custom_mount_path(self):
+        app = Starlette()
+        mount_inspector(app, agents=AGENTS, enabled=True, path="/tools/inspector", plugins=["/static/sign.js"])
+        client = TestClient(app)
+        self.assertEqual(["/static/sign.js"], client.get("/tools/inspector/config.json").json()["plugins"])
+        self.assertEqual(404, client.get("/agui-inspector/config.json").status_code)
+
+    def test_plugin_values_are_delivered_unchanged_so_the_page_alone_judges_them(self):
+        plugins = ["https://example.invalid/a.js", "data:text/javascript,1", ""]
+        app = Starlette()
+        mount_inspector(app, agents=AGENTS, enabled=True, plugins=plugins)
+        self.assertEqual(plugins, TestClient(app).get("/agui-inspector/config.json").json()["plugins"])
+
+    def test_plugins_add_no_route_serve_no_module_and_change_no_header(self):
+        for name, make in (("starlette", Starlette), ("fastapi", FastAPI)):
+            with self.subTest(name):
+                plain, with_plugins = make(), make()
+                mount_inspector(plain, agents=AGENTS, enabled=True)
+                mount_inspector(with_plugins, agents=AGENTS, enabled=True, plugins=["/static/sign.js"])
+                self.assertEqual([r.path for r in plain.routes], [r.path for r in with_plugins.routes])
+                self.assertEqual(404, TestClient(with_plugins).get("/agui-inspector/static/sign.js").status_code)
+                for route in ("/agui-inspector/", "/agui-inspector/config.json", "/agui-inspector/app.js"):
+                    a, b = TestClient(plain).get(route), TestClient(with_plugins).get(route)
+                    self.assertEqual(a.headers["content-security-policy"], b.headers["content-security-policy"], route)
+                    self.assertEqual(a.headers["content-type"], b.headers["content-type"], route)
+
+    def test_a_disabled_helper_with_plugins_still_mounts_nothing(self):
+        for name, app in self.apps():
+            with self.subTest(name), self.assertNoLogs("agui_inspector"):
+                before = list(app.routes)
+                mount_inspector(app, agents=AGENTS, plugins=["/static/sign.js"])
+                self.assertEqual(before, list(app.routes))
+
     def test_catalog_aliases_are_served_in_config_json_for_starlette_and_fastapi(self):
         aliases = {"https://catalog.invalid/old/basic.json": "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json"}
         for name, app in self.apps():

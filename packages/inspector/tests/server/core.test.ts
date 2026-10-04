@@ -94,6 +94,30 @@ test('brand is served as given: unset fields are left out, an empty brand is an 
   assert.deepEqual(Object.keys(withTheme), ['version', 'agents', 'theme', 'brand']);
 });
 
+test('plugins are served as given, after brand: no field means the same bytes as before, and an empty list is an empty list', async () => {
+  const text = async (options: object = {}) => (await createInspectorHandler({ agents: AGENTS, assetsDir, ...options })(at('/agui-inspector/config.json'), 'config.json')).text();
+  const plugins = ['/static/a.js', 'plugins/b.js'];
+  assert.deepEqual(JSON.parse(await text({ plugins })), { version: 0, agents: AGENTS, plugins });
+  assert.equal(await text(), JSON.stringify({ version: 0, agents: AGENTS }), 'no plugins: the bytes served before this feature');
+  assert.equal(await text({ plugins: undefined }), await text());
+  assert.deepEqual(JSON.parse(await text({ plugins: [] })).plugins, []);
+  // The page checks the values and warns; the helper neither hides nor repairs them.
+  const odd = ['https://example.invalid/a.js', 'data:text/javascript,1', ''];
+  assert.deepEqual(JSON.parse(await text({ plugins: odd })).plugins, odd);
+  const all = JSON.parse(await text({ theme: { light: {} }, brand: { name: 'Acme' }, plugins }));
+  assert.deepEqual(Object.keys(all), ['version', 'agents', 'theme', 'brand', 'plugins']);
+});
+
+test('plugins add no route and change no header: the response of every asset is the same with and without them', async () => {
+  const bare = createInspectorHandler({ agents: AGENTS, assetsDir });
+  const withPlugins = createInspectorHandler({ agents: AGENTS, assetsDir, plugins: ['/static/a.js'] });
+  for (const asset of ['', 'index.html', 'app.js', 'assets/chunk.js', 'static/a.js', 'plugins/a.js', 'nope']) {
+    const [a, b] = [await bare(at('/agui-inspector/'), asset), await withPlugins(at('/agui-inspector/'), asset)];
+    assert.equal(b.status, a.status, asset);
+    assert.deepEqual([...b.headers.entries()], [...a.headers.entries()], asset);
+  }
+});
+
 test('packaged files are served, nested ones included, with a content type by extension', async () => {
   const cases = [
     ['app.js', APP_JS, 'text/javascript; charset=utf-8'],
@@ -285,5 +309,36 @@ test('resolveMount does not log; warnMounted is the one place that does', () => 
     assert.equal(warn.mock.callCount(), 0);
   } finally {
     warn.mock.restore();
+  }
+});
+
+test('localFiles (internal, for the command) serves exactly the named files at request time, and any other name is as before', async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'agui-core-local-'));
+  try {
+    const file = path.join(dir, 'sign.js');
+    writeFileSync(file, 'one');
+    const withFiles = createInspectorHandler({ agents: AGENTS, assetsDir, localFiles: { 'plugins/1.js': file } });
+    const bare = createInspectorHandler({ agents: AGENTS, assetsDir });
+    const served = await withFiles(at('/agui-inspector/plugins/1.js'), 'plugins/1.js');
+    assert.equal(served.status, 200);
+    assert.equal(await served.text(), 'one');
+    assert.equal(served.headers.get('content-type'), 'text/javascript; charset=utf-8');
+    assert.equal(served.headers.get('content-security-policy'), POLICY);
+    writeFileSync(file, 'two');
+    assert.equal(await (await withFiles(at('/agui-inspector/plugins/1.js'), 'plugins/1.js')).text(), 'two');
+    assert.equal((await withFiles(at('/agui-inspector/plugins/1.js', { method: 'HEAD' }), 'plugins/1.js')).status, 200);
+    assert.equal((await withFiles(at('/agui-inspector/plugins/1.js', { method: 'POST' }), 'plugins/1.js')).status, 405);
+    for (const asset of ['plugins/2.js', 'plugins/1.js/..', 'plugins/../plugins/1.js', 'plugins', 'sign.js', '__proto__', 'constructor', 'toString']) {
+      assert.equal((await withFiles(at('/agui-inspector/x'), asset)).status, 404, asset);
+    }
+    for (const asset of ['', 'index.html', 'app.js', 'config.json', 'nope']) {
+      const [a, b] = [await bare(at('/agui-inspector/'), asset), await withFiles(at('/agui-inspector/'), asset)];
+      assert.equal(await b.text(), await a.text(), asset);
+      assert.equal(b.status, a.status, asset);
+    }
+    rmSync(file);
+    assert.equal((await withFiles(at('/agui-inspector/plugins/1.js'), 'plugins/1.js')).status, 404, 'a file that was removed is a 404');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 });

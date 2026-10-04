@@ -10,7 +10,7 @@ The code under `packages/inspector/src` has three layers:
 
 - `core` is TypeScript with no React (a test checks this): the recorder, the frame reader, the session store,
   configuration, presets and profiles, session files, the A2UI lifecycle, the projection that expands chunk
-  events, and the runtime with its guarded transport.
+  events, the plugin host, and the runtime with its guarded transport.
 - `views` holds the React views (connection, conversation, inspection, A2UI and settings) and the theme's tokens and
   primitives.
 - `server` is the Node-side code of the Express, Hono and Next.js helpers: one core on the web-standard `Request` and
@@ -19,7 +19,7 @@ The code under `packages/inspector/src` has three layers:
 - `app` is the assembly that builds the page. `startup.ts` reads `hosting-config.json`, turns it into the transport
   policy and the content security policy, and only then creates the runtime. `index.tsx` keeps the page's state around
   one shared session store and turns each view callback into one call on a core module. `boundary.tsx` keeps a render
-  failure inside the pane where it happened. `brand.tsx` draws the top bar's mark and name, or the adopter's logo and name.
+  failure inside the pane where it happened. `brand.tsx` draws the top bar's mark and name, or the adopter's logo and name. `plugin-slot.tsx` holds the container of one plugin renderer.
 
 The shared types are in `contracts.ts`, which imports no React either.
 
@@ -432,6 +432,22 @@ works for both.
 
 Pass `threadId: state.threadId` to `ConversationView` and `StateView`, so New thread empties them immediately.
 
+## Plugin host wiring
+
+The [plugin API](./plugins.mdx) is built from three pieces that keep to the existing seams.
+
+| Piece | Where | What it does |
+| --- | --- | --- |
+| The reader | `core/config` (`pluginSource`, `parsePlugins`) | Checks each address against the page's origin and location, before any request. A bad entry is a warning. |
+| The host | `core/plugins/index.ts` (`createPluginHost`) | `load` requests every module with `import()`, then activates the plugins in order. Each activation has its own pending set and a frozen API object. The set merges into the host only when the function ends without error. The host keeps the hooks, the providers and the renderers, and the list of warnings. |
+| The slot | `core/plugins/mount.ts`, `app/plugin-slot.tsx` | `mountRender` gives a renderer a copy of the data and an empty container, and runs its cleanup before the next draw. `PluginSlot` calls it when the content of the entry changes. |
+
+`startPage` creates the host before the runtime, loads the plugins after the configuration, and resolves only when every plugin has loaded or failed. The page then renders.
+
+The runtime takes the host as `plugins`, an object with two methods. `beforeRun` runs in `dispatchRun` after the input is composed and before the setup requests. `provideHeaders` runs before each setup request, each run request and each raw request, and before the recorder is called, so a provider that fails leaves no exchange. The headers reach the guarded transport as a fourth argument of `send`, like the token and never inside the request. The recorder is never given them. The transport checks them again, lets a typed token replace one of the same name, and keeps `Accept` and `Content-Type` for itself.
+
+The conversation view has `renderActivity` and `renderCustom` seams. The app tries the A2UI view first, then the plugin renderer.
+
 ## Recorder and protocol fixtures
 
 The fixtures are deterministic and need no model or network. Each one gives the request the recorder is told about
@@ -560,6 +576,20 @@ request. The scenarios, v0.8 and v0.9, are in [`examples/reference-agent/a2ui-sc
 | `packages/inspector/tests/hosted/app.test.tsx` | The top bar's markup: the default, a name, a logo, a dark logo and a logo that failed to load. |
 | `packages/python/tests/test_embedding.py` | `Brand` in `config.json`: set fields only, no brand and the same bytes as before, unchanged routes and headers. |
 | `tests/e2e/branding/brand.spec.ts` | The production build in hosted, embedded, Python and generic static serving: light and dark logos by system preference and by the switch, every rejected value, a logo that fails to load, and a long name or wide logo on a desktop and a phone. |
+
+## Plugin tests
+
+| File | Covers |
+| --- | --- |
+| `packages/inspector/tests/config/plugins.test.ts` | Reading `plugins`: every valid form, every rejected value with its warning, repeated addresses, and no warning that holds a value. |
+| `packages/inspector/tests/plugins/host.test.ts` | Loading and activation order, atomic registration, timeouts, the registry rules, the warnings, the hooks (`beforeRun`) and the providers (`provideHeaders`). |
+| `packages/inspector/tests/plugins/mount.test.ts` | One renderer call with a fake container: the copy, the cleanup order, a throw. |
+| `packages/inspector/tests/plugins/scenario.test.ts` | The reference agent's plugin scenario. |
+| `packages/inspector/tests/plugins/docs.test.ts` | The plugins page names every function and holds the example file. |
+| `packages/inspector/tests/runtime/plugins.test.ts` | The runtime with a real host: the hook, the providers, a failure that stops one request, Stop, and a provider value that is in no recording. |
+| `packages/inspector/tests/runtime/transport.test.ts`, `prepare.test.ts` | Provider headers in the transport and in the setup requests. |
+| `packages/inspector/tests/conversation/custom-renderer.test.tsx` | The custom event card. |
+| `tests/e2e/plugins` | The production build: every serving mode, the failures, the headers, the hook, the renderers and the example plugin. `tests/e2e/cli/plugin.spec.ts` covers `--plugin`. |
 
 ## Hosted deployment tests
 

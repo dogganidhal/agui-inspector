@@ -10,6 +10,7 @@
 import type { AgentConfig, BrandConfig, CatalogAliases, ClientProfileSettings, JsonValue, SessionStore, ThemeConfig, TransportPolicy } from '../contracts.ts';
 import { loadConfig, type ParsedConfig, type Result } from '../core/config/index.ts';
 import { defaultProfile, loadProfile, type StorageLike } from '../core/profiles/index.ts';
+import { createPluginHost, type PluginHost } from '../core/plugins/index.ts';
 import { createRuntime, guardedFetchText, resolveTarget, type Runtime } from '../core/runtime/index.ts';
 import { createSessionStore } from '../core/store/index.ts';
 import { DEFAULT_CONFIG_FILE, EMBEDDED_DEFAULTS, HOSTING_CONFIG_FILE, installPolicy, parseHostingConfig, policyFor, type HostingConfig } from './security.ts';
@@ -31,6 +32,11 @@ export interface StartupEnvironment {
    * one is the usual empty start unless the deployment's own file requires a configuration.
    */
   readonly configFile?: string;
+  /**
+   * Loads one plugin module by its resolved address. The page passes a dynamic `import()`, which the policy limits to its
+   * own origin. Tests pass a stub.
+   */
+  readonly importModule?: (address: string) => Promise<unknown>;
 }
 
 /** What the runtime reads when it builds a run. The page updates it as the user edits. */
@@ -53,6 +59,8 @@ export interface Started {
   readonly brand?: BrandConfig;
   /** The validated catalog aliases from `config.json`; the A2UI view resolves catalog ids with them. */
   readonly catalogAliases?: CatalogAliases;
+  /** The plugins of this page: loaded or failed by the time the start resolves. Empty when none was declared. */
+  readonly plugins: PluginHost;
   /** Theme and brand values that were rejected. The page shows them; none of them stops the start. */
   readonly warnings: readonly string[];
   /** Why the configuration or the saved profile could not be used. */
@@ -94,8 +102,9 @@ export async function startPage(env: StartupEnvironment): Promise<StartResult> {
   installPolicy(env.document, policy);
 
   const store = createSessionStore();
+  const plugins = createPluginHost();
   const settings: Settings = { profile: defaultProfile(), variables: {} };
-  const runtime = createRuntime({ store, policy, settings: () => settings, fetch: env.fetch });
+  const runtime = createRuntime({ store, policy, settings: () => settings, fetch: env.fetch, plugins });
   const problems: string[] = [];
 
   // Relative to the page, like `hosting-config.json`: the guarded transport alone would resolve it against the origin root.
@@ -115,15 +124,22 @@ export async function startPage(env: StartupEnvironment): Promise<StartResult> {
   let theme: ThemeConfig | undefined;
   let brand: BrandConfig | undefined;
   let catalogAliases: CatalogAliases | undefined;
+  let pluginAddresses: readonly string[] = [];
   let warnings: readonly string[] = [];
-  if (loaded.ok) ({ agents, theme, brand, catalogAliases, warnings } = loaded.value);
-  else if (hosting.value.config !== undefined || !NOT_FOUND.test(loaded.error)) problems.push(loaded.error);
+  if (loaded.ok) {
+    ({ agents, theme, brand, catalogAliases, warnings } = loaded.value);
+    pluginAddresses = loaded.value.plugins ?? [];
+  } else if (hosting.value.config !== undefined || !NOT_FOUND.test(loaded.error)) problems.push(loaded.error);
 
   if (env.storage !== undefined) {
     const saved = loadProfile(env.storage);
     if (!saved.ok) problems.push(saved.error);
     else if (saved.value !== undefined) settings.profile = saved.value;
   }
+
+  // Plugins load last and before the page renders, so no run can be sent before a hook that guards it exists. The page
+  // passes a plain dynamic import: it is a request for a script, limited by `script-src 'self'`, and never evaluates a string.
+  await plugins.load(pluginAddresses, env.importModule ?? ((address) => import(address)), { origin: env.origin, baseUrl: env.baseUrl });
 
   const first = agents[0];
   if (first !== undefined) runtime.selectAgent(first);
@@ -134,6 +150,7 @@ export async function startPage(env: StartupEnvironment): Promise<StartResult> {
     runtime,
     settings,
     agents,
+    plugins,
     warnings,
     ...(theme !== undefined && { theme }),
     ...(brand !== undefined && { brand }),

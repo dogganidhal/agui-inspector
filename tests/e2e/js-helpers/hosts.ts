@@ -27,6 +27,10 @@ export interface HostOptions {
   readonly credentials?: { readonly user: string; readonly password: string };
   /** Hono `basePath` or Next.js `basePath`. Express ignores it. */
   readonly basePath?: string;
+  /** The `plugins` option of the helper, as written in the host's code: module addresses on the host's origin. */
+  readonly plugins?: readonly string[];
+  /** Files the host serves from its own `<basePath>/static/<name>` route with a content type by extension: the helper serves none. */
+  readonly files?: Readonly<Record<string, string>>;
 }
 
 export interface Host {
@@ -71,6 +75,13 @@ function fullRequest(origin: string, message: IncomingMessage): Request {
   return new Request(`${origin}${message.url ?? '/'}`, { method, headers, body, duplex: 'half' } as RequestInit);
 }
 
+/** The host's own route for a plugin module or a logo. */
+function staticFile(files: Readonly<Record<string, string>>, name: string): Response {
+  const body = files[name];
+  if (body === undefined) return new Response('not found', { status: 404 });
+  return new Response(body, { status: 200, headers: { 'content-type': name.endsWith('.js') ? 'text/javascript' : name.endsWith('.svg') ? 'image/svg+xml' : 'text/plain' } });
+}
+
 function listen(server: Server): Promise<string> {
   return new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve(`http://127.0.0.1:${(server.address() as AddressInfo).port}`)));
 }
@@ -82,6 +93,8 @@ export async function startHost(kind: HostKind, options: HostOptions = {}): Prom
   const agentUrl = `${basePath}/agents/demo/stream`;
   const agents = [{ id: 'demo', name: 'Demo agent', url: agentUrl }];
   const authorization = options.credentials ? basic(options.credentials) : undefined;
+  const files = options.files ?? {};
+  const plugins = options.plugins === undefined ? {} : { plugins: options.plugins };
 
   const warnings: string[] = [];
   const original = console.warn;
@@ -93,7 +106,11 @@ export async function startHost(kind: HostKind, options: HostOptions = {}): Prom
     if (authorization) {
       app.use((req, res, next) => (req.headers.authorization === authorization ? next() : void res.status(401).set('www-authenticate', 'Basic realm="host"').send('host guard')));
     }
-    mountExpress(app, { agents, enabled, brand: BRAND });
+    mountExpress(app, { agents, enabled, brand: BRAND, ...plugins });
+    app.get('/static/:name', async (req, res) => {
+      const reply = staticFile(files, String(req.params.name));
+      res.status(reply.status).set(Object.fromEntries(reply.headers)).send(Buffer.from(await reply.arrayBuffer()));
+    });
     app.post(agentUrl, async (req, res) => {
       let text = '';
       for await (const chunk of req) text += String(chunk);
@@ -104,14 +121,15 @@ export async function startHost(kind: HostKind, options: HostOptions = {}): Prom
   } else if (kind === 'hono') {
     const app = new Hono().basePath(basePath);
     if (authorization) app.use('*', async (c, next) => (c.req.header('authorization') === authorization ? next() : c.text('host guard', 401, { 'www-authenticate': 'Basic realm="host"' })));
-    mountHono(app, { agents, enabled, brand: BRAND });
+    mountHono(app, { agents, enabled, brand: BRAND, ...plugins });
+    app.get('/static/:name', (c) => staticFile(files, c.req.param('name')));
     app.post('/agents/demo/stream', async (c) => agentResponse(runIds(await c.req.text())));
     server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
       await sendResponse(await app.fetch(fullRequest(`http://${req.headers.host}`, req)), res);
     });
   } else {
     // `app/agui-inspector/[[...path]]/route.ts` under the base path, with a guard standing for the middleware.
-    const { GET, HEAD } = inspectorRoute({ agents, enabled, brand: BRAND });
+    const { GET, HEAD } = inspectorRoute({ agents, enabled, brand: BRAND, ...plugins });
     const route = '/agui-inspector';
     server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
       const request = fullRequest(`http://${req.headers.host}`, req);
@@ -128,6 +146,7 @@ export async function startHost(kind: HostKind, options: HostOptions = {}): Prom
       const rest = url.pathname.slice(basePath.length);
       // Next.js gives a route handler the URL without the `basePath`.
       const routed = new Request(`${url.origin}${rest}${url.search}`, request);
+      if (rest.startsWith('/static/') && request.method === 'GET') return send(staticFile(files, decodeURIComponent(rest.slice('/static/'.length))));
       if (rest === '/agents/demo/stream' && request.method === 'POST') return send(agentResponse(runIds(await request.text())));
       if (rest === route || rest.startsWith(`${route}/`)) {
         if (request.method !== 'GET' && request.method !== 'HEAD') return send(new Response(null, { status: 405 }));

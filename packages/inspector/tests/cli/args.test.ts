@@ -139,3 +139,19 @@ test('an unquoted header never prints the words that followed it', () => {
     assert.ok(message.startsWith('--header') || message.startsWith('unexpected argument') || message.startsWith('unknown command'), message);
   }
 });
+
+// --plugin (spec 014, FR-021): the command serves plugin files and lists them in config.json.
+
+test('--plugin is repeatable, may stand anywhere, keeps its order, and does not change which target a header belongs to', () => {
+  const cli = served(['--plugin', 'a.js', '--target', 'http://a.example', '--header', 'X-Key: a', '--plugin=b.js', '--target', 'http://b.example', '--plugin', 'c.js', '--header', 'X-Key: b']);
+  assert.deepEqual((cli as unknown as { plugins: string[] }).plugins, ['a.js', 'b.js', 'c.js']);
+  assert.deepEqual(cli.targets.map(headersOf), [['X-Key: a'], ['X-Key: b']]);
+  assert.deepEqual((served(['--target', 'http://a.example']) as unknown as { plugins: string[] }).plugins, [], 'none without the option');
+});
+
+test('--plugin is in the usage text, and a missing or empty value is a usage error that echoes nothing', () => {
+  assert.match(USAGE, /--plugin <file>/);
+  assert.equal(failed(['--target', 'http://a.example', '--plugin']), '--plugin needs a value');
+  assert.equal(failed(['--target', 'http://a.example', '--plugin', '']), '--plugin must name a file');
+  assert.equal(failed(['--plugin', 'a.js']), '--target is required');
+});

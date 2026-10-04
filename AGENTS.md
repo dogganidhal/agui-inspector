@@ -59,6 +59,7 @@ spec. Everything else does, including small bug fixes.
 | `demo` | Public demo bootstrap and service worker. Kept out of the npm package and the wheel. |
 | `examples/reference-agent` | Scripted, model-free AG-UI server and scenarios shared by tests and the demo. Erasable TypeScript only; Node runs it directly. |
 | `examples/fastapi` | Embedded example host. |
+| `examples/plugin` | An example plugin that uses every extension point. Plain JavaScript, loaded by the browser as it is. A test keeps it equal to its copy on the plugins docs page. |
 | `tests/e2e` | Playwright specs. `tests/demo`, `tests/ci`, `tests/release` and `tests/benchmarks` hold unit tests for those areas. |
 | `scripts` | Build, test runner, bundle budget, CI gate, Python packaging, changeset versioning. |
 | `website` | The docs site (Next.js static export with Fumadocs, its own lockfile, not a workspace). Pages are MDX in `website/content/docs`; several tests read them. `docs/` keeps only the frozen product brief and the README screenshots. |
@@ -117,6 +118,7 @@ These come from the [constitution](.specify/memory/constitution.md). Read it bef
 - The brand mark exists in four copies (`branding/mark.svg`, `branding/icon.svg`, `icons.mark` in
   `views/theme/primitives.tsx`, and the favicon data URI in both `index.html` files). Change all or none. Repo assets stay
   black and white; adopters recolor through `--agui-accent`.
+- A plugin is code from the page's own origin and nothing else loads as code. Provider headers reach the transport as an argument, never in a request or to the recorder, and tests search for a synthetic value. A hook changes what is sent, and the recorded request is the one that was sent.
 - Workflows pin every action to a full commit SHA. `ci.yml` only checks, `pages.yml` only deploys the demo and the docs site, and
   `release.yml` is the only publisher, to PyPI and npm; tests fail if triggers or permissions widen.
 - Python and npm package versions move only through Changesets, each package on its own. A change to what the wheel or

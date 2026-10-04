@@ -13,6 +13,7 @@ import type { ConversationViewProps, EvidenceTarget, FrameId, JsonValue, RawFram
 import type {
   ActivityEntry,
   ConversationEntry,
+  CustomEntry,
   Delta,
   EncryptedEntry,
   IssueEntry,
@@ -32,8 +33,10 @@ import { SnapshotMarker } from './state';
 
 /** Optional hooks for the assembly. */
 export interface ConversationViewExtras {
-  /** Draws an activity's content (an A2UI surface) inside its card. */
+  /** Draws an activity's content (an A2UI surface, or a plugin's view) inside its card. */
   renderActivity?(entry: ActivityEntry): ReactNode;
+  /** Draws a custom event's value (a plugin's view). Without it, or when it returns nothing, the event is the one-line marker. */
+  renderCustom?(entry: CustomEntry): ReactNode;
   /** Shows the evidence a run id or frame reference points at. Without it they stay plain text. */
   onReveal?(target: EvidenceTarget): void;
 }
@@ -293,6 +296,23 @@ function ActivityBlock({ entry, extras }: { entry: ActivityEntry; extras: Conver
   );
 }
 
+/** A custom event that a plugin draws: the marker's facts in a card header, and the same Rendered/JSON switch as an activity. */
+function CustomBlock({ entry, frames, rendered }: { entry: CustomEntry; frames: Frames; rendered: ReactNode }): ReactElement {
+  const [mode, setMode] = useState<'rendered' | 'json'>('rendered');
+  return (
+    <Card data-entry="custom" data-custom={entry.name}>
+      <CardHeader>
+        <FamilyDot family="neutral" hollow />
+        <b className="agui-conv-mono">CUSTOM</b>
+        <Tag variant="neutral">{entry.name}</Tag>
+        <FrameRef frameId={entry.frames[0] as FrameId} frames={frames} />
+        <SegmentedControl label="Custom event display" value={mode} options={[{ value: 'rendered', label: 'Rendered' }, { value: 'json', label: 'JSON' }]} onChange={(value) => setMode(value as 'rendered' | 'json')} />
+      </CardHeader>
+      <CardBody>{mode === 'rendered' ? rendered : <CodeBlock text={pretty(entry.value)} aria-label={`Value of ${entry.name}`} />}</CardBody>
+    </Card>
+  );
+}
+
 /** The issues of one run that sit side by side, as one list a screen reader can find. */
 function IssueList({ issues, frames }: { issues: readonly IssueEntry[]; frames: Frames }): ReactElement {
   return (
@@ -338,7 +358,9 @@ function Entries({ list, frames, extras }: { list: readonly ConversationEntry[];
             return <ActivityBlock key={entry.id} entry={entry} extras={extras} />;
           case 'snapshot':
             return <SnapshotMarker key={entry.id} entry={entry} frames={frames} />;
-          case 'custom':
+          case 'custom': {
+            const rendered = extras.renderCustom?.(entry);
+            if (rendered !== undefined && rendered !== null) return <CustomBlock key={entry.id} entry={entry} frames={frames} rendered={rendered} />;
             return (
               <div key={entry.id} className="agui-conv-marker" data-entry="custom">
                 <FamilyDot family="neutral" hollow />
@@ -348,6 +370,7 @@ function Entries({ list, frames, extras }: { list: readonly ConversationEntry[];
                 <FrameRef frameId={entry.frames[0] as FrameId} frames={frames} />
               </div>
             );
+          }
           case 'raw':
             return (
               <div key={entry.id} className="agui-conv-marker" data-entry="raw">
@@ -365,9 +388,9 @@ function Entries({ list, frames, extras }: { list: readonly ConversationEntry[];
 }
 
 /** The transcript of the current thread, built from the store and live as frames arrive. */
-export function ConversationView({ store, threadId, renderActivity, onReveal }: ConversationViewProps & ConversationViewExtras): ReactElement {
+export function ConversationView({ store, threadId, renderActivity, renderCustom, onReveal }: ConversationViewProps & ConversationViewExtras): ReactElement {
   const { model, frames } = useProjection(store, threadId);
-  const extras: ConversationViewExtras = { ...(renderActivity && { renderActivity }) };
+  const extras: ConversationViewExtras = { ...(renderActivity && { renderActivity }), ...(renderCustom && { renderCustom }) };
   // Not saved: a reload starts in plain text, and so does a page that mounts only this view.
   const [textMode, setTextMode] = useState<TextMode>('plain');
   return (

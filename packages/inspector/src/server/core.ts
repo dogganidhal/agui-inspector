@@ -49,13 +49,23 @@ export interface InspectorBrand {
   logoDark?: string;
 }
 
-/** The helper arguments, as in the Python `mount_inspector`. `createInspectorHandler` reads only the first four. */
+/** The helper arguments, as in the Python `mount_inspector`. `createInspectorHandler` reads `agents`, `theme`, `brand` and `plugins`, and the two internal options. */
 export interface InspectorOptions {
   agents: readonly InspectorAgent[];
   theme?: InspectorTheme;
   brand?: InspectorBrand;
+  /**
+   * Plugin modules on the page's own origin, written into `config.json` as given. The host serves each module from one of
+   * its own routes, as it serves a logo: the helper serves none. The page checks the values and warns about any it rejects.
+   */
+  plugins?: readonly string[];
   /** The directory with the built page. Tests use a stand-in. @internal */
   assetsDir?: string;
+  /**
+   * Files the command serves from the local file system: a name below the mount, such as `plugins/1.js`, to an absolute
+   * file path. Only an exact match is served, and the file is read when the request arrives. @internal
+   */
+  localFiles?: Readonly<Record<string, string>>;
   /** Mounts only when `true`. Default `false`. */
   enabled?: boolean;
   /** Where the page lives. Default `/agui-inspector`. It starts with `/` and is not `/` alone. */
@@ -78,7 +88,7 @@ export function createInspectorHandler(options: InspectorOptions): InspectorHand
     throw new Error("the packaged inspector files are missing; build them with 'npm run build'");
   }
   // JSON.stringify leaves out the fields that are undefined, which is the file the Python helper writes.
-  const config = JSON.stringify({ version: 0, agents: options.agents, theme: options.theme, brand: options.brand });
+  const config = JSON.stringify({ version: 0, agents: options.agents, theme: options.theme, brand: options.brand, plugins: options.plugins });
 
   const reply = (body: BodyInit | null, status: number, headers: Record<string, string>) =>
     new Response(body, { status, headers: { 'content-security-policy': POLICY, ...headers } });
@@ -99,9 +109,19 @@ export function createInspectorHandler(options: InspectorOptions): InspectorHand
 
     let body: string | Uint8Array<ArrayBuffer>;
     let type: string;
+    const local = options.localFiles !== undefined && Object.hasOwn(options.localFiles, asset) ? options.localFiles[asset] : undefined;
     if (asset === 'config.json') {
       body = config;
       type = CONTENT_TYPES['.json']!;
+    } else if (local !== undefined) {
+      try {
+        const bytes = await readFile(local);
+        body = new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+      } catch (error) {
+        if (MISSING.has((error as NodeJS.ErrnoException).code ?? '')) return notFound();
+        throw error;
+      }
+      type = CONTENT_TYPES[path.extname(asset).toLowerCase()] ?? 'application/octet-stream';
     } else {
       const parts = asset === '' ? ['index.html'] : asset.split('/');
       if (parts.some((part) => part === '' || part === '.' || part === '..' || part.includes('\\') || part.includes('\0'))) return notFound();

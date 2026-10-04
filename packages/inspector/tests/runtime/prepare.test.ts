@@ -56,6 +56,61 @@ test('every preparation is sent in declared order and recorded as an exchange wi
   assert.equal(net.calls[1]?.body, undefined);
 });
 
+// Headers from plugin providers (spec 014): resolved before each preparation is recorded, so a failure records nothing.
+
+test('headers are asked for before each preparation is recorded, with that request\'s method, address and exact body, and ride in the request', async () => {
+  const { net, run, settle } = executor([ok200]);
+  const asked: Array<{ method: string; url: string; body?: string }> = [];
+  const result = await run(plan, {
+    provideHeaders: async (request) => {
+      asked.push(request);
+      return { ok: true, value: { 'X-Signature': `sig-${asked.length}` } };
+    },
+  });
+  assert.deepEqual(result, { ok: true, value: undefined });
+  assert.deepEqual(asked, [
+    { method: 'PUT', url: 'https://agent.example/prepare/sessions/t-1', body: '{"user":"u-1","seed":{"plan":"free"}}' },
+    { method: 'POST', url: 'https://agent.example/prepare/warm' },
+    { method: 'POST', url: 'https://agent.example/prepare/last', body: '[1,2]' },
+  ]);
+  assert.deepEqual(net.calls.map((call) => call.headers['x-signature']), ['sig-1', 'sig-2', 'sig-3']);
+  const { exchanges } = await settle();
+  assert.equal(exchanges.length, 3);
+  assert.ok(!JSON.stringify(exchanges).includes('sig-'), 'the recording holds no provider header');
+});
+
+test('a failing provider stops the sequence before that step is recorded or sent', async () => {
+  const { net, run, settle } = executor([ok200]);
+  let calls = 0;
+  const result = await run(plan, {
+    provideHeaders: async () => (calls++ === 1 ? { ok: false, error: 'Plugin /p.js: provideHeaders threw: no signature today.' } : { ok: true, value: {} }),
+  });
+  assert.deepEqual(result, { ok: false, error: 'Preparation failed: POST /prepare/warm: Plugin /p.js: provideHeaders threw: no signature today. The run was not sent.' });
+  assert.deepEqual(net.calls.map((call) => call.path), ['/prepare/sessions/t-1']);
+  assert.equal((await settle()).exchanges.length, 1, 'no exchange for the step whose provider failed');
+});
+
+test('a stop while a provider works says so and sends nothing more', async () => {
+  const { net, run, settle } = executor([ok200]);
+  const controller = new AbortController();
+  const result = await run(plan, {
+    signal: controller.signal,
+    provideHeaders: async () => {
+      controller.abort();
+      return { ok: false, error: 'Stopped' };
+    },
+  });
+  assert.deepEqual(result, { ok: false, error: 'Stopped during preparation: PUT /prepare/sessions/t-1. The run was not sent.' });
+  assert.deepEqual(net.calls, []);
+  assert.equal((await settle()).exchanges.length, 0);
+});
+
+test('with no provideHeaders function the preparations are sent as before', async () => {
+  const { net, run } = executor([ok200]);
+  await run(plan);
+  for (const call of net.calls) assert.deepEqual(Object.keys(call.headers).sort(), call.body === undefined ? ['accept'] : ['accept', 'content-type']);
+});
+
 test('each step starts only after the one before it has answered', async () => {
   const order: string[] = [];
   const slow: Route = async (call) => {

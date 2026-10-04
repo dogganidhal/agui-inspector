@@ -18,6 +18,7 @@
     "cli",
     "hosted",
     "configuration",
+    "plugins",
     "presets",
     "theming",
     "---Contribute---",

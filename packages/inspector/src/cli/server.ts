@@ -21,6 +21,8 @@ export interface ListenOptions {
   readonly log?: Log;
   /** The directory with the built page. Tests use a stand-in. */
   readonly assetsDir?: string;
+  /** Absolute paths of the plugin files (feature 014). Each is served at `/plugins/<n>.js`, `n` from 1, and listed in `config.json`. */
+  readonly plugins?: readonly string[];
 }
 
 export interface Listening {
@@ -30,6 +32,7 @@ export interface Listening {
 }
 
 const PROXY = '/proxy/';
+const PLUGINS = '/plugins/';
 // `CONNECT` and upgrade requests are refused here: without a listener, current Node.js serves an upgrade request as an
 // ordinary one.
 const FORBIDDEN = 'HTTP/1.1 403 Forbidden\r\nConnection: close\r\nContent-Length: 0\r\n\r\n';
@@ -41,8 +44,13 @@ const refuseSocket = (_request: IncomingMessage, socket: Duplex) => void socket.
  */
 export async function listen(options: ListenOptions): Promise<Listening> {
   const { targets, log = () => {} } = options;
+  const plugins = options.plugins ?? [];
   const handle = createInspectorHandler({
     agents: targets.map((target) => ({ id: `target-${target.n}`, name: target.url.href, url: `${PROXY}${target.n}${target.path}` })),
+    ...(plugins.length > 0 && {
+      plugins: plugins.map((_, index) => `${PLUGINS}${index + 1}.js`),
+      localFiles: Object.fromEntries(plugins.map((file, index) => [`plugins/${index + 1}.js`, file])),
+    }),
     ...(options.assetsDir !== undefined && { assetsDir: options.assetsDir }),
   });
 
@@ -63,6 +71,12 @@ export async function listen(options: ListenOptions): Promise<Listening> {
     const queryAt = target.indexOf('?');
     const path = queryAt < 0 ? target : target.slice(0, queryAt);
     if (path.startsWith(PROXY)) return proxy(request, response, port, path, queryAt < 0 ? '' : target.slice(queryAt));
+    // A plugin file can hold a signing key, so it is held to the relay's rules about where a request comes from: a page on
+    // another site must not be able to load it. The page and `config.json` stay links that any site may open.
+    if (path.startsWith(PLUGINS)) {
+      const foreign = fromAnotherSite(request, port);
+      if (foreign !== undefined) return forbid(response, foreign);
+    }
 
     // Decoded once, here. The core rejects an unsafe name. A bad escape is looked up as written, and no file has that name.
     const raw = path === '/' ? 'index.html' : path.slice(1);
@@ -73,6 +87,19 @@ export async function listen(options: ListenOptions): Promise<Listening> {
     await sendResponse(await handle(toRequest(request), asset), response);
   }
 
+  /**
+   * Why a request is from another origin or site, or undefined. A page on another site can send a request to this address,
+   * and the relay would add the developer's headers to it. The browser says where a request comes from: `Origin` on all but
+   * a plain GET, `Sec-Fetch-Site` on every one.
+   */
+  function fromAnotherSite(request: IncomingMessage, port: number): string | undefined {
+    const origin = request.headers.origin;
+    if (origin !== undefined && ![`http://127.0.0.1:${port}`, `http://localhost:${port}`].includes(origin.toLowerCase())) return 'the request comes from another origin';
+    const site = request.headers['sec-fetch-site'];
+    if (site !== undefined && site !== 'same-origin' && site !== 'none') return 'the request comes from another site';
+    return undefined;
+  }
+
   function proxy(request: IncomingMessage, response: ServerResponse, port: number, path: string, query: string): void {
     const rest = path.slice(PROXY.length);
     const slash = rest.indexOf('/');
@@ -81,12 +108,8 @@ export async function listen(options: ListenOptions): Promise<Listening> {
     const chosen = /^[1-9][0-9]*$/.test(number) ? targets[Number(number) - 1] : undefined;
     if (chosen === undefined) return forbid(response, 'no such target');
 
-    // A page on another site can send a request to this address, and the relay would add the developer's headers to it.
-    // The browser says where a request comes from: `Origin` on all but a plain GET, `Sec-Fetch-Site` on every one.
-    const origin = request.headers.origin;
-    if (origin !== undefined && ![`http://127.0.0.1:${port}`, `http://localhost:${port}`].includes(origin.toLowerCase())) return forbid(response, 'the request comes from another origin');
-    const site = request.headers['sec-fetch-site'];
-    if (site !== undefined && site !== 'same-origin' && site !== 'none') return forbid(response, 'the request comes from another site');
+    const foreign = fromAnotherSite(request, port);
+    if (foreign !== undefined) return forbid(response, foreign);
 
     relay(request, response, chosen, `${slash < 0 ? '/' : rest.slice(slash)}${query}`, log);
   }

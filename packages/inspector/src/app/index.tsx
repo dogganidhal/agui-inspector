@@ -13,7 +13,8 @@ import { createRoot, type Root as ReactRoot } from 'react-dom/client';
 import type { A2uiAction, AppProps, BrandConfig, ClientProfileSettings, DeploymentMode, EvidenceTarget, InspectionSession, SessionStore } from '../contracts';
 import { declaredOf, loadCapabilities } from '../core/config/index';
 import { exportProfile, importProfile, saveProfile, type StorageLike } from '../core/profiles/index';
-import { publishChunkExpansions, type ActivityEntry } from '../core/projection/index';
+import type { PluginHost } from '../core/plugins/index';
+import { publishChunkExpansions, type ActivityEntry, type CustomEntry } from '../core/projection/index';
 import { guardedFetchText } from '../core/runtime/index';
 import { parseSession, restoreSession, serializeSession, SESSION_FILE_NAME } from '../core/session-files/index';
 import { a2uiActivity } from '../views/a2ui/index';
@@ -30,6 +31,7 @@ import '../views/settings/settings.css';
 import './app.css';
 import { Brand, type LogoField } from './brand';
 import { PaneBoundary, describeError } from './boundary';
+import { PluginSlot } from './plugin-slot';
 import { startPage, type StartupEnvironment, type Started } from './startup';
 import { saveThemeChoice } from './theme-choice';
 
@@ -54,8 +56,14 @@ export interface AppExtras {
   /** An imported recording is open: inspection only, nothing can be sent. */
   readonly recording?: boolean;
   readonly renderActivity?: (entry: ActivityEntry) => ReactNode;
+  /** Draws a custom event's value inside a card. Without it every custom event is the one-line marker. */
+  readonly renderCustom?: (entry: CustomEntry) => ReactNode;
   /** Configuration problems that did not stop the page, such as rejected theme overrides. */
   readonly warnings?: readonly string[];
+  /** Plugin failures (spec 014): loading, hooks, header providers and renderers. Shown with the configuration warnings, as kind "Plugin". */
+  readonly pluginWarnings?: readonly string[];
+  /** How many plugins are active; the footer names it when it is above 0. */
+  readonly plugins?: number;
   /** The adopter's name and logos for the top bar; the default mark and name without one. */
   readonly brand?: BrandConfig;
   /** Where the theme switch remembers its choice. Without it the choice lasts until a reload. */
@@ -75,14 +83,14 @@ function requestScope(mode: DeploymentMode | undefined, allowedOrigins: readonly
 }
 
 /** The inspection pane's closing line: counts for the session on screen, then the privacy facts for this mode. */
-function Footer({ store, mode, allowedOrigins, allowVisitorTargets, recording }: { store: SessionStore; mode?: DeploymentMode; allowedOrigins: readonly string[]; allowVisitorTargets: boolean; recording?: boolean }): ReactElement {
+function Footer({ store, mode, allowedOrigins, allowVisitorTargets, recording, plugins }: { store: SessionStore; mode?: DeploymentMode; allowedOrigins: readonly string[]; allowVisitorTargets: boolean; recording?: boolean; plugins: number }): ReactElement {
   const session: InspectionSession = useSyncExternalStore(store.subscribe, store.snapshot, store.snapshot);
   const frames = session.frames.reduce((count, frame) => count + (frame.classification === 'data' ? 1 : 0), 0);
   return (
     <footer className="agui-app-footer" data-view="footer">
       <Icon name="lock" size={13} />
       <span>
-        {plural(session.exchanges.length, 'exchange')} · {plural(frames, 'frame')} · {requestScope(mode, allowedOrigins, allowVisitorTargets)} · no telemetry · headers never recorded
+        {plural(session.exchanges.length, 'exchange')} · {plural(frames, 'frame')} · {plugins > 0 ? `${plural(plugins, 'plugin')} · ` : ''}{requestScope(mode, allowedOrigins, allowVisitorTargets)} · no telemetry · headers never recorded
         {recording ? ' · imported recording, inspection only' : ''}
       </span>
     </footer>
@@ -115,7 +123,7 @@ function ThemeSwitch({ storage }: { storage?: StorageLike }): ReactElement {
  * The app shell: a fixed top bar above two panes that scroll on their own, conversation left and
  * inspection right. Under 960 px one pane shows and a segmented control switches between them.
  */
-export function App({ settings, connection, conversation, inspection, mode, allowedOrigins = [], allowVisitorTargets = false, brand, capabilities, capturing, notice, onPaneError, recording, renderActivity, storage, warnings: configWarnings = [] }: AppProps & AppExtras): ReactElement {
+export function App({ settings, connection, conversation, inspection, mode, allowedOrigins = [], allowVisitorTargets = false, brand, capabilities, capturing, notice, onPaneError, pluginWarnings = [], plugins = 0, recording, renderActivity, renderCustom, storage, warnings: configWarnings = [] }: AppProps & AppExtras): ReactElement {
   const [pane, setPane] = useState<Pane>('conversation');
   // A logo that does not load shows the default mark and a warning, so a missing file is not a silent no-op.
   const [failedLogos, setFailedLogos] = useState<readonly LogoField[]>([]);
@@ -147,10 +155,15 @@ export function App({ settings, connection, conversation, inspection, mode, allo
         <ThemeSwitch {...(storage !== undefined && { storage })} />
       </header>
 
-      {warnings.length > 0 && (
+      {(warnings.length > 0 || pluginWarnings.length > 0) && (
         <div className="agui-app-warnings" role="status" aria-label="Configuration warnings" data-view="warnings">
           {warnings.map((warning) => (
-            <Finding key={warning} variant="warn" kind="Configuration">
+            <Finding key={`configuration:${warning}`} variant="warn" kind="Configuration">
+              {warning}
+            </Finding>
+          ))}
+          {pluginWarnings.map((warning) => (
+            <Finding key={`plugin:${warning}`} variant="warn" kind="Plugin">
               {warning}
             </Finding>
           ))}
@@ -174,7 +187,7 @@ export function App({ settings, connection, conversation, inspection, mode, allo
           <div className="agui-app-column">
             <div className="agui-app-transcript">
               <PaneBoundary pane="conversation" resetKey={conversation.store} onCatch={onPaneError}>
-                <ConversationView {...conversation} {...(renderActivity !== undefined && { renderActivity })} onReveal={onReveal} />
+                <ConversationView {...conversation} {...(renderActivity !== undefined && { renderActivity })} {...(renderCustom !== undefined && { renderCustom })} onReveal={onReveal} />
                 <RepliesView {...conversation} running={connection.running} />
               </PaneBoundary>
             </div>
@@ -226,7 +239,7 @@ export function App({ settings, connection, conversation, inspection, mode, allo
           <div className="agui-app-body" hidden={tab !== 'settings'}>
             <SettingsView {...settings} {...(capabilities !== undefined && { capabilities })} />
           </div>
-          <Footer store={inspection.store} allowedOrigins={allowedOrigins} allowVisitorTargets={allowVisitorTargets} {...(mode !== undefined && { mode })} {...(recording !== undefined && { recording })} />
+          <Footer store={inspection.store} allowedOrigins={allowedOrigins} allowVisitorTargets={allowVisitorTargets} plugins={plugins} {...(mode !== undefined && { mode })} {...(recording !== undefined && { recording })} />
         </div>
       </div>
     </div>
@@ -236,6 +249,27 @@ export function App({ settings, connection, conversation, inspection, mode, allo
 // ---------------------------------------------------------------------------------------------
 // Wiring
 // ---------------------------------------------------------------------------------------------
+
+/** The plugin renderer for an activity type, as a view for the activity card. Nothing when no plugin claimed the type. */
+function pluginActivity(plugins: PluginHost, entry: ActivityEntry): ReactNode | undefined {
+  const renderer = plugins.activityRenderer(entry.activityType);
+  if (renderer === undefined) return undefined;
+  return (
+    <PluginSlot
+      render={renderer.render}
+      data={{ messageId: entry.messageId, activityType: entry.activityType, content: entry.content }}
+      label={`Content of ${entry.messageId}`}
+      onError={(error) => plugins.report(renderer.plugin, `renderActivity(${entry.activityType})`, error)}
+    />
+  );
+}
+
+/** The plugin renderer for a custom event name, as a view for the custom card. */
+function pluginCustom(plugins: PluginHost, entry: CustomEntry): ReactNode | undefined {
+  const renderer = plugins.eventRenderer(entry.name);
+  if (renderer === undefined) return undefined;
+  return <PluginSlot render={renderer.render} data={{ name: entry.name, value: entry.value }} label={`Value of ${entry.name}`} onError={(error) => plugins.report(renderer.plugin, `renderCustomEvent(${entry.name})`, error)} />;
+}
 
 const RECORDING_NOTICE = 'An imported recording is open for inspection. Reload the page to send requests again.';
 
@@ -253,8 +287,9 @@ const PROFILE_FILE_NAME = 'agui-inspector-profile.json';
 const EXPANSION_DELAY_MS = 250;
 
 function Root({ started, storage }: { started: Started; storage?: StorageLike }): ReactElement {
-  const { runtime, store: live, settings, agents, policy } = started;
+  const { runtime, store: live, settings, agents, policy, plugins } = started;
   const state = useSyncExternalStore(runtime.subscribe, runtime.getState);
+  const pluginWarnings = useSyncExternalStore(plugins.subscribe, plugins.warnings);
   const [selectedId, setSelectedId] = useState(started.selectedAgentId);
   const [profile, setProfile] = useState(settings.profile);
   const [variables, setVariables] = useState(settings.variables);
@@ -336,9 +371,13 @@ function Root({ started, storage }: { started: Started; storage?: StorageLike })
     capturing: state.capturing,
     onPaneError: paneFailed,
     warnings: started.warnings,
+    pluginWarnings,
+    plugins: plugins.count(),
     ...(storage !== undefined && { storage }),
     ...(started.brand !== undefined && { brand: started.brand }),
-    renderActivity: (entry) => a2uiActivity(entry, { renderEnabled: profile.renderA2ui, onAction, ...(started.catalogAliases !== undefined && { catalogAliases: started.catalogAliases }) }),
+    // The A2UI view first: its activity type belongs to the A2UI renderer packages, and a plugin cannot claim it.
+    renderActivity: (entry) => a2uiActivity(entry, { renderEnabled: profile.renderA2ui, onAction, ...(started.catalogAliases !== undefined && { catalogAliases: started.catalogAliases }) }) ?? pluginActivity(plugins, entry),
+    renderCustom: (entry) => pluginCustom(plugins, entry),
     ...(recording ? { notice: RECORDING_NOTICE } : state.notice !== undefined && { notice: state.notice }),
     settings: {
       agents,

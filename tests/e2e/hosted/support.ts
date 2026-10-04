@@ -7,7 +7,7 @@
 //
 // Self-contained on purpose: it imports the build script and the reference agent's scenarios, and nothing from another lane's tests.
 import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import { createServer, type IncomingHttpHeaders, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import { expect, test as base, type Page } from '@playwright/test';
@@ -29,6 +29,8 @@ export interface Seen {
   readonly token: string | undefined;
   /** The Accept header as it arrived: the encoding the page asked for. */
   readonly accept?: string | undefined;
+  /** Every header as it arrived, names in lower case. A spec reads the headers a plugin provided from here. */
+  readonly headers?: IncomingHttpHeaders;
 }
 
 export interface Origin {
@@ -202,7 +204,7 @@ function agentServer(seen: Seen[], cors: () => string | undefined, redirectTo: (
     }
     const body = await readBody(request);
     const tokenHeader = request.headers['authorization'] ?? request.headers['x-api-key'];
-    seen.push({ method: request.method ?? '', path: pathname, body, cookie: request.headers.cookie, token: Array.isArray(tokenHeader) ? tokenHeader[0] : tokenHeader, accept: request.headers.accept });
+    seen.push({ method: request.method ?? '', path: pathname, body, cookie: request.headers.cookie, token: Array.isArray(tokenHeader) ? tokenHeader[0] : tokenHeader, accept: request.headers.accept, headers: request.headers });
 
     const file = files()[pathname];
     if (request.method === 'GET' && file !== undefined) {
@@ -239,7 +241,7 @@ async function openSite(dist: string, options: SiteOptions): Promise<{ site: Sit
     if (request.method === 'POST') {
       // The embedded case: the page's own origin is also the agent's.
       const body = await readBody(request);
-      pageSeen.push({ method: 'POST', path: pathname, body, cookie: request.headers.cookie, token: request.headers.authorization });
+      pageSeen.push({ method: 'POST', path: pathname, body, cookie: request.headers.cookie, token: request.headers.authorization, headers: request.headers });
       let input: { threadId?: unknown; runId?: unknown } | undefined;
       try {
         input = JSON.parse(body);
