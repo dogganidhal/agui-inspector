@@ -49,7 +49,7 @@ To try this with your own agent, [embed the inspector in Starlette or FastAPI](.
 - A finding reports a problem with a frame, a run or its connection, for example `json`, `schema`, `sequence`, `transport` or `terminal`. It points at what it explains and never changes the captured data.
 - A terminal event is `RUN_FINISHED` or `RUN_ERROR`, the event that says how a run ended. Without a valid one, the run's outcome is `unknown`.
 - A preset holds what a server needs around a run: variables, preparation requests, forwarded properties and quick messages. It is part of the agent's configuration ([presets](./presets.mdx)).
-- A profile, or client profile, holds the seven client settings that every run sends, such as tools, context and forwarded properties. You change it in Settings. The page saves it in browser storage, and it can override parts of the preset ([client profile](./configuration.mdx#client-profile)).
+- A profile, or client profile, holds the client settings that every run sends, such as tools, context and forwarded properties, and the optional settings that answer interrupts and tool calls for you. You change it in Settings. The page saves it in browser storage, and it can override parts of the preset ([client profile](./configuration.mdx#client-profile)).
 - A surface is a form or other interface that your agent describes in A2UI. The inspector draws it inside an activity card ([A2UI surfaces](./a2ui.mdx)).
 
 ## The example agents
@@ -70,7 +70,7 @@ A plain reply, "Hello from the reference agent.", in about 0.7 seconds. In Frame
 
 ### interrupt
 
-The agent says it needs two answers. The run finishes with an `interrupt` outcome that holds two interrupts. Each gets a card where you resolve or cancel it. The next run starts when both have an answer. Inspect that run's request body to see the answers in the order the run reported them ([interrupts](./runs.mdx)).
+The agent says it needs two answers. The run finishes with an `interrupt` outcome that holds two interrupts. Each gets a card where you resolve or cancel it. The next run starts when both have an answer. Inspect that run's request body to see the answers in the order the run reported them ([interrupts](./runs.mdx)). To skip the clicks, open Settings and set Interrupt replies to Resolve. The inspector then answers both interrupts and starts the next run. See [automatic replies](./runs.mdx#automatic-replies).
 
 ### tools
 
