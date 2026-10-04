@@ -116,7 +116,7 @@ The inspector bundles two catalogs and never fetches one. A surface names its ca
 | `https://a2ui.org/specification/v0_9/basic_catalog.json` | v0.9 basic | The default of `@ag-ui/a2ui-middleware` 0.0.11 when the agent sets none. This is the one built-in alias |
 | `https://a2ui.org/specification/v0_8/standard_catalog_definition.json` | v0.8 standard | The default that the v0.8 protocol names. A v0.8 surface that names no catalog uses it |
 
-Any other id gives "Catalog not found: <id>" with the entry as received, and the surface is not drawn. The v0.8 processor does not look at `catalogId`, so the inspector checks it. Matching is exact: a trailing slash, another scheme or another case makes a different id. The inspector never rewrites `createSurface` or `beginRendering`, so the activity JSON and the recording show the id the agent sent.
+Any other id gives `Catalog not found: <id>` with the entry as received, and the surface is not drawn. The v0.8 processor does not look at `catalogId`, so the inspector checks it. Matching is exact: a trailing slash, another scheme or another case makes a different id. The inspector never rewrites `createSurface` or `beginRendering`, so the activity JSON and the recording show the id the agent sent.
 
 ### Aliases
 
