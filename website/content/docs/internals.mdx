@@ -182,6 +182,8 @@ activity's content, such as an [A2UI surface](./a2ui.mdx), and the card then get
 `ConversationView` also draws the Message text control and keeps its [Markdown](./event-views.mdx#markdown) mode in its own state, which is never saved. The code is in `views/conversation/markdown.tsx`. It parses with `markdown-it` and folds the tokens into React elements, so no HTML string exists. A view mounted without the control shows plain text.
 `StateView` takes `{ store }` and the same optional `threadId`.
 
+The projection also lists every subagent lane in `model.subagents`, in the order the lanes began. The list keeps the lanes that a `MESSAGES_SNAPSHOT` took out of the transcript, and marks them `inTranscript: false`. `timelineOf(model)` in `core/projection/subagents.ts` turns that list and the run entries into the charts and rows of the [subagent timeline](./event-views.mdx#subagent-timeline). It is plain data with no React, so another view can use the same relationships. `views/conversation/lanes.tsx` draws a lane and holds the jump state between a lane and its row, and `views/conversation/timeline.tsx` draws the timeline.
+
 `ConversationView` and `StateView` also take an optional `onReveal(target)`. The `target` is an `EvidenceTarget`: an `exchangeId` and, for a frame, a `frameId`. Without `onReveal`, run ids and frame references stay plain text. `InspectionView` takes an optional `reveal` target and applies it to its own filter and open rows. Each request must be a new object. `App` connects the three.
 
 Both views show the thread that the assembly passes as `threadId`, even before that thread has an exchange. Without `threadId`, they show the thread of the latest conversation exchange, which is what an imported

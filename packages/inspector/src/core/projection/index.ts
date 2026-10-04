@@ -59,6 +59,11 @@ export interface RunEntry extends EntryBase {
   startOffsetMs?: number;
   /** Derived from frame offsets: terminal (or latest) frame minus RUN_STARTED. */
   durationMs?: number;
+  /**
+   * Where the run's exchange ends on the offset axis, as the frames list draws it: the exchange's elapsed time, or the
+   * offset of its last frame of any kind while it is live, and at least 1. Derived.
+   */
+  axisMs: number;
   result?: JsonValue;
   pendingToolCallIds: string[];
   interrupts: Interrupt[];
@@ -148,18 +153,44 @@ export interface SubagentLine {
   readonly detail?: string;
   readonly outcome?: string;
   readonly code?: string;
+  /** The interrupts a suspended subagent raised itself, when its finish event names them. */
+  readonly interruptIds?: readonly string[];
 }
 
+/** How a subagent's segment of a run stands. Derived from its latest lifecycle line and from the exchange. */
+export type SubagentStatus = 'running' | 'finished' | 'suspended' | 'error' | 'stopped' | 'no-end';
+
+/**
+ * A subagent lane: one invocation inside one run (a segment). It holds what the invocation produced, in arrival order,
+ * and carries the facts the timeline draws. An event belongs to the lane its `subagentRunId` names; an event without
+ * one belongs to the parent's flow. Every lane of the thread is also in `ConversationModel.subagents`.
+ */
 export interface SubagentEntry extends EntryBase {
   readonly kind: 'subagent';
   subagentRunId: string;
   name?: string;
   description?: string;
   parentToolCallId?: string;
+  parentMessageId?: string;
   parentSubagentRunId?: string;
   /** The run it is nested under. */
   parentRunId?: string;
+  /** The lane it sits in, when its parent invocation had a lane earlier in the same run. Absent: it sits under the run. */
+  parentLaneId?: string;
   lines: SubagentLine[];
+  /** What the lane holds, in arrival order: entries, steps it opened, and nested lanes. */
+  children: ConversationEntry[];
+  status: SubagentStatus;
+  /** Offset of the first SUBAGENT_STARTED frame. Absent when no start event arrived. */
+  startOffsetMs?: number;
+  /** Offset of the frame that made the lane. */
+  firstOffsetMs: number;
+  /** Offset of its end event, or of the last valid frame of the exchange when it has none. Never before the start. */
+  endOffsetMs: number;
+  /** An earlier run of the thread had a lane for the same invocation. */
+  continued: boolean;
+  /** False when a MESSAGES_SNAPSHOT took the lane out of the transcript. The timeline still has it. */
+  inTranscript: boolean;
 }
 
 export interface ActivityEntry extends EntryBase {
@@ -271,6 +302,12 @@ export interface ConversationModel {
   readonly derived: DerivedEntry[];
   /** Every issue in arrival order. The same ones sit in `entries`, each in its own run. */
   readonly issues: ProjectionIssue[];
+  /**
+   * Every subagent lane of the thread, in the order they began, including the ones a MESSAGES_SNAPSHOT took out of
+   * `entries`. These are the same objects `entries` holds. The one source of run and subagent relationships for the
+   * timeline (`timelineOf`) and for any other view that needs them.
+   */
+  readonly subagents: SubagentEntry[];
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -331,6 +368,15 @@ const CLOSES_OWN_LANE = new Set([
   'REASONING_START', 'REASONING_MESSAGE_START', 'REASONING_MESSAGE_CONTENT', 'REASONING_MESSAGE_END', 'REASONING_END',
 ]);
 const CLOSES_ALL_LANES = new Set(['RUN_STARTED', 'RUN_FINISHED', 'RUN_ERROR', 'MESSAGES_SNAPSHOT']);
+// Events that make a conversation entry and can carry a `subagentRunId`. Their entry goes in that invocation's lane.
+// State events carry it too but make no conversation entry; the lifecycle events name their own subject.
+const ATTRIBUTABLE = new Set([
+  'TEXT_MESSAGE_START', 'TEXT_MESSAGE_CONTENT', 'TEXT_MESSAGE_END', 'TEXT_MESSAGE_CHUNK',
+  'TOOL_CALL_START', 'TOOL_CALL_ARGS', 'TOOL_CALL_END', 'TOOL_CALL_CHUNK', 'TOOL_CALL_RESULT',
+  'STEP_STARTED', 'STEP_FINISHED',
+  'REASONING_START', 'REASONING_MESSAGE_START', 'REASONING_MESSAGE_CONTENT', 'REASONING_MESSAGE_END', 'REASONING_MESSAGE_CHUNK', 'REASONING_END',
+  'REASONING_ENCRYPTED_VALUE', 'ACTIVITY_SNAPSHOT', 'ACTIVITY_DELTA', 'CUSTOM', 'RAW',
+]);
 
 /**
  * Builds the conversation, state and chunk expansions of one thread: `current` when the caller names it
@@ -353,7 +399,14 @@ export function projectConversation(session: InspectionSession, current?: string
   const exchanges = conversation.filter((_, i) => threadIds[i] === threadId);
 
   let entries: ConversationEntry[] = [];
-  let stack: StepEntry[] = [];
+  // Open steps, one stack per lane (the parent's flow is the lane `undefined`): steps of parallel subagents interleave,
+  // and each lane closes its own.
+  const stacks = new Map<SubagentEntry | undefined, StepEntry[]>();
+  const stackOf = (lane: SubagentEntry | undefined): StepEntry[] => {
+    let found = stacks.get(lane);
+    if (!found) stacks.set(lane, (found = []));
+    return found;
+  };
   const derived: DerivedEntry[] = [];
   const issues: ProjectionIssue[] = [];
   const state: StateModel = { current: undefined, changes: [] };
@@ -363,7 +416,12 @@ export function projectConversation(session: InspectionSession, current?: string
   const reasonings = new Map<string, ReasoningEntry>();
   const tools = new Map<string, ToolCallEntry>();
   const activities = new Map<string, ActivityEntry>();
-  const subagents = new Map<string, SubagentEntry>();
+  /** The lanes of the exchange being read, by invocation id. */
+  let invocations = new Map<string, SubagentEntry>();
+  /** Every lane of the thread, in the order they began. */
+  const segments: SubagentEntry[] = [];
+  /** Invocation ids that an earlier run had a lane for. */
+  const earlier = new Set<string>();
   const registry = new Map<string, Registered>();
   const pendingIds = new Set<string>();
   const phaseOpen = new Set<string>();
@@ -377,8 +435,11 @@ export function projectConversation(session: InspectionSession, current?: string
   // The tool results of this exchange's input that the inspector gave from the profile, and the ones the input really carried.
   let automaticTools: ReadonlySet<string> = new Set();
   let automaticToolsCarried: string[] = [];
+  /** The lane the frame being read belongs to. Undefined: the parent's flow. */
+  let inLane: SubagentEntry | undefined;
 
-  const container = (): ConversationEntry[] => stack[stack.length - 1]?.children ?? entries;
+  const containerOf = (lane: SubagentEntry | undefined): ConversationEntry[] => stackOf(lane).at(-1)?.children ?? lane?.children ?? entries;
+  const container = (): ConversationEntry[] => containerOf(inLane);
   const add = <T extends ConversationEntry>(entry: T): T => {
     container().push(entry);
     return entry;
@@ -391,6 +452,57 @@ export function projectConversation(session: InspectionSession, current?: string
   };
   const delta = (text: string): Delta => ({ frameId: frame.id, offsetMs: frame.offsetMs, text });
   const refreshReasoning = (entry: ReasoningEntry) => void (entry.live = phaseOpen.has(entry.messageId) || messageOpen.has(entry.messageId));
+
+  // ---- subagent lanes ----
+
+  /** A new lane for an invocation, placed in the flow of its parent lane or, without one, of the run. */
+  function newLane(id: string, parent?: SubagentEntry): SubagentEntry {
+    const lane: SubagentEntry = {
+      ...base(`subagent-${id}`, []),
+      kind: 'subagent',
+      subagentRunId: id,
+      ...(run.runId !== undefined && { parentRunId: run.runId }),
+      ...(parent !== undefined && { parentLaneId: parent.id }),
+      lines: [],
+      children: [],
+      status: 'running',
+      firstOffsetMs: frame.offsetMs,
+      endOffsetMs: frame.offsetMs,
+      continued: earlier.has(id),
+      inTranscript: true,
+    };
+    invocations.set(id, lane);
+    segments.push(lane);
+    containerOf(parent).push(lane);
+    return lane;
+  }
+
+  /**
+   * The lane of an invocation in this run, made on first sight. A lane that a MESSAGES_SNAPSHOT took out of the
+   * transcript comes back, empty, so what follows has a place. `parent` only counts when the lane is made.
+   */
+  function laneFor(id: string, parent?: SubagentEntry): SubagentEntry {
+    const known = invocations.get(id);
+    if (known === undefined) return newLane(id, parent);
+    if (!known.inTranscript) {
+      containerOf(undefined).push(known);
+      known.inTranscript = true;
+    }
+    return known;
+  }
+
+  /** After the run's frames are read: where each lane of the run ended and how it stands. */
+  function settleLanes(live: boolean, terminal: boolean, lastOffset: number | undefined) {
+    for (const lane of invocations.values()) {
+      const end = lane.lines.at(-1);
+      if (end?.phase === 'finished') lane.status = end.outcome === 'suspended' ? 'suspended' : 'finished';
+      else if (end?.phase === 'error') lane.status = 'error';
+      else lane.status = live && !terminal ? 'running' : exchange.transport === 'user-stopped' ? 'stopped' : 'no-end';
+      const at = end !== undefined && end.phase !== 'started' ? end.offsetMs : (lastOffset ?? lane.firstOffsetMs);
+      lane.endOffsetMs = Math.max(at, lane.startOffsetMs ?? lane.firstOffsetMs);
+      earlier.add(lane.subagentRunId);
+    }
+  }
 
   // ---- derived chunk expansions ----
 
@@ -580,7 +692,9 @@ export function projectConversation(session: InspectionSession, current?: string
           case 'tool':
             return entry.live ? [entry] : [];
           case 'subagent':
-            return entry.lines.every((line) => line.phase === 'started') ? [entry] : [];
+            // A lane stays while it is still open or something inside it stays, as a step does.
+            entry.children = keep(entry.children);
+            return entry.lines.every((line) => line.phase === 'started') || entry.children.length > 0 ? [entry] : [];
           case 'activity':
             return incomingIds.has(entry.messageId) ? [] : [entry];
           default:
@@ -592,7 +706,7 @@ export function projectConversation(session: InspectionSession, current?: string
     const collect = (list: readonly ConversationEntry[]) => {
       for (const entry of list) {
         if (entry.kind === 'run' || entry.kind === 'issue') boundaries.push(entry);
-        else if (entry.kind === 'step') collect(entry.children);
+        else if (entry.kind === 'step' || entry.kind === 'subagent') collect(entry.children);
       }
     };
     collect(entries);
@@ -602,12 +716,18 @@ export function projectConversation(session: InspectionSession, current?: string
     const visit = (list: readonly ConversationEntry[]) => {
       for (const entry of list) {
         alive.add(entry);
-        if (entry.kind === 'step') visit(entry.children);
+        if (entry.kind === 'step' || entry.kind === 'subagent') visit(entry.children);
       }
     };
     visit(survivors);
-    for (const map of [messages, reasonings, tools, activities, subagents] as Array<Map<string, ConversationEntry>>) {
+    for (const map of [messages, reasonings, tools, activities] as Array<Map<string, ConversationEntry>>) {
       for (const [id, entry] of map) if (!alive.has(entry)) map.delete(id);
+    }
+    // A lane that left the transcript keeps its place in `segments`, so the timeline still has it. A later event for
+    // it puts it back (see `laneOf`).
+    for (const lane of segments) {
+      lane.inTranscript = alive.has(lane);
+      if (!lane.inTranscript) lane.children = [];
     }
     registry.clear();
     for (const id of [...messages.keys(), ...reasonings.keys(), ...activities.keys()]) {
@@ -622,8 +742,9 @@ export function projectConversation(session: InspectionSession, current?: string
 
     // The marker follows the boundaries, then the snapshot's messages (at the root, whatever step is
     // open), then what is still arriving.
-    const openSteps = stack.filter((step) => alive.has(step));
-    stack = [];
+    const openSteps = stackOf(undefined).filter((step) => alive.has(step));
+    for (const [lane, open] of stacks) if (lane !== undefined) stacks.set(lane, open.filter((step) => alive.has(step)));
+    stacks.set(undefined, []);
     entries = [...boundaries, marker];
     for (const message of incoming) {
       const id = message.id as string;
@@ -631,14 +752,14 @@ export function projectConversation(session: InspectionSession, current?: string
       addMessage(message as unknown as Message, 'snapshot');
     }
     entries.push(...survivors);
-    stack = openSteps;
+    stacks.set(undefined, openSteps);
     marker.added = added.map((message) => brief(message.id as string, registry.get(message.id as string) ?? { role: str(message.role) ?? '', read: () => '' }));
   }
 
   // ---- one exchange ----
 
-  for (const [position, current] of exchanges.entries()) {
-    exchange = current;
+  for (const [position, exchangeOf] of exchanges.entries()) {
+    exchange = exchangeOf;
     const recorded = runOf.get(exchange.id);
     const input = inputOf(exchange, recorded);
     const frames = framesOf.get(exchange.id) ?? [];
@@ -646,6 +767,9 @@ export function projectConversation(session: InspectionSession, current?: string
     automaticTools = new Set(recorded?.automaticReplies?.toolCallIds ?? []);
     automaticToolsCarried = [];
     lanes.clear();
+    invocations = new Map();
+    stacks.clear();
+    inLane = undefined;
 
     // Before the first frame is read, ids are made from the exchange.
     frame = { id: `${exchange.id}:input` } as RawFrame;
@@ -658,11 +782,11 @@ export function projectConversation(session: InspectionSession, current?: string
       ...(str(input.runId) !== undefined && { runId: str(input.runId) as string }),
       ...(str(input.parentRunId) !== undefined && { parentRunId: str(input.parentRunId) as string }),
       status: 'streaming',
+      axisMs: Math.max(exchange.elapsedMs ?? frames.at(-1)?.offsetMs ?? 0, frames.at(-1)?.offsetMs ?? 0, 1),
       pendingToolCallIds: [],
       interrupts: [],
       carried: [],
     };
-    stack = [];
     entries.push(run);
 
     if (position === 0 && state.current === undefined && input.state !== undefined) state.current = state.initial = input.state as JsonValue;
@@ -690,6 +814,7 @@ export function projectConversation(session: InspectionSession, current?: string
       const type = str(event.type) as string;
       const lane = str(event.subagentRunId);
       lastOffset = raw.offsetMs;
+      inLane = ATTRIBUTABLE.has(type) && lane !== undefined ? laneFor(lane) : undefined;
 
       if (CLOSES_ALL_LANES.has(type)) closeAllLanes();
       else if (CLOSES_OWN_LANE.has(type)) closeLane(lane);
@@ -744,17 +869,18 @@ export function projectConversation(session: InspectionSession, current?: string
         case 'STEP_STARTED': {
           const step: StepEntry = { ...base('step'), kind: 'step', stepName: str(event.stepName) ?? '', startOffsetMs: raw.offsetMs, live: true, children: [] };
           add(step);
-          stack.push(step);
+          stackOf(inLane).push(step);
           break;
         }
         case 'STEP_FINISHED': {
           const name = str(event.stepName);
-          const at = stack.findLastIndex((step) => step.stepName === name);
+          const open = stackOf(inLane);
+          const at = open.findLastIndex((step) => step.stepName === name);
           if (at < 0) {
             issue(`STEP_FINISHED for step "${name}" that is not open`);
             break;
           }
-          const [step, ...unfinished] = stack.splice(at);
+          const [step, ...unfinished] = open.splice(at);
           for (const inner of unfinished) inner.live = false;
           if (step) {
             step.live = false;
@@ -1032,22 +1158,25 @@ export function projectConversation(session: InspectionSession, current?: string
         case 'SUBAGENT_FINISHED':
         case 'SUBAGENT_ERROR': {
           const id = str(event.subagentRunId) as string;
-          let entry = subagents.get(id);
-          if (!entry) {
-            entry = add<SubagentEntry>({ ...base(`subagent-${id}`), kind: 'subagent', subagentRunId: id, ...(run.runId !== undefined && { parentRunId: run.runId }), lines: [] });
-            subagents.set(id, entry);
-          }
+          // A start names its parent. The parent lane is put back in the transcript if a snapshot took it out, since it is
+          // spawning work again.
+          const parentId = type === 'SUBAGENT_STARTED' ? str(event.parentSubagentRunId) : undefined;
+          const parent = parentId !== undefined && invocations.has(parentId) ? laneFor(parentId) : undefined;
+          const entry = laneFor(id, parent);
           touch(entry);
           if (type === 'SUBAGENT_STARTED') {
             if (str(event.name) !== undefined) entry.name = str(event.name);
             if (str(event.description) !== undefined) entry.description = str(event.description);
             if (str(event.parentToolCallId) !== undefined) entry.parentToolCallId = str(event.parentToolCallId);
-            if (str(event.parentSubagentRunId) !== undefined) entry.parentSubagentRunId = str(event.parentSubagentRunId);
+            if (str(event.parentMessageId) !== undefined) entry.parentMessageId = str(event.parentMessageId);
+            if (parentId !== undefined) entry.parentSubagentRunId = parentId;
+            entry.startOffsetMs ??= raw.offsetMs;
             entry.lines.push({ phase: 'started', frameId: raw.id, offsetMs: raw.offsetMs });
           } else if (type === 'SUBAGENT_FINISHED') {
             const detail = compact(event.result as JsonValue | undefined);
             const outcome = isRecord(event.outcome) ? str(event.outcome.type) : undefined;
-            entry.lines.push({ phase: 'finished', frameId: raw.id, offsetMs: raw.offsetMs, ...(detail !== undefined && { detail }), ...(outcome !== undefined && { outcome }) });
+            const interruptIds = isRecord(event.outcome) && Array.isArray(event.outcome.interruptIds) ? event.outcome.interruptIds.filter((item): item is string => typeof item === 'string') : [];
+            entry.lines.push({ phase: 'finished', frameId: raw.id, offsetMs: raw.offsetMs, ...(detail !== undefined && { detail }), ...(outcome !== undefined && { outcome }), ...(interruptIds.length > 0 && { interruptIds }) });
           } else {
             entry.lines.push({ phase: 'error', frameId: raw.id, offsetMs: raw.offsetMs, detail: str(event.message) ?? '', ...(str(event.code) !== undefined && { code: str(event.code) as string }) });
           }
@@ -1073,7 +1202,7 @@ export function projectConversation(session: InspectionSession, current?: string
         for (const entry of list) {
           if (entry.exchangeId !== exchange.id) continue;
           if (entry.kind === 'message' || entry.kind === 'tool' || entry.kind === 'reasoning' || entry.kind === 'step') entry.live = false;
-          if (entry.kind === 'step') everything(entry.children);
+          if (entry.kind === 'step' || entry.kind === 'subagent') everything(entry.children);
         }
       };
       everything(entries);
@@ -1083,11 +1212,13 @@ export function projectConversation(session: InspectionSession, current?: string
       if (run.startOffsetMs !== undefined && lastOffset !== undefined) run.durationMs = lastOffset - run.startOffsetMs;
       if (exchange.transportError !== undefined) run.transportError = exchange.transportError;
     }
+    settleLanes(live, terminal, lastOffset);
+    inLane = undefined;
     if (run.runId === undefined) delete run.runId;
     if (run.threadId === undefined) delete run.threadId;
   }
 
-  return { ...(threadId !== undefined && { threadId }), entries, state: { current: state.current, ...(state.initial !== undefined && { initial: state.initial }), changes: state.changes.reverse() }, derived, issues };
+  return { ...(threadId !== undefined && { threadId }), entries, subagents: segments, state: { current: state.current, ...(state.initial !== undefined && { initial: state.initial }), changes: state.changes.reverse() }, derived, issues };
 }
 
 // ---------------------------------------------------------------------------------------------

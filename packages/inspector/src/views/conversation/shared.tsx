@@ -1,5 +1,5 @@
 // Small pieces the conversation and state views share. Composes F06 primitives; adds no styling of its own.
-import { createContext, useContext, useMemo, useState, useSyncExternalStore, type ReactElement, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactElement, type ReactNode } from 'react';
 import type { EvidenceTarget, FrameId, InspectionSession, RawFrame, SessionStore } from '../../contracts';
 import { projectConversation, type ConversationModel } from '../../core/projection/index';
 import { Icon } from '../theme/primitives';
@@ -58,14 +58,20 @@ export function Disclosure({
   summary,
   defaultOpen = false,
   className,
+  reveal,
   children,
 }: {
   summary: ReactNode;
   defaultOpen?: boolean;
   className?: string;
+  /** A jump to something inside opens the group: each new request changes this token. */
+  reveal?: number;
   children: ReactNode;
 }): ReactElement {
   const [open, setOpen] = useState(defaultOpen);
+  useEffect(() => {
+    if (reveal !== undefined) setOpen(true);
+  }, [reveal]);
   return (
     <details className={className} open={open} onToggle={(event) => setOpen(event.currentTarget.open)}>
       <summary className="agui-conv-summary">

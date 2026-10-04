@@ -194,14 +194,103 @@ details[open] > .agui-conv-summary .agui-conv-chev { transform: rotate(90deg); }
   font-size: 12.5px;
 }
 .agui-conv-marker b { color: var(--fg); font-weight: 500; }
-.agui-conv-nest {
+/* Subagent lanes: one block for each subagent invocation, holding what it produced. Nested lanes indent by their rail. */
+.agui-lane {
   display: grid;
-  gap: calc(var(--u) * 1.5);
-  padding: calc(var(--u) * 2) calc(var(--u) * 3);
-  border: 1px dashed var(--line-2);
-  border-radius: var(--r);
+  gap: calc(var(--u) * 2);
+  padding-left: calc(var(--u) * 3);
+  border-left: 2px solid var(--line-2);
   font-size: 12.5px;
 }
+.agui-lane-head { display: grid; gap: calc(var(--u) * 1); }
+.agui-lane-bar { display: flex; align-items: center; flex-wrap: wrap; gap: calc(var(--u) * 2); }
+.agui-lane-toggle {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  gap: calc(var(--u) * 2);
+  min-width: 0;
+  margin: 0;
+  padding: calc(var(--u) * 1) 0;
+  border: 0;
+  background: none;
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.agui-lane-toggle[aria-expanded="true"] .agui-conv-chev { transform: rotate(90deg); }
+.agui-lane-meta { display: flex; flex-wrap: wrap; gap: calc(var(--u) * 2); font-size: 12px; overflow-wrap: anywhere; }
+.agui-lane-body { display: grid; gap: calc(var(--u) * 3.5); }
+
+/* Subagent timeline: one chart for each run that has subagents. A bar runs from the frame that started the subagent to the
+   frame that ended it. Each status differs by its end glyph and its border style as well as by its word, never by color alone. */
+.agui-tl { display: grid; gap: calc(var(--u) * 2); font-size: 12.5px; }
+.agui-tl-note { margin: calc(var(--u) * 1) 0 0; font-size: 12px; }
+.agui-tl-chart { display: grid; gap: calc(var(--u) * 1.5); margin-top: calc(var(--u) * 3); }
+.agui-tl-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: calc(var(--u) * 2); font-size: 12px; }
+.agui-tl-box {
+  max-height: calc(var(--u) * 90);
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+}
+.agui-tl-rows { margin: 0; padding: 0; list-style: none; }
+.agui-tl-row,
+.agui-tl-runrow,
+.agui-tl-axisrow {
+  display: grid;
+  grid-template-columns: minmax(calc(var(--u) * 40), 30%) minmax(calc(var(--u) * 60), 1fr) calc(var(--u) * 42);
+  align-items: center;
+  gap: calc(var(--u) * 3);
+  min-width: calc(var(--u) * 150);
+  padding: calc(var(--u) * 1) calc(var(--u) * 2);
+}
+.agui-tl-row {
+  width: 100%;
+  margin: 0;
+  border: 0;
+  background: none;
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.agui-tl-row:hover { background: var(--hover); }
+.agui-tl-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agui-tl-name { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
+.agui-tl-meta { display: flex; align-items: center; gap: calc(var(--u) * 2); white-space: nowrap; font-size: 12px; }
+.agui-tl-track { position: relative; display: block; height: calc(var(--u) * 4); border-radius: var(--r-xs); background: var(--sunk); }
+.agui-tl-axis { position: relative; height: calc(var(--u) * 3.5); color: var(--muted); font: 10.5px var(--agui-font-mono); }
+.agui-tl-axis span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+.agui-tl-axis span:first-child { transform: none; }
+.agui-tl-axis .agui-tl-axis-end { transform: translateX(-100%); }
+.agui-tl-bar {
+  position: absolute;
+  top: calc(var(--u) * 0.5);
+  bottom: calc(var(--u) * 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: calc(var(--u) * 3.5);
+  border: 1px solid var(--muted);
+  border-radius: var(--r-xs);
+  background: var(--muted);
+  color: var(--bg);
+}
+.agui-tl-end { padding: 0 calc(var(--u) * 0.5); font-size: 10px; line-height: 1; }
+.agui-tl-bar[data-status="run"] { background: none; border-color: var(--muted); }
+.agui-tl-bar[data-status="finished"] { background: var(--ok); border-color: var(--ok); color: var(--bg); }
+.agui-tl-bar[data-status="error"] { background: var(--err); border-color: var(--err); color: var(--bg); }
+.agui-tl-bar[data-status="running"] { border-right: 0; border-color: var(--acc); background: var(--acc-soft); color: var(--fg); }
+.agui-tl-bar[data-status="suspended"] { border: 2px dashed var(--fg); background: none; color: var(--fg); }
+.agui-tl-bar[data-status="stopped"] { border: 2px dotted var(--warn); background: var(--warn-soft); color: var(--fg); }
+.agui-tl-bar[data-status="no-end"] { border: 2px dotted var(--fg); background: none; color: var(--fg); }
+@media (prefers-reduced-motion: no-preference) {
+  .agui-tl-bar[data-status="running"] .agui-tl-end { animation: agui-pulse 1.4s ease-in-out infinite; }
+}
+.agui-tl-more { padding: calc(var(--u) * 2); }
 .agui-conv-lines { display: grid; gap: calc(var(--u) * 1.5); margin: 0; padding: 0; list-style: none; }
 .agui-conv-lines li { display: flex; align-items: center; flex-wrap: wrap; gap: calc(var(--u) * 2); }
 
