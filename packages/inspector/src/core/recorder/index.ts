@@ -8,7 +8,8 @@
 // The recorder is told what it needs (RecordedRequest) and reads nothing else: no request object,
 // no request or response headers. The caller says whether an event stream is expected; the
 // response's content type is never consulted. Only the status decides one thing: a non-2xx
-// answer is an error body to keep as text, never an event stream.
+// answer is an error body to keep as text, never an event stream. An event stream is server-sent events or,
+// when the caller asked for the protobuf encoding, binary frames; the exchange says which (`encoding`).
 //
 // Event-stream bytes go to the sink as they arrive. Splitting them into frames is the frame
 // reader's job; the recorder invents no frames, events or outcomes, including when a run is stopped.
@@ -132,6 +133,8 @@ export function createRecorder(sink: RecorderSink, clock: RecorderClock = browse
           path: request.path,
           ...(request.body !== undefined && { requestBody: request.body }),
           ...(parsedBody !== undefined && { requestBodyJson: parsedBody }),
+          // Told by the caller, never read from a header: the answer is read in the encoding that was asked for.
+          ...(request.responseKind === 'protobuf' && { encoding: 'protobuf' as const }),
           startedAt: clock.epoch(),
           transport: 'sending',
           frameIds: [],
@@ -147,7 +150,7 @@ export function createRecorder(sink: RecorderSink, clock: RecorderClock = browse
         throw error;
       }
 
-      const streaming = request.responseKind === 'sse' && response.ok;
+      const streaming = request.responseKind !== 'response' && response.ok;
       guard(() => sink.updateExchange(id, { status: response.status, transport: streaming ? 'streaming' : 'reading' }));
 
       let branch: Response;

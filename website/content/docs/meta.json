@@ -8,6 +8,7 @@
     "runs",
     "inspection",
     "rules",
+    "protobuf",
     "troubleshooting",
     "event-views",
     "a2ui",

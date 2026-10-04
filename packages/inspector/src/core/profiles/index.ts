@@ -1,11 +1,11 @@
 // Client profiles and run input (FR-030, FR-031, FR-032, FR-036). Framework-free.
 //
-// A profile is seven settings that say what the inspector declares and sends: protocol version,
+// A profile is eight settings that say what the inspector declares and sends: protocol version,
 // client tools, context, whether A2UI renders, whether the render_a2ui tool is injected, the message
-// mode and forwarded properties. Three optional settings say how the inspector answers a finished run's
-// interrupts and client tool calls for the developer: the interrupt reply, a payload per interrupt
-// reason and a result per tool. They never reach the run input. Nothing else is a profile field. In
-// particular there is no place for an authentication header or token: the token lives in volatile
+// mode, the encoding a run asks for and forwarded properties. Three optional settings say how the inspector
+// answers a finished run's interrupts and client tool calls for the developer: the interrupt reply, a payload
+// per interrupt reason and a result per tool. They never reach the run input. Nothing else is a profile field.
+// In particular there is no place for an authentication header or token: the token lives in volatile
 // connection state and reaches the guarded transport only, so it cannot enter a saved profile, an
 // exported file or a run input.
 //
@@ -22,6 +22,7 @@ import {
   FORMAT_VERSION,
   type A2uiAction,
   type ClientProfileSettings,
+  type Encoding,
   type JsonObject,
   type JsonValue,
   type ProfileEnvelope,
@@ -31,7 +32,10 @@ import { reservedPropertyProblem, selectMessages, type DispatchIds, type Prepare
 
 export const PROFILE_STORAGE_KEY = 'agui-inspector.profile';
 
-const SETTINGS = ['protocolVersion', 'tools', 'context', 'renderA2ui', 'injectA2uiTool', 'messageMode', 'forwardedProps', 'interruptReply', 'interruptPayloads', 'toolResults'];
+const SETTINGS = ['protocolVersion', 'tools', 'context', 'renderA2ui', 'injectA2uiTool', 'messageMode', 'encoding', 'forwardedProps', 'interruptReply', 'interruptPayloads', 'toolResults'];
+
+/** The encoding a run asks for: the profile's choice, else the preset's default, else server-sent events. */
+export const encodingFor = (profile: ClientProfileSettings, presetEncoding: Encoding | undefined): Encoding => profile.encoding ?? presetEncoding ?? 'sse';
 
 /** The pinned protocol version, no tools or context, A2UI rendered but not injected, the preset's mode. */
 export function defaultProfile(): ClientProfileSettings {
@@ -85,7 +89,7 @@ export function parseProfileSettings(value: unknown, where = 'profile'): Result<
   const extra = unexpectedKey(value, SETTINGS, where, 'a profile');
   if (extra) return fail(extra);
 
-  const { protocolVersion, tools, context, renderA2ui, injectA2uiTool, messageMode, forwardedProps, interruptReply } = value;
+  const { protocolVersion, tools, context, renderA2ui, injectA2uiTool, messageMode, encoding, forwardedProps, interruptReply } = value;
   if (typeof protocolVersion !== 'string' || protocolVersion === '') return fail(`${where}.protocolVersion must be a nonempty string`);
   if (!Array.isArray(tools)) return fail(`${where}.tools must be a list`);
   const names = new Set<string>();
@@ -103,6 +107,7 @@ export function parseProfileSettings(value: unknown, where = 'profile'): Result<
   if (typeof renderA2ui !== 'boolean') return fail(`${where}.renderA2ui must be true or false`);
   if (typeof injectA2uiTool !== 'boolean') return fail(`${where}.injectA2uiTool must be true or false`);
   if (messageMode !== undefined && messageMode !== 'full' && messageMode !== 'turn') return fail(`${where}.messageMode must be "full" or "turn"`);
+  if (encoding !== undefined && encoding !== 'sse' && encoding !== 'protobuf') return fail(`${where}.encoding must be "sse" or "protobuf"`);
   if (!isJsonObject(forwardedProps)) return fail(`${where}.forwardedProps must be a JSON object`);
   const reserved = reservedPropertyProblem(forwardedProps, `${where}.forwardedProps`);
   if (reserved) return fail(reserved);
@@ -119,6 +124,7 @@ export function parseProfileSettings(value: unknown, where = 'profile'): Result<
     renderA2ui,
     injectA2uiTool,
     ...(messageMode !== undefined && { messageMode }),
+    ...(encoding !== undefined && { encoding }),
     forwardedProps: structuredClone(forwardedProps),
     ...(interruptReply !== undefined && { interruptReply }),
     ...(payloads.value !== undefined && { interruptPayloads: payloads.value }),
@@ -128,7 +134,7 @@ export function parseProfileSettings(value: unknown, where = 'profile'): Result<
 
 /** The version-0 envelope, built from the settings alone. The automation settings are written only when set. */
 function envelope(settings: ClientProfileSettings): ProfileEnvelope {
-  const { protocolVersion, tools, context, renderA2ui, injectA2uiTool, messageMode, forwardedProps, interruptReply, interruptPayloads, toolResults } = settings;
+  const { protocolVersion, tools, context, renderA2ui, injectA2uiTool, messageMode, encoding, forwardedProps, interruptReply, interruptPayloads, toolResults } = settings;
   return {
     version: FORMAT_VERSION,
     profile: {
@@ -138,6 +144,7 @@ function envelope(settings: ClientProfileSettings): ProfileEnvelope {
       renderA2ui,
       injectA2uiTool,
       ...(messageMode !== undefined && { messageMode }),
+      ...(encoding !== undefined && { encoding }),
       forwardedProps,
       ...(interruptReply !== undefined && { interruptReply }),
       ...(interruptPayloads !== undefined && { interruptPayloads }),

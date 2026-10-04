@@ -426,6 +426,7 @@ function ProfilePanel({ props, agent }: { props: SettingsViewProps; agent?: Agen
 
   const preset = agent?.preset;
   const presetMode = preset?.messages ?? 'full';
+  const presetEncoding = preset?.encoding ?? 'sse';
   const mode: ModeChoice = profile.messageMode ?? 'preset';
   const variables = Object.entries(preset?.variables ?? {});
 
@@ -454,6 +455,21 @@ function ProfilePanel({ props, agent }: { props: SettingsViewProps; agent?: Agen
               onChange={(choice) => {
                 const { messageMode: _previous, ...rest } = profile;
                 commit(choice === 'preset' ? rest : { ...rest, messageMode: choice as 'full' | 'turn' });
+              }}
+            />
+          </Row>
+          <Row title="Encoding" hint={`Preset default: ${presetEncoding === 'protobuf' ? 'protobuf' : 'server-sent events'}`}>
+            <SegmentedControl
+              label="Encoding"
+              value={profile.encoding ?? 'preset'}
+              options={[
+                { value: 'preset', label: 'Preset default' },
+                { value: 'sse', label: 'Server-sent events' },
+                { value: 'protobuf', label: 'Protobuf' },
+              ]}
+              onChange={(choice) => {
+                const { encoding: _previous, ...rest } = profile;
+                commit(choice === 'preset' ? rest : { ...rest, encoding: choice as 'sse' | 'protobuf' });
               }}
             />
           </Row>

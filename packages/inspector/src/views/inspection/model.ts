@@ -5,6 +5,7 @@
 // fields do not look like its type falls back to the reader's own summary rather than guessing.
 // Client-derived entries (chunk expansions) are separate rows placed after the frame they came from.
 import { EventType } from '@ag-ui/core';
+import { byteCountOf } from '../../core/frames/bytes.ts';
 import type { DerivedEntry, EvidenceTarget, Exchange, ExchangeId, Finding, FrameId, InspectionSession, RawFrame } from '../../contracts.ts';
 import type { Family } from '../theme/primitives.tsx';
 
@@ -86,8 +87,12 @@ export const formatDuration = (ms: number) => (ms < 1000 ? `${Math.round(ms)} ms
 export function typeLabel(frame: RawFrame): string {
   if (frame.classification !== 'data') return frame.classification;
   if (frame.eventType !== undefined) return frame.eventType;
+  if (frame.bytes !== undefined) return frame.schemaVerdict === 'unknown-type' ? 'unknown event' : 'undecodable';
   return frame.jsonVerdict === 'invalid' ? 'unparsed' : 'untyped';
 }
+
+/** How many bytes the frame holds as received: the bytes of a binary frame, or the text of the others. */
+export const receivedSize = (frame: RawFrame): number => (frame.bytes !== undefined ? byteCountOf(frame.bytes) : byteLength(frame.data ?? frame.envelope));
 
 /**
  * One line for the summary column. Ids come first, then the most useful payload field; strings are
@@ -97,7 +102,8 @@ export function typeLabel(frame: RawFrame): string {
  */
 export function summarizeFrame(frame: RawFrame): string {
   if (frame.classification !== 'data') return frame.summary;
-  if (frame.jsonVerdict !== 'valid') return `unparsed · ${byteLength(frame.data ?? '')} bytes`;
+  // A binary frame has no JSON verdict: it has an event when it decoded, and the reader's own summary when it did not.
+  if (frame.bytes === undefined && frame.jsonVerdict !== 'valid') return `unparsed · ${byteLength(frame.data ?? '')} bytes`;
   const event = asObject(frame.parsed);
   return (event && summarizeEvent(event)) ?? frame.summary;
 }
@@ -240,6 +246,9 @@ export const NO_FILTER: FrameFilter = { query: '', families: new Set(), issuesOn
 // is not "filtering" in the sense of the shown/total frame counts.
 export const isFiltering = (filter: FrameFilter) => filter.query !== '' || filter.families.size > 0 || filter.issuesOnly;
 
+/** What the filter searches: the text as received, or for a binary frame the decoded event (its bytes are not searched). */
+const searchableText = (frame: RawFrame): string => (frame.bytes !== undefined ? JSON.stringify(frame.parsed) ?? '' : frame.data ?? frame.envelope);
+
 const haystacks = new WeakMap<object, string>();
 function haystack(source: object, build: () => string): string {
   let text = haystacks.get(source);
@@ -256,7 +265,7 @@ export function frameMatches(frame: RawFrame, issues: number, filter: FrameFilte
   if (filter.issuesOnly && issues === 0) return false;
   if (filter.query !== '') {
     const query = filter.query.toLowerCase();
-    if (!(frame.eventType ?? '').toLowerCase().includes(query) && !haystack(frame, () => frame.data ?? frame.envelope).includes(query)) return false;
+    if (!(frame.eventType ?? '').toLowerCase().includes(query) && !haystack(frame, () => searchableText(frame)).includes(query)) return false;
   }
   return true;
 }

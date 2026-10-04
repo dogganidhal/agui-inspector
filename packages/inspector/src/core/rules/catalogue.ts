@@ -70,6 +70,10 @@ export const RULES = [
   { id: 'capability.interrupt-unsupported', family: 'capability', summary: 'An interrupt outcome came from an agent that declares interrupts as unsupported.' },
   { id: 'capability.state-delta-unsupported', family: 'capability', summary: 'A state delta came from an agent that declares state deltas as unsupported.' },
   { id: 'capability.state-snapshot-unsupported', family: 'capability', summary: 'A state snapshot came from an agent that declares state snapshots as unsupported.' },
+
+  { id: 'binary.undecodable-frame', family: 'binary', summary: 'The bytes of a frame are not a protobuf event, so no event could be read.' },
+  { id: 'binary.unreadable-stream', family: 'binary', summary: 'The stream states a frame larger than 10 MB, so the rest of it is kept as raw bytes.' },
+  { id: 'binary.client-failed', family: 'binary', summary: 'The protocol client could not read the protobuf stream.' },
 ] as const satisfies readonly RuleDefinition[];
 
 export type CatalogueRuleId = (typeof RULES)[number]['id'];

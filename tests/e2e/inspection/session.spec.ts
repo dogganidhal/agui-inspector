@@ -3,7 +3,7 @@
 // a file with no headers or credentials even though a token was in use. Import makes no request.
 import { readFileSync } from 'node:fs';
 import type { Page } from '@playwright/test';
-import { expect, expectAllowlisted, open, run, snapshot, test, type Site } from './support.ts';
+import { expect, expectAllowlisted, open, run, runProtobuf, snapshot, test, type Site } from './support.ts';
 
 const SECRET = 'SECRET-TOKEN-4f9a';
 const toolbar = (page: Page) => page.locator('.agui-ins-head');
@@ -201,4 +201,76 @@ test('an empty session exports with its warning and imports back to nothing', as
   await importText(page, text);
   await expect(page.locator('[data-exchange-header]')).toHaveCount(0);
   await expect(page.getByText('No exchanges yet')).toBeVisible();
+});
+
+// ---- protobuf sessions (spec 013, US3; SC-002) --------------------------------------------------------------
+
+const bytesOf = (frames: Array<{ bytes?: string }>) => frames.map((frame) => Buffer.from(frame.bytes ?? '', 'base64').toString('hex'));
+
+test('a session with protobuf runs exports with a warning and imports back with every frame\'s bytes unchanged, and makes no request', async ({ page, site, network, browser }) => {
+  await open(page, site);
+  await runProtobuf(page, 'baselineRun');
+  await runProtobuf(page, 'splitByByte');
+  await run(page, 'baselineRun');
+  const original = await snapshot(page);
+  expect(original.frames.some((frame) => frame.bytes !== undefined)).toBe(true);
+
+  // The warning comes first, and it covers binary frames: they are the received evidence.
+  await toolbar(page).getByRole('button', { name: 'Export session' }).click();
+  await expect(page.getByRole('dialog')).toContainText('can contain personal or sensitive data');
+  await expect(page.getByRole('dialog')).toContainText('Headers, including the authentication header, are not captured or exported');
+  await page.keyboard.press('Escape');
+
+  const { text } = await exportFile(page);
+  const file = JSON.parse(text) as { version: number; session: { exchanges: Array<{ encoding?: string }>; frames: Array<{ exchangeId: string; bytes?: string }> } };
+  expect(file.version).toBe(0);
+  expect(file.session.exchanges.map((exchange) => exchange.encoding)).toEqual(['protobuf', 'protobuf', undefined]);
+  expect(file.session.frames.filter((frame) => frame.exchangeId === 'exchange-3').every((frame) => frame.bytes === undefined), 'the server-sent-events exchange has no bytes').toBe(true);
+  expect(text).not.toMatch(/"headers"|authorization|cookie/i);
+
+  const fresh = await browser.newPage();
+  const requests: string[] = [];
+  fresh.on('request', (request) => requests.push(request.url()));
+  await open(fresh, site);
+  const before = requests.length;
+  site.received.length = 0;
+  await importText(fresh, text);
+  await expect(fresh.locator('[data-exchange-header]')).toHaveCount(3);
+  const imported = await snapshot(fresh);
+  expect(imported).toEqual(original);
+  expect(bytesOf(imported.frames)).toEqual(bytesOf(original.frames));
+  expect(requests.length).toBe(before);
+  expect(site.received).toEqual([]);
+  await expect(fresh.locator('[data-exchange-header="exchange-2"]')).toContainText('protobuf');
+  await fresh.close();
+
+  await page.reload();
+  await page.waitForFunction(() => '__host' in window);
+  await importText(page, text);
+  expect((await exportFile(page)).text, 'exporting what was imported gives back the same file').toBe(text);
+  expectAllowlisted(network, site);
+});
+
+test('a protobuf file in which one byte was changed is refused, naming the frame, and the session on screen is untouched', async ({ page, site }) => {
+  await open(page, site);
+  await runProtobuf(page, 'baselineRun');
+  const before = await snapshot(page);
+  const { text } = await exportFile(page);
+  const file = JSON.parse(text) as { session: { frames: Array<{ bytes?: string; eventType?: string }> } };
+  const frame = file.session.frames.find((candidate) => candidate.eventType === 'TEXT_MESSAGE_CONTENT')!;
+  const bytes = Buffer.from(frame.bytes!, 'base64');
+  bytes[bytes.length - 3] = (bytes[bytes.length - 3]! ^ 0x01) & 0xff;
+  frame.bytes = bytes.toString('base64');
+
+  await importText(page, JSON.stringify(file));
+  const alert = page.getByTestId('inspection-error');
+  await expect(alert).toContainText('Import failed');
+  await expect(alert).toContainText(/frames\[\d+\]: (parsed does not match the event the bytes decode to|bytes is not one whole frame|schemaVerdict)/);
+  expect(await snapshot(page)).toEqual(before);
+
+  // Bytes that are not even base64 are refused too.
+  frame.bytes = 'not base64!';
+  await importText(page, JSON.stringify(file));
+  await expect(alert).toContainText('bytes is not canonical base64');
+  expect(await snapshot(page)).toEqual(before);
 });

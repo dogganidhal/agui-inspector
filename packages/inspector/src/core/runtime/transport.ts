@@ -17,6 +17,7 @@
 // - Redirects are not followed. A redirect answer is an error the user sees, never a second request.
 // - A browser-level failure (CORS, private-network or mixed-content rules, an unreachable server) is
 //   reported as such. The inspector has no proxy and no bypass for any of them.
+import { AGUI_MEDIA_TYPE } from '@ag-ui/proto';
 import type { GuardedTransport, TransportPolicy, TransportRequest, VolatileAuth } from '../../contracts.ts';
 import { fail, hasUserinfo, ok, type Result } from '../config/validation.ts';
 
@@ -34,8 +35,11 @@ export interface TransportOptions {
 const RESERVED_HEADER = /^(?:cookie2?|set-cookie|host|content-length|content-type|accept)$/i;
 const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 
+// The one place a request's Accept header is chosen: a run, a continuation, a surface action and a raw
+// submission all reach a target through `send`, so the encoding they ask for is decided here and nowhere else.
 const ACCEPT = {
   sse: 'text/event-stream',
+  protobuf: AGUI_MEDIA_TYPE,
   response: 'application/json, text/plain;q=0.9, */*;q=0.1',
 } as const;
 

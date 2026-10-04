@@ -10,12 +10,15 @@
 // never enabled, so a hosted page that sent cookies could not even read the answer.
 // What the agent answers is chosen by the environment-neutral producer in scenarios.ts, which the
 // browser demo's service worker shares; this adapter keeps the Node I/O, validation, CORS, request log,
-// failure controls and open-stream accounting. Runs arrive at wire speed, as tests expect, unless a test
+// failure controls and open-stream accounting. A request whose Accept lists the AG-UI protobuf media type gets the
+// same answer as protobuf frames (protobuf.ts), chunk for chunk, so every scenario with a protobuf form is served
+// in both encodings; a scenario that has none (`broken`, which sends text that is not an event) answers 406. Runs arrive at wire speed, as tests expect, unless a test
 // opts in to the demo's natural pacing (pacing.ts) with the `pace` option.
 // Erasable TypeScript only, so Node can run it directly.
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { deliver, pace, sleepOn, type PaceProfile } from './pacing.ts';
+import { acceptsProtobuf, toProtobuf } from './protobuf.ts';
 import { interactiveResponse, type RunInput } from './scenarios.ts';
 
 export { INTERRUPT_FOREVER, INTERRUPTS, SCENARIOS, SUBAGENTS } from './scenarios.ts';
@@ -34,6 +37,8 @@ export interface RecordedRequest {
   readonly text: string;
   /** Names among authorization, x-api-key, cookie that arrived. Never their values. */
   readonly credentials: readonly string[];
+  /** The Accept header as it arrived: the encoding the page asked for. */
+  readonly accept: string;
 }
 
 export interface InteractiveServer {
@@ -48,6 +53,8 @@ export interface InteractiveServer {
   reset(): void;
   /** Connections to a held-open scenario (`never finishes`) that are open right now. */
   openStreams(): number;
+  /** The bytes written for each run response so far, in order: what the page should have recorded. */
+  sent(): readonly Uint8Array[];
   close(): Promise<void>;
 }
 
@@ -60,6 +67,16 @@ export interface InteractiveOptions {
   readonly pace?: PaceProfile;
 }
 
+const concat = (chunks: readonly Uint8Array[]): Uint8Array => {
+  const bytes = new Uint8Array(chunks.reduce((total, chunk) => total + chunk.length, 0));
+  let at = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, at);
+    at += chunk.length;
+  }
+  return bytes;
+};
+
 const CREDENTIAL_HEADERS = ['authorization', 'x-api-key', 'cookie'] as const;
 
 const sleep = sleepOn();
@@ -68,6 +85,7 @@ export async function createInteractiveServer(options: InteractiveOptions = {}):
   const recorded: RecordedRequest[] = [];
   const seen: string[] = [];
   const failures = new Map<string, number>();
+  const written: Uint8Array[][] = [];
   let open = 0;
 
   const text = (response: ServerResponse, status: number, contentType: string, body: string) => {
@@ -88,9 +106,19 @@ export async function createInteractiveServer(options: InteractiveOptions = {}):
     }
   }
 
-  async function stream(response: ServerResponse, input: RunInput): Promise<void> {
+  async function stream(request: IncomingMessage, response: ServerResponse, input: RunInput): Promise<void> {
     const reply = interactiveResponse(input);
-    const answer = options.pace === undefined ? reply : pace(reply, options.pace);
+    const paced = options.pace === undefined ? reply : pace(reply, options.pace);
+    let answer = paced;
+    if (acceptsProtobuf(request.headers.accept)) {
+      try {
+        answer = toProtobuf(paced);
+      } catch (error) {
+        return text(response, 406, 'application/json', JSON.stringify({ error: error instanceof Error ? error.message : String(error) }));
+      }
+    }
+    const body: Uint8Array[] = [];
+    written.push(body);
     response.writeHead(answer.status, { 'content-type': answer.contentType, 'cache-control': 'no-store' });
     // The response closes when the client goes away; the request's own 'close' fires once its body is read.
     const gone = new AbortController();
@@ -101,7 +129,11 @@ export async function createInteractiveServer(options: InteractiveOptions = {}):
         open -= 1;
       });
     }
-    if ((await deliver(answer, (chunk) => response.write(chunk), sleep, gone.signal)) && answer.ending === 'close') response.end();
+    const write = (chunk: Uint8Array) => {
+      body.push(chunk);
+      response.write(chunk);
+    };
+    if ((await deliver(answer, write, sleep, gone.signal)) && answer.ending === 'close') response.end();
   }
 
   const server = createServer(async (request, response) => {
@@ -143,6 +175,7 @@ export async function createInteractiveServer(options: InteractiveOptions = {}):
       body: parsed,
       text: body,
       credentials: CREDENTIAL_HEADERS.filter((name) => request.headers[name] !== undefined),
+      accept: request.headers.accept ?? '',
     });
 
     const failure = failures.get(pathname);
@@ -153,7 +186,7 @@ export async function createInteractiveServer(options: InteractiveOptions = {}):
     if (typeof input?.threadId !== 'string' || typeof input.runId !== 'string') {
       return text(response, 422, 'application/json', JSON.stringify({ detail: 'threadId and runId must be strings' }));
     }
-    return stream(response, input as RunInput);
+    return stream(request, response, input as RunInput);
   });
 
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -165,10 +198,12 @@ export async function createInteractiveServer(options: InteractiveOptions = {}):
     clear: () => failures.clear(),
     reset() {
       recorded.length = 0;
+      written.length = 0;
       seen.length = 0;
       failures.clear();
     },
     openStreams: () => open,
+    sent: () => written.map((chunks) => concat(chunks)),
     close: () =>
       new Promise((resolve) => {
         server.close(() => resolve());

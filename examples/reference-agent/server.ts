@@ -3,10 +3,13 @@
 //   --allow-origin <url>  the single cross-origin page allowed to call it (default: none)
 // It binds 127.0.0.1 only, grants CORS to exactly one origin and never sets credentials headers.
 // /agent never echoes request headers; /credential-echo does, in one known frame, on purpose (D03).
+// /agent answers in protobuf when the request's Accept lists the AG-UI protobuf media type, and in server-sent
+// events otherwise, the way a server written with EventEncoder does.
 // Prints one JSON line, {"url": "..."}, when ready.
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { credentialEchoBody, credentialOf } from './credential-echo.ts';
+import { acceptsProtobuf, toProtobuf } from './protobuf.ts';
 import { referenceRunResponse } from './scenarios.ts';
 
 function option(name: string, fallback: string): string {
@@ -66,7 +69,8 @@ const server = createServer(async (request, response) => {
     response.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store' });
     return void response.end(credentialEchoBody(threadId, runId, credentialOf(request.headers)));
   }
-  const reply = referenceRunResponse({ threadId, runId });
+  const sse = referenceRunResponse({ threadId, runId });
+  const reply = acceptsProtobuf(request.headers.accept) ? toProtobuf(sse) : sse;
   response.writeHead(reply.status, { 'content-type': reply.contentType, 'cache-control': 'no-store' });
   for (const chunk of reply.chunks) response.write(chunk);
   response.end();

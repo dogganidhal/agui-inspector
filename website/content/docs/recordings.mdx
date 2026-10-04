@@ -87,9 +87,9 @@ A file is one JSON object with a version and a session:
 
 | Collection | Holds |
 | --- | --- |
-| `exchanges` | Every preparation request, conversation run and raw submission, in capture order: method, path, exact request body text, response status, any non-stream response body, wall-clock start, elapsed time, how the transport ended, and its frame ids. |
+| `exchanges` | Every preparation request, conversation run and raw submission, in capture order: method, path, exact request body text, response status, any non-stream response body, wall-clock start, elapsed time, how the transport ended, and its frame ids. An exchange read as protobuf also has `encoding`. |
 | `runs` | Each run's thread, run and parent ids, the input as sent, start and end time, and the outcome the stream showed. A run whose replies the inspector answered from the client profile also has `automaticReplies`, with the `interruptIds` and the `toolCallIds` it answered. |
-| `frames` | Every received frame in arrival order: the original envelope text with delimiters, the extracted data text, the offset in milliseconds from the request's start, the event type if known, the summary, the JSON and schema verdicts, and the parsed value. Control and partial frames are included and marked. |
+| `frames` | Every received frame in arrival order: the original envelope text with delimiters, the extracted data text, the offset in milliseconds from the request's start, the event type if known, the summary, the JSON and schema verdicts, and the parsed value. Control and partial frames are included and marked. A frame of a protobuf exchange has `bytes` instead of the envelope and data text. |
 | `findings` | Judgements that point at a frame, run or exchange. They add to the evidence and never replace it. Each has a `kind`, a `message`, the `subject` it points at and, since 0.2.0, the optional `rule` id from the [rule catalogue](./rules.mdx). |
 | `derived` | Client-derived entries such as chunk expansions, each listing its source frames. They are marked `derived` and carry no frame index. |
 
@@ -100,6 +100,32 @@ A finding without a `rule` is a finding from a 0.1.0 recording, and the inspecto
 Order is part of the format. Records are written in store order, and exporting an imported file again gives the same bytes.
 
 A request from the [raw request editor](./runs.mdx#raw-submissions) is an exchange of kind `raw` with no run. Its `requestBody` is the text as entered, with whitespace and key order kept. But a text area reports line breaks as line feeds, so a typed or pasted carriage return is sent as a line feed. The answer is recorded like any other, error responses included.
+
+## Binary frames
+
+A run read as [protobuf](./protobuf.mdx) has an exchange with `"encoding": "protobuf"`, and every frame of it has `bytes`: the frame's bytes exactly as received, length prefix included, as base64. The envelope is empty and there is no data text. `parsed` and `eventType` hold the decoded event. Frames of a protobuf exchange have the JSON verdict `not-applicable`, because nothing was JSON.
+
+```json
+{
+  "id": "exchange-1:frame-2",
+  "exchangeId": "exchange-1",
+  "index": 2,
+  "classification": "data",
+  "envelope": "",
+  "bytes": "AAAAEwoRCgASAm0xGglhc3Npc3RhbnQ=",
+  "offsetMs": 41.5,
+  "eventType": "TEXT_MESSAGE_START",
+  "summary": "TEXT_MESSAGE_START messageId=m1",
+  "jsonVerdict": "not-applicable",
+  "schemaVerdict": "valid",
+  "parsed": { "type": "TEXT_MESSAGE_START", "messageId": "m1", "role": "assistant" },
+  "provenance": "raw"
+}
+```
+
+Export copies `bytes` from the session and does not encode it again, so an imported file exports the same bytes. A `partial` frame of a protobuf exchange has `bytes` too: the unfinished frame at the end of a stream, or every byte after a frame that no client reads. A frame that cannot be decoded has no `parsed` and no `eventType`.
+
+`encoding` and `bytes` are optional, and the format stays at version 0. A session with no protobuf exchange has neither field, and a file from 0.1.0 imports unchanged. A 0.1.0 inspector rejects a file that has them, because it does not know the keys. The finding kind `binary` is new.
 
 ## What a file never contains
 
@@ -121,6 +147,8 @@ Import checks the whole file in memory first. A failing file is refused with a v
 - Times are finite and not negative, and a run does not end before it starts. Exchange start times are wall-clock values and do not have to increase, because a clock can change during a session.
 - Each frame is consistent: its JSON verdict matches whether the data text parses, `parsed` equals the data text, and a control or partial frame has no data and no verdicts. A frame whose schema verdict is `valid` must also pass the AG-UI event schema, checked with the same function the live reader uses. The conversation is built from those frames, so the importer refuses a `valid` label on data the schema rejects.
 - A run's input is a run input, an interrupt outcome holds interrupts, and a path holds no URL credentials.
+- `bytes` is canonical base64: decoding it and encoding it again gives the same text. A frame has `bytes` exactly when its exchange has `encoding: "protobuf"`, and then its envelope is empty, it has no data text and its JSON verdict is `not-applicable`. A control frame has no `bytes`.
+- The bytes of a `data` frame are one whole frame: a four-byte length, then exactly that many bytes. Decoding them with the upstream decoder must give what the file says. If they decode, `parsed` equals the event and `eventType` is its type. If the decoder reports an event from a later protocol, the verdict is `unknown-type` and there is no `parsed`. If the bytes are not an event, the verdict is `not-applicable` and there is no `parsed`. A `valid` verdict must also pass the event schema.
 
 Frames that the schema rejects, unknown event types and data that is not JSON are evidence. They import as recorded when their verdicts say so: `invalid`, `unknown-type`, or `not-applicable` for data that is not JSON. Only a verdict that contradicts its data is an error, and the message names the frame. The inspector does not correct the verdict or the data. Fix the file, or export it again from the session that recorded it.
 

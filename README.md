@@ -100,7 +100,7 @@ public demo at your server. For the hosted page, your server must allow the page
 
 ## What it does
 
-- Records each HTTP exchange and each Server-Sent Events (SSE) frame exactly as it arrived, with its timing. It never
+- Records each HTTP exchange and each Server-Sent Events (SSE) or protobuf frame exactly as it arrived, with its timing. It never
   drops, repairs or reorders a frame, even one that is not JSON.
 - Checks frames against the AG-UI schemas and the event order, and shows each problem on its frame and its run.
 - Shows all 31 AG-UI event types in a frames list with a timeline, a conversation view and a state view.

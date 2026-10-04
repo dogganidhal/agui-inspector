@@ -44,7 +44,7 @@ Each preparation request, conversation run request and raw submission becomes on
 | `elapsedMs` | From dispatch to the end of the exchange, on a monotonic clock. |
 | `transport`, `transportError` | How the transport ended: `completed`, `transport-error` or `user-stopped`. |
 
-An event stream does not go into `responseBody`. Its bytes go to the frame reader as they arrive, in the chunks the
+An event stream does not go into `responseBody`. A request for [protobuf](./protobuf.mdx) adds `encoding: 'protobuf'` to the exchange. The caller says so, as it does for an event stream, and no header is read. Its bytes go to the frame reader as they arrive, in the chunks the
 network delivered. Each chunk is stamped with the milliseconds since dispatch. The recorder does not split or
 interpret them.
 
@@ -75,9 +75,9 @@ client. The two branches read the same bytes independently, so:
 - a slow client does not delay recording, and a slow recorder does not delay the client;
 - if the client rejects the stream, for example for a malformed frame or a sequence violation, recording continues to
   the end of the stream;
-- the client gets the response unread and unlocked, with only its line endings changed.
+- the client gets the response unread and unlocked. For server-sent events only its line endings change. A protobuf answer is not changed at all.
 
-The runtime changes them after the recorder has cloned the response. The pinned `@ag-ui/client` cannot read lines
+The runtime changes them, for server-sent events only, after the recorder has cloned the response. The pinned `@ag-ui/client` cannot read lines
 that end in CRLF or in a lone carriage return (CR), although both are valid in server-sent events (SSE). So before the
 client reads its copy, the runtime turns each CRLF and each lone CR into one line feed (LF). Every other byte stays as
 received, in the same order. The recording comes from the other branch, so its envelopes keep the server's
@@ -167,6 +167,24 @@ raises.
 
 When the stream ends, the reader looks for a schema-valid `RUN_FINISHED` or `RUN_ERROR` frame. If there is none, it
 adds one `terminal.missing` finding. It writes no run outcome, so the outcome stays `unknown` until something observes one.
+
+### The protobuf reader
+
+`createProtobufFrameReader` reads an exchange that was asked for as protobuf. The frame sink starts it for an exchange whose `encoding` is `protobuf`, and the server-sent-events reader for every other exchange. A frame is a four-byte big-endian length and that many bytes. The reader keeps the bytes that are not yet a whole frame in one buffer, takes each frame when its last byte has arrived, and gives it the offset of that read. Where the network cuts the stream changes nothing.
+
+Each frame keeps `bytes`, the base64 of the whole frame, length prefix included. Its payload goes to `decode` from `@ag-ui/proto`, and the event goes through the same judging function as an event from server-sent events, so the schema check, the verdicts, the terminal tracking and the findings are shared.
+
+| Bytes | Frame | Finding |
+| --- | --- | --- |
+| Decode returns an event | `data`, with `parsed` and `eventType`, JSON verdict `not-applicable` | The rules of the [catalogue](./rules.mdx) that apply to any event, such as `schema.invalid-event` |
+| Decode reports an event from a later protocol | `data`, schema verdict `unknown-type`, no event | `schema.unknown-event-type` |
+| Any other decode error, or an empty message | `data`, no event | `binary.undecodable-frame` |
+| A frame larger than 10 MB, prefix included | The rest of the stream as one `partial` frame | `binary.unreadable-stream` |
+| The stream ends inside a frame | One `partial` frame | None of its own |
+
+The 10 MB limit is the one that `parseProtoStream` in the pinned `@ag-ui/client` enforces, so the inspector flags what the client fails on. A test pins the two together. After a frame larger than the limit nothing marks where the next frame begins, so the reader stops splitting and keeps every later byte. An answer in server-sent events to a protobuf request ends up here, because the first four bytes of `data: ` read as a length are about 1.7 GB.
+
+The protocol client's three binary errors (a frame it cannot decode, a stream that ends in a frame and a frame above its limit) become one `binary.client-failed` finding on the run, in the client's own words. Pin tests check the messages against the pinned client.
 
 ## The session store
 

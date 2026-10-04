@@ -208,9 +208,9 @@ gain optional fields and stay at version 0, nothing to migrate.
 
 ## Coordination
 
-- **#77 (spec 007)**: findings get rule ids and the reader's tail changes. Rebase first (step 1), then share the tail
-  and add the three `binary` rules and their fixtures. If #77 merges after this feature, it adds the ids and the
-  `binary` family when it rebases; the research note and the kinds here are the hand-over.
+- **#77 (spec 007)**: merged as #94 before this feature. The judging step is shared, so a protobuf frame gets the `compat` and
+  `capability` rules too, and the three `binary` rules (`binary.undecodable-frame`, `binary.unreadable-stream`,
+  `binary.client-failed`) are in the catalogue with a fixture each, in the rules page, and in the catalogue test (42 rules).
 - **#74**: the profile list in `SETTINGS`, `parseProfileSettings` and the envelope. A list merge.
 - **#86 (docs alignment)**: `index.mdx`, `status.mdx` and the README may change under this feature. Re-read before editing.
 - **#95**: resumption. Nothing here prevents it. `connect()` would be an agent method and would record through the

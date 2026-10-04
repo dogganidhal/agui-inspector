@@ -64,7 +64,7 @@ never goes back.
 
 ## Finding
 
-`FindingKind` gains `binary`. Messages name fields and kinds of problem, never received values.
+`FindingKind` gains `binary`, and the rule catalogue gains the family `binary` with three rules. Messages name fields and kinds of problem, never received values. Each finding has a rule id: `binary.undecodable-frame`, `binary.unreadable-stream` and `binary.client-failed` for the new ones, and `schema.unknown-event-type`, `schema.invalid-event` and `terminal.missing` for the others.
 
 | Problem | Subject | Kind |
 | --- | --- | --- |

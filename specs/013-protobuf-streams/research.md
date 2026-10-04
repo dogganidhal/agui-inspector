@@ -185,10 +185,13 @@ the three messages of `parseProtoStream` (`Failed to decode protocol buffer mess
 mid-frame`, `Protobuf message size exceeded`). A compatibility test pins each message to the client that raises it, as
 issue #77 does for sequence errors.
 
-On the rebase onto #77, each finding takes a rule id in that catalogue's grammar. The proposed rows are
-`binary.undecodable-frame`, `binary.unreadable-stream` and `binary.client-failed`, and `binary` joins the list of
-families. Adding a family is not a breaking change there. If #77 has not merged when this feature is implemented, the
-findings use the kinds alone and #77 adds the ids when it rebases.
+Issue #77 merged (as #94) before this feature, so each finding carries a rule id in that catalogue's grammar. The new
+rows are `binary.undecodable-frame` (frame), `binary.unreadable-stream` (frame) and `binary.client-failed` (run), and
+`binary` joins the list of families. The catalogue now has 42 rules, and `ruleFixtures` has a fixture for each new one: the
+protobuf scenarios `undecodablePayload` and `oversizedLength` through the reader, and `undecodablePayload` through the
+runtime and the real client. The other findings reuse existing rules: `schema.unknown-event-type`,
+`schema.invalid-event` and `terminal.missing`. Because the reader's judging step is shared, a protobuf frame also gets the
+`compat` and `capability` rules.
 
 **Rationale**: Reusing `json` would say "not valid JSON" about bytes. Reusing `schema` for undecodable bytes would
 mean the data is not a valid event, which hides that no event was read. `terminal` and `schema` already say the right

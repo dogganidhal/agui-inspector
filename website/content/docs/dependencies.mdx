@@ -16,6 +16,7 @@ repository uses npm workspaces and Node 24 LTS (`engines.node` is `>=24`).
 | --- | --- | --- | --- |
 | `@ag-ui/core` | 1.0.1 | Event, run-input and resume types, and the Zod schemas that validate frames. Implements the 31-event protocol 1.0 baseline. | Local copies of the schemas would diverge from the protocol. |
 | `@ag-ui/client` | 1.0.1 | `HttpAgent` keeps the derived transcript, state, interrupts and outcomes, reports sequence errors, and takes the recorder's `fetch`. | A hand-written client repeats the protocol rules. `EventSource` cannot POST a run body. |
+| `@ag-ui/proto` | 1.0.1 | Decodes the frames of a protobuf stream and gives the protobuf media type. `@ag-ui/client` depends on exactly this version and already bundles it. | A copy of the decoder would drift from the protocol. |
 | `@ag-ui/a2ui-middleware` | 0.0.11 | Only the official `RENDER_A2UI_TOOL` declaration and the A2UI action types. | Re-declaring the tool schema would diverge from the middleware. |
 | `@a2ui/react` | 0.12.0 | The A2UI React renderers for v0.9 (`@a2ui/react/v0_9`) and v0.8 (`@a2ui/react/v0_8`). | A custom renderer or a chat framework: the constitution requires the official renderer packages. |
 | `@a2ui/web_core` | 0.12.0 | `MessageProcessor` and the surface model that drive the v0.9 renderer, and the strict v0.8 message schema that checks v0.8 messages. | Hand-written message processing. |

@@ -68,6 +68,15 @@ See [the token](./runs.mdx#the-token) and [credentials](./configuration.mdx#cred
 
 "The stream ended without a valid RUN_FINISHED or RUN_ERROR event" (rule `terminal.missing`) means no valid closing event arrived. If you pressed Stop, this finding is expected. Otherwise, check that the last event passed validation: its frame has no `json` or `schema` tag. Check that its Server-Sent Events (SSE) block ended with a blank line. Also look for a `transport` finding, which shows the connection was lost first. See [missing terminal events](./inspection.mdx#missing-terminal-events).
 
+## A protobuf run fails or shows unreadable bytes
+
+- The frames look right but the run fails. Check the `Content-Type` of the answer. It must be `application/vnd.ag-ui.event+proto` and nothing more. With a parameter, such as `; charset=utf-8`, the protocol client reads the bytes as server-sent events and the run has no events. The recording is right, so open the exchange and compare.
+- One `partial` frame holds the whole answer, with a `binary` finding that mentions another encoding. You chose protobuf and the server answered in server-sent events. Choose server-sent events in Settings, or make the server honor the `Accept` header.
+- A few `control` or `partial` frames with no event, and a missing terminal event. You chose server-sent events and the server answered in protobuf. Choose protobuf.
+- The exchange shows an error status, such as 406, and no frames. The server did not accept the protobuf media type in `Accept`. The body is kept as text under the request.
+
+See [Protobuf streams](./protobuf.mdx#findings) for every finding.
+
 ## An event is in Frames but not in the conversation
 
 The inspector builds the conversation from valid events only. A frame with a `json` or `schema` tag adds nothing to it. A frame with a `compat` tag is an older shape that the protocol client still accepts. It is not projected either, because only current valid events are. The finding says what to change on the server. A "Not shown" note in the conversation marks a valid event that refers to something that never started, such as text for a message with no `TEXT_MESSAGE_START`. In that case the run has a `sequence` finding. See [Read frames and findings](./inspection.mdx) and the [event reference](./event-views.mdx).

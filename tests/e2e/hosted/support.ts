@@ -14,6 +14,7 @@ import { expect, test as base, type Page } from '@playwright/test';
 import { contradictionEvents } from '../../../examples/reference-agent/rule-fixtures.ts';
 import { interactiveResponse, SUBAGENTS, type RunInput } from '../../../examples/reference-agent/scenarios.ts';
 import { buildApp } from '../../../scripts/build.mjs';
+import { acceptsProtobuf, frameProtobuf, PROTOBUF_MEDIA_TYPE } from '../../../examples/reference-agent/protobuf.ts';
 
 export const root = path.resolve(import.meta.dirname, '..', '..', '..');
 export const SYNTHETIC_TOKEN = 'synthetic-token-7f3a91';
@@ -26,6 +27,8 @@ export interface Seen {
   readonly cookie: string | undefined;
   /** Whether the credential header arrived and what it held; the agent never echoes it back. */
   readonly token: string | undefined;
+  /** The Accept header as it arrived: the encoding the page asked for. */
+  readonly accept?: string | undefined;
 }
 
 export interface Origin {
@@ -137,7 +140,7 @@ const close = (server: Server) =>
   });
 
 /** What every scripted agent answers, on whichever origin it is asked. */
-function answer(pathname: string, input: { threadId?: unknown; runId?: unknown; messages?: unknown } | undefined, response: ServerResponse, redirectTo: () => string): void {
+function answer(pathname: string, input: { threadId?: unknown; runId?: unknown; messages?: unknown } | undefined, response: ServerResponse, redirectTo: () => string, accept?: string): void {
   if (pathname === '/redirect') {
     response.writeHead(302, { location: `${redirectTo()}/agent` });
     return void response.end();
@@ -171,8 +174,14 @@ function answer(pathname: string, input: { threadId?: unknown; runId?: unknown; 
             : pathname === '/subagents'
               ? subagentEvents(runId)
               : [{ type: 'TEXT_MESSAGE_START', messageId: 'msg-1', role: 'assistant' }, { type: 'TEXT_MESSAGE_CONTENT', messageId: 'msg-1', delta: AGENT_REPLY }, { type: 'TEXT_MESSAGE_END', messageId: 'msg-1' }];
+  const events = [{ type: 'RUN_STARTED', threadId, runId }, ...activity, { type: 'RUN_FINISHED', threadId, runId, outcome: { type: 'success' } }];
+  // A server written with EventEncoder: protobuf when the request's Accept asks for it, server-sent events otherwise.
+  if (acceptsProtobuf(accept)) {
+    response.writeHead(200, { 'content-type': PROTOBUF_MEDIA_TYPE, 'cache-control': 'no-store' });
+    return void response.end(Buffer.concat(events.map((event) => Buffer.from(frameProtobuf(event)))));
+  }
   response.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store' });
-  response.end(sse([{ type: 'RUN_STARTED', threadId, runId }, ...activity, { type: 'RUN_FINISHED', threadId, runId, outcome: { type: 'success' } }]));
+  response.end(sse(events));
 }
 
 function agentServer(seen: Seen[], cors: () => string | undefined, redirectTo: () => string, files: () => Record<string, string>): Server {
@@ -193,7 +202,7 @@ function agentServer(seen: Seen[], cors: () => string | undefined, redirectTo: (
     }
     const body = await readBody(request);
     const tokenHeader = request.headers['authorization'] ?? request.headers['x-api-key'];
-    seen.push({ method: request.method ?? '', path: pathname, body, cookie: request.headers.cookie, token: Array.isArray(tokenHeader) ? tokenHeader[0] : tokenHeader });
+    seen.push({ method: request.method ?? '', path: pathname, body, cookie: request.headers.cookie, token: Array.isArray(tokenHeader) ? tokenHeader[0] : tokenHeader, accept: request.headers.accept });
 
     const file = files()[pathname];
     if (request.method === 'GET' && file !== undefined) {
@@ -207,7 +216,7 @@ function agentServer(seen: Seen[], cors: () => string | undefined, redirectTo: (
       response.writeHead(400, { 'content-type': 'application/json' });
       return void response.end('{"error":"request body is not valid JSON"}');
     }
-    answer(pathname, input, response, redirectTo);
+    answer(pathname, input, response, redirectTo, request.headers.accept);
   });
 }
 
@@ -237,7 +246,7 @@ async function openSite(dist: string, options: SiteOptions): Promise<{ site: Sit
       } catch {
         input = undefined;
       }
-      return answer(pathname, input, response, () => origins.foreign.origin);
+      return answer(pathname, input, response, () => origins.foreign.origin, request.headers.accept);
     }
     pageSeen.push({ method: 'GET', path: pathname, body: '', cookie: request.headers.cookie, token: undefined });
     const extra = options.files?.[pathname];

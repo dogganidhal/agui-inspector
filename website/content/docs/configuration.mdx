@@ -144,7 +144,7 @@ Capabilities show in the eleven documented groups: `identity`, `transport`, `too
 
 ## Client profile
 
-The profile is what the inspector declares and sends: seven settings. Three more optional settings say how the inspector answers a run's interrupts and client tool calls. There are no others.
+The profile is what the inspector declares and sends: eight settings. Three more optional settings say how the inspector answers a run's interrupts and client tool calls. There are no others.
 
 | Setting | Effect on the next run input |
 | --- | --- |
@@ -154,6 +154,7 @@ The profile is what the inspector declares and sends: seven settings. Three more
 | `renderA2ui` | None. It decides whether [A2UI surfaces](./a2ui.mdx) render or stay as JSON in the views. |
 | `injectA2uiTool` | Adds the official `render_a2ui` tool from `@ag-ui/a2ui-middleware` to `tools`. It replaces a profile tool with the same name, so the name never appears twice. |
 | `messageMode` | `full` or `turn`. When set, it overrides the [preset's mode](./presets.mdx#forwarded-properties-and-message-mode). When absent, the preset decides. |
+| `encoding` | None. It changes the `Accept` header of runs and raw submissions, not the body. `sse` or `protobuf`. When set, it overrides the [preset's encoding](./presets.mdx#encoding). When absent, the preset decides, and without one the encoding is `sse`. See [Protobuf streams](./protobuf.mdx). |
 | `forwardedProps` | Merged over the preset's properties. If both define a name, the profile wins. `a2uiAction` is reserved. |
 | `interruptReply` | `resolve` or `cancel`. None. When set, the inspector answers every interrupt of a finished run and sends the continuation. When absent, you answer by hand. |
 | `interruptPayloads` | None. An object from an interrupt `reason` to a JSON payload, never `null`. Resolve sends the payload for the interrupt's reason, as written. Without one it sends the starting answer from the response schema. It is kept when `interruptReply` is not `resolve`. |

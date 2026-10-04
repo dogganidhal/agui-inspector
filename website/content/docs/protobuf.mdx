@@ -1,0 +1,89 @@
+---
+title: Protobuf streams
+description: How to choose the protobuf encoding, what the inspector sends and records, what a server must send back, and what each finding means.
+---
+
+An AG-UI server can answer a run in two encodings. Server-sent events (SSE) is the default. The other is protobuf, where each event is a binary frame. The inspector records both in the same way and shows both in the same views. This page explains how to ask for protobuf, what a server must do to be inspected, and how to read a stream that is damaged.
+
+## Choose the encoding
+
+There are two places to choose it.
+
+- In Settings, under Client profile, the Encoding control offers Preset default, Server-sent events and Protobuf. You reach it in two steps: open Settings, then choose.
+- In a [preset](./presets.mdx#encoding), the `encoding` field sets the default for one agent. Use it when you embed the inspector next to a server that speaks protobuf.
+
+```json title="config.json"
+{
+  "version": 0,
+  "agents": [{ "id": "support", "url": "/agents/support", "preset": { "encoding": "protobuf" } }]
+}
+```
+
+The profile wins when both are set. With neither, the encoding is server-sent events, as in 0.1.0. The choice is saved with the [client profile](./configuration.mdx#client-profile) and exported with it. The profile field is `encoding`, and it is optional, so a profile from 0.1.0 still loads.
+
+A change applies to the next request. The thread continues with its messages and state. Earlier exchanges keep the encoding they were read with.
+
+## What the inspector sends
+
+Every run request, continuation, surface action and raw submission asks for the encoding you chose in the `Accept` header:
+
+| Encoding | `Accept` |
+| --- | --- |
+| Server-sent events | `text/event-stream` |
+| Protobuf | `application/vnd.ag-ui.event+proto` |
+
+A protobuf request names only the protobuf media type. It does not list server-sent events as a fallback. Preparation requests and configuration requests are not affected, and no request body changes. The [raw request editor](./runs.mdx#raw-submissions) sends the text you typed, unchanged, and follows the same choice, because a server that speaks protobuf has to be asked for it.
+
+The inspector reads the answer in the encoding you chose. It does not read the answer's headers to find out. That keeps the rule that the [recorder reads no header](./internals.mdx#what-the-recorder-never-touches). If the server answers in the other encoding, the bytes are kept and flagged (see [findings](#findings)).
+
+## What a server must send
+
+- A status from 200 to 299. Any other status is read as an error and kept as text, as for server-sent events.
+- The header `Content-Type: application/vnd.ag-ui.event+proto`, exactly. Do not add a parameter such as `; charset=utf-8`. The protocol client compares the whole value to choose its parser. With a parameter it reads the bytes as server-sent events, and the run fails.
+- One frame for each event. A frame is four bytes that hold the length of the message as an unsigned big-endian integer, then the message that `encode` from `@ag-ui/proto` writes. A frame, length prefix included, can be 10 MB at most.
+
+A TypeScript server that uses `EventEncoder` from `@ag-ui/encoder` does all of this when it is created with the request's `Accept` header: `new EventEncoder({ accept })`. Its `getContentType()` gives the header value, and `encodeBinary(event)` gives the frame.
+
+## What the inspector records
+
+Each frame is one frame in the list, in arrival order. The network can cut the stream anywhere, in the middle of a length prefix too, and the frames are the same. A frame's offset is the offset of the read that brought its last byte.
+
+- The exchange row has a `protobuf` tag. A frame row has a `binary` tag, and the same type and summary as the same event in server-sent events.
+- Open a frame to see its first 4,096 bytes as hexadecimal text, with two digits for each byte and sixteen bytes on a line. The label says how many bytes the frame has and how many are not shown. Below it is the decoded event as formatted JSON.
+- Copy bytes copies all the bytes as hexadecimal text. Copy event copies the decoded event as JSON. The copy button on the exchange row copies the frames as JSON, with each frame's bytes in base64.
+- The filter finds a binary frame by its event type and by the content of its decoded event. It does not search the hexadecimal text.
+
+The decoded event goes through the same schema check as an event from server-sent events. The conversation, state, interrupt, tool and A2UI views are built from it in the same way. All 31 event types decode to the same events in both encodings.
+
+The protocol client reads the original response, byte for byte. The copy with converted line endings that [server-sent events get](./internals.mdx#how-the-client-branch-stays-untouched) is not made for protobuf, because the bytes are not text.
+
+## Findings
+
+A damaged stream never stops the recording. Every byte that arrived is kept, in order, and nothing is repaired.
+
+| What arrived | What you see |
+| --- | --- |
+| Bytes that are not a protobuf event, or an empty message | A frame with the `binary` finding "The bytes are not a valid protobuf event, so no event could be read", rule `binary.undecodable-frame`. The frames after it are still read. |
+| An event from a later protocol that this build does not know | A frame with no event type and a `schema` finding, rule `schema.unknown-event-type`, that says the event type is not in the supported baseline. The protocol client drops such an event and writes a warning to the browser console. The recording keeps it. |
+| An event that decodes and fails the event schema | A frame with the event and a `schema` finding, rule `schema.invalid-event`, that names the failing fields. |
+| A frame larger than 10 MB, length prefix included | The frames before it are unchanged. Every byte from that length prefix to the end of the stream is kept as one `partial` frame with a `binary` finding, rule `binary.unreadable-stream`. Nothing after it is split into frames. |
+| A stream that ends inside a frame or inside a length prefix | One `partial` frame holds the bytes that arrived. The run gets the usual finding for a [missing terminal event](./inspection.mdx#missing-terminal-events). |
+| A stream the protocol client could not read | A `binary` finding on the run, rule `binary.client-failed`, in the client's own words, and no connection banner. |
+
+The [rule catalogue](./rules.mdx#binary) lists the three `binary` rules.
+
+Two mistakes look alike:
+
+- You chose protobuf and the server answered in server-sent events. The first four bytes of `data: ` read as a length are far above 10 MB, so the whole answer is kept as one `partial` frame with a `binary` finding that mentions another encoding. Choose server-sent events, or make the server honor the `Accept` header.
+- You chose server-sent events and the server answered in protobuf. The bytes are read as text. They show as a few `control` or `partial` frames with no event, and the run gets the finding for a missing terminal event. Choose protobuf.
+
+If the run fails although the frames look right, check the `Content-Type` of the answer. See [troubleshooting](./troubleshooting.mdx#a-protobuf-run-fails-or-shows-unreadable-bytes).
+
+## Recordings
+
+A session export keeps each binary frame's bytes as base64 in the optional `bytes` field, and marks a protobuf exchange with `encoding: "protobuf"`. Import decodes the bytes again and refuses a file in which they do not match the decoded event. Importing a file gives back the same bytes, byte for byte. The format stays at version 0. [Recordings](./recordings.mdx#binary-frames) lists the fields and the checks. The warning before an export covers binary frames, because their bytes are the received evidence.
+
+## Not included
+
+- Resuming a run with `connectAgent`. In `@ag-ui/client` 1.0.1, `HttpAgent` has no `connect()`, and AG-UI defines no HTTP request for it. It is tracked in [issue 95](https://github.com/dogganidhal/agui-inspector/issues/95).
+- Finding the encoding from the answer. You choose it.

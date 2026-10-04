@@ -1,6 +1,6 @@
 ---
 title: Presets
-description: Per-agent variables, forwarded properties, message mode, preparation requests and quick messages.
+description: Per-agent variables, forwarded properties, message mode, encoding, preparation requests and quick messages.
 ---
 
 Add a preset when your server needs setup requests before a run, extra forwarded properties, or messages you send often. The inspector core has no server-specific routes or message rules. Anything specific to your server comes from the agent's `preset` in the [configuration file](./configuration.mdx#configuration-file). Presets are version 0 and not yet stable, like the rest of that file.
@@ -63,6 +63,16 @@ The inspector merges `forwardedProps` into every conversation run, including con
 `messages` is `full` (the default) or `turn`. `full` sends the whole transcript. `turn` sends only what the turn adds: the new user message, the tool results, or nothing for a resume.
 
 The [client profile](./configuration.mdx#client-profile) can override both. Its `messageMode`, if set, replaces the preset's mode. Its `forwardedProps` are merged over the preset's, so the profile wins when both define a name.
+
+## Encoding
+
+`encoding` is `sse` (the default) or `protobuf`. It says which encoding this agent's server speaks. Runs, continuations, surface actions and raw submissions ask for it in the `Accept` header. Preparation requests are not affected.
+
+```json
+{ "agents": [{ "id": "support", "url": "/agents/support", "preset": { "encoding": "protobuf" } }] }
+```
+
+The [client profile](./configuration.mdx#client-profile) can override it. Its `encoding`, if set, replaces the preset's. Any other value is reported like any other invalid preset field, and names the field. See [Protobuf streams](./protobuf.mdx).
 
 ## Preparation requests
 

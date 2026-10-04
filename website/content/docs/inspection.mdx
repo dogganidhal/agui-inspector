@@ -14,7 +14,8 @@ Start in Inspection, on the Frames tab. The list has one row for each exchange, 
 
 - An exchange is one HTTP request and its response: a run request, a preparation request or a raw submission. Its row shows the method and path, a tag (the run, `prepare` or `raw`), the status, the elapsed time, the frame count and the number of issues, if any. A request that got no response shows `failed` instead of the status, or `stopped` if you stopped it first. A `live` tag marks an exchange still being recorded.
 - Open an exchange to see the request body as sent, any finding on the exchange or its run, a non-stream response body, a timeline of arrivals, and its frames.
-- A frame is one block from the event stream, in arrival order, with its offset in seconds since the request was sent. A check mark means the frame is a valid AG-UI event. A tag names the kind of the frame's finding (`json`, `schema`, `compat`, `capability`). Open the frame to see every finding with its rule id. A `control` or `partial` tag marks a block that is not an event, such as a keep-alive comment or an unfinished block left when the stream ended.
+- A frame is one block from the event stream, in arrival order, with its offset in seconds since the request was sent. A check mark means the frame is a valid AG-UI event. A tag names the kind of the frame's finding (`json`, `schema`, `compat`, `capability`, `binary`). Open the frame to see every finding with its rule id. A `control` or `partial` tag marks a block that is not an event, such as a keep-alive comment or an unfinished block left when the stream ended.
+- A run read as [protobuf](./protobuf.mdx) has a `protobuf` tag on its exchange row and a `binary` tag on each frame row. Open a frame to see its first 4,096 bytes as hexadecimal text, how many bytes it has, and the decoded event.
 - Open a frame to see it as received, formatted if it is valid JSON. Its Copy button copies the exact text. The copy button on an exchange row copies all its frames as JSON.
 - A finding explains a problem with a frame, a run or its connection. It sits beside the evidence and never replaces or changes it. Each finding shows the id of its rule, such as `sequence.text-message-not-open`. The [rule catalogue](./rules.mdx) lists every rule and what to check.
 
@@ -45,6 +46,7 @@ The finding goes on the exchange's run if the session already has that run, othe
 | --- | --- | --- |
 | `json` | Frame, and the run when the protocol client rejected it | The frame's data is not JSON, empty data included. |
 | `schema` | Frame, and the run when the protocol client rejected it | The data is JSON but not a valid event: a `type` outside the 31 baseline types, a wrong or missing field, or JSON that is not an object. |
+| `binary` | Frame, and the run when the protocol client rejected the stream | Bytes of a [protobuf](./protobuf.mdx#findings) run that cannot be read: a frame that is not a protobuf event, a frame larger than 10 MB (the rest of the stream is kept as one `partial` frame), or a stream the protocol client could not read. |
 | `sequence` | Run | Each event is valid alone, but the order is wrong, for example a text message that never started. The protocol client reports it. |
 | `terminal` | Run, or the exchange | The stream ended without a valid terminal event. |
 | `transport` | Exchange | The request failed before a response, or the connection failed during the stream. The message holds only the error's name and message. |
@@ -66,9 +68,9 @@ Derived data (the conversation, subagent lanes and their timeline, the current s
 
 ## How the stream becomes frames
 
-The inspector splits the stream at blank lines. LF, CRLF and CR all end a line, in any mix. How the network split the stream into chunks never changes the frames. Each frame keeps its original text with every delimiter, so the frames list shows the line endings your server used. Bytes that are not valid UTF-8 show as U+FFFD.
+The inspector splits the stream at blank lines. LF, CRLF and CR all end a line, in any mix. How the network split the stream into chunks never changes the frames. Each frame keeps its original text with every delimiter, so the frames list shows the line endings your server used. Bytes that are not valid UTF-8 show as U+FFFD. A protobuf stream is split at its four-byte length prefixes instead, and each frame keeps its bytes.
 
-The protocol client reads its own copy of the response while the recorder reads another, so recording continues when the client rejects the stream. No request or response header is recorded. The inspector ignores `Content-Type`. It reads the response to a run request as an event stream, and keeps a non-2xx response as text without reading it as events. The session lives in memory only. A reload clears it, so export it first to keep it.
+The protocol client reads its own copy of the response while the recorder reads another, so recording continues when the client rejects the stream. No request or response header is recorded. The inspector ignores `Content-Type`. It reads the response to a run request in the encoding you chose, as an event stream or, for [protobuf](./protobuf.mdx), as binary frames, and keeps a non-2xx response as text without reading it as events. The session lives in memory only. A reload clears it, so export it first to keep it.
 
 <Callout type="warn">
 A server can echo a credential in its body. The inspector never writes a credential it holds and keeps the target's bytes unchanged. Nothing is redacted, hashed or treated differently, and no frame text reaches summaries or findings except an identifier such as a message id. Exports carry a warning instead. See [recordings](./recordings.mdx#read-this-before-you-share-a-file).

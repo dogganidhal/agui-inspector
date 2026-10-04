@@ -11,8 +11,11 @@ import {
   scenarioSend,
   type RecorderScenario,
 } from '../../../../examples/reference-agent/recorder-fixtures.ts';
+import { concat as concatBytes, protobufScenarios } from '../../../../examples/reference-agent/protobuf-fixtures.ts';
 import type { Exchange, ExchangeId, ExchangePatch, Finding } from '../../src/contracts.ts';
+import { createFrameSink } from '../../src/core/frames/index.ts';
 import { createRecorder, type RecorderSink } from '../../src/core/recorder/index.ts';
+import { createSessionStore } from '../../src/core/store/index.ts';
 
 const TERMINAL = ['completed', 'transport-error', 'user-stopped'];
 const decoder = new TextDecoder();
@@ -215,6 +218,67 @@ test('a non-2xx answer to a run request is kept as body evidence, not read as ev
   assert.deepEqual(memory.findings, []);
 });
 
+// ---- protobuf exchanges (spec 013) ---------------------------------------------------------------
+
+test('a protobuf request is recorded as protobuf and its chunks reach the sink as the bytes that arrived', async () => {
+  const scenario = protobufScenarios.baselineRun;
+  const { memory, recorder } = setup();
+  const response = await recorder.record(scenario.request, scenarioSend(scenario));
+  const clientBytes = await readAll(response.body);
+  const exchange = await memory.settled(memory.only().id);
+
+  assert.equal(exchange.encoding, 'protobuf');
+  assert.equal(exchange.status, 200);
+  assert.equal(exchange.transport, 'completed');
+  assert.equal(exchange.responseBody, undefined, 'a stream is not kept as body text');
+  assert.deepEqual(memory.bytesOf(exchange.id), scenarioBytes(scenario));
+  assert.deepEqual(memory.chunksOf(exchange.id).map((chunk) => chunk.bytes.length), scenario.chunks.map((chunk) => chunk.length), 'one chunk for each read');
+  assert.deepEqual(clientBytes, scenarioBytes(scenario), 'the client reads the same bytes, untouched');
+  assert.deepEqual(memory.findings, []);
+});
+
+test('a server-sent-events request records no encoding, and an ordinary request is never read as a stream', async () => {
+  const { memory, recorder } = setup();
+  const sse = recorderScenarios.splitStream;
+  await (await recorder.record(sse.request, scenarioSend(sse))).arrayBuffer();
+  const plain = recorderScenarios.errorTextBody;
+  await (await recorder.record(plain.request, scenarioSend(plain))).arrayBuffer();
+  const [first, second] = memory.all();
+  await memory.settled(first!.id);
+  await memory.settled(second!.id);
+
+  assert.equal(memory.all()[0]!.encoding, undefined);
+  assert.equal(memory.all()[1]!.encoding, undefined);
+  assert.deepEqual(memory.chunksOf(second!.id), []);
+});
+
+test('a non-2xx answer to a protobuf request is kept as body text, with no chunks and no encoding claim on the frames', async () => {
+  const base = recorderScenarios.errorJsonBody;
+  const scenario: RecorderScenario = { ...base, request: { ...base.request, responseKind: 'protobuf' } };
+  const { memory, recorder } = setup();
+  const response = await recorder.record(scenario.request, scenarioSend(scenario));
+  const clientText = await response.text();
+  const exchange = await memory.settled(memory.only().id);
+
+  assert.equal(exchange.status, 422);
+  assert.equal(exchange.encoding, 'protobuf', 'it was asked for as protobuf; the answer is an error body');
+  assert.equal(exchange.responseBody, '{"error":"threadId and runId must be strings"}');
+  assert.equal(clientText, exchange.responseBody);
+  assert.deepEqual(memory.chunksOf(exchange.id), []);
+  assert.deepEqual(memory.findings, []);
+});
+
+test('a protobuf stream that is stopped or cut keeps what arrived and ends as a server-sent-events stream does', async () => {
+  const cutScenario: RecorderScenario = { ...protobufScenarios.baselineRun, chunks: protobufScenarios.baselineRun.chunks.slice(0, 5), ending: 'network-error' };
+  const { memory, recorder } = setup();
+  const response = await recorder.record(cutScenario.request, scenarioSend(cutScenario));
+  await response.arrayBuffer().catch(() => undefined);
+  const exchange = await memory.settled(memory.only().id);
+  assert.equal(exchange.transport, 'transport-error');
+  assert.equal(exchange.encoding, 'protobuf');
+  assert.deepEqual(memory.bytesOf(exchange.id), concat(cutScenario.chunks));
+});
+
 test('an ordinary response is read whole, with split multibyte text decoded exactly', async () => {
   const scenario = recorderScenarios.errorTextBody;
   const { memory, recorder } = setup();
@@ -377,6 +441,28 @@ test('stopping a run keeps the partial evidence and does not manufacture a termi
   assert.deepEqual(memory.bytesOf(exchange.id), scenarioBytes(scenario), 'partial evidence stays exactly as received');
   assert.ok(!decoder.decode(memory.bytesOf(exchange.id)).includes('RUN_FINISHED'));
   assert.deepEqual(memory.findings, [], 'no finding, no outcome: the recorder only reports transport status');
+});
+
+test('stopping a protobuf run in the middle of a frame keeps the bytes that arrived, and the reader keeps them as a partial frame', async () => {
+  const half = protobufScenarios.baselineRun.chunks;
+  const scenario: RecorderScenario = { ...protobufScenarios.baselineRun, chunks: [concatBytes(half).slice(0, 40), concatBytes(half).slice(40, 53)], ending: 'hold-until-abort' };
+  const stop = new AbortController();
+  const store = createSessionStore({ schedule: (callback) => callback() });
+  const recorder = createRecorder(createFrameSink(store), steppedClock());
+  const response = await recorder.record(scenario.request, scenarioSend(scenario, stop.signal));
+  const reader = response.body!.getReader();
+  await reader.read();
+  await reader.read();
+  while ((store.snapshot().frames.length === 0 && store.snapshot().exchanges[0]?.transport === 'streaming') || store.snapshot().exchanges[0]?.transport === 'sending') await new Promise((resolve) => setTimeout(resolve, 0));
+  stop.abort();
+  await assert.rejects(reader.read(), { name: 'AbortError' });
+  while (store.snapshot().exchanges[0]?.transport !== 'user-stopped') await new Promise((resolve) => setTimeout(resolve, 0));
+
+  const { exchanges, frames, findings } = store.snapshot();
+  assert.equal(exchanges[0]!.encoding, 'protobuf');
+  assert.equal(frames.at(-1)?.classification, 'partial', 'the unfinished frame is kept as evidence');
+  assert.deepEqual(concatBytes(frames.map((frame) => Uint8Array.from(Buffer.from(frame.bytes!, 'base64')))), concatBytes(scenario.chunks), 'every byte that arrived, nothing invented');
+  assert.deepEqual(findings.filter((finding) => finding.kind !== 'terminal'), [], 'a stop adds no finding but the missing terminal event');
 });
 
 test('aborting before a response arrives is a user stop and the abort reaches the caller', async () => {
