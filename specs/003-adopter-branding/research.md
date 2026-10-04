@@ -63,10 +63,10 @@ stop an `<img>` from loading.
 
 ## R4. A logo that fails to load
 
-**Decision**: `onError` on each `<img>` marks that logo as failed. A failed light logo shows the default mark in the
-light wrapper. A failed dark logo shows the default mark in the dark wrapper. The component reports each failed field
-once, and the app adds `brand.logo could not be loaded; the default mark is shown` (or `brand.logoDark`) to the
-warning list it renders.
+**Decision**: `onError` on each `<img>` reports that logo as failed to `App`, which keeps the failed fields. `Brand`
+receives them as a prop and shows the default mark in place of a failed image, inside its own wrapper: the light
+wrapper for `logo`, the dark wrapper for `logoDark`. `App` adds `brand.logo could not be loaded; the default mark is
+shown` (or `brand.logoDark`) to the warning list it renders.
 
 **Reason**: A broken image icon in the top bar looks like a bug in the inspector. The warning tells the adopter why the
 default mark is back. It also covers a same-origin redirect that the policy blocks.
@@ -84,8 +84,9 @@ mark test keep passing. The logo has no frame: the accent-colored square belongs
 **Accessibility**: The `<h1>` carries the name. Images use `alt=""`. The wrapper is `aria-hidden`, as the default mark
 is. Nothing takes focus.
 
-**Size**: The logo is as tall as the default mark's square and at most about six times that wide. The name is cut with an
-ellipsis at a fixed width, so neither can break the bar's row.
+**Size**: The logo is as tall as the default mark's square and at most 160 px wide. The name is cut with an ellipsis at 240 px.
+Both limits shrink with the viewport (30% and 40% of it) so that the brand and the theme switch share one row on a
+phone. Neither can break the bar's row.
 
 ## R6. The Python argument
 

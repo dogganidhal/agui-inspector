@@ -64,7 +64,7 @@ unknown field name is quoted, through the existing `shown` helper.
 
 ## Load state
 
-Transient, in the page, never stored.
+Transient, kept by `App`, never stored.
 
 | State | Meaning |
 | --- | --- |

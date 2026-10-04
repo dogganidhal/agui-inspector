@@ -35,7 +35,7 @@ loadConfig(url: string, fetchText: FetchText, page?: PageLocation): Promise<Resu
 ```
 
 - `ParsedConfig.brand` holds the valid fields, with logos resolved to `href`. It is absent when nothing is valid.
-- `ParsedConfig.warnings` holds the brand warnings after the theme warnings, in field order.
+- `ParsedConfig.warnings` holds the brand warnings after the theme warnings: unknown fields first, then `name`, `logo` and `logoDark`.
 - `brand` is an allowed top-level key. `brand` problems never return an error result.
 
 `startPage` passes `{ origin: env.origin, baseUrl: env.baseUrl }` and returns `Started.brand`.
@@ -75,8 +75,9 @@ With a brand:
 - With a valid `logo` the `agui-app-mark` span is replaced by `<span class="agui-app-logo" aria-hidden="true">`.
   - Without `logoDark`: one `<img class="agui-app-logo-img" src="…" alt="">`.
   - With `logoDark`: two wrappers, `<span data-for="light">` and `<span data-for="dark">`, each with one image.
-- A failed image is replaced, in its wrapper, by the default mark's `agui-app-mark` span.
-- Images are limited by the stylesheet to the default mark's height and a fixed maximum width, with proportions kept.
+- A failed image is replaced, inside its own wrapper (the `agui-app-logo` span for a single logo), by the default mark's `agui-app-mark` span.
+- `Brand({ brand, failed, onFailed })` holds no state. `App` keeps the failed fields and passes them down.
+- Images are limited by the stylesheet to the default mark's height and a maximum width (160 px, or 30% of the viewport when that is less), with proportions kept. The name is cut at 240 px, or 40% of the viewport when that is less.
 - The stylesheet shows `data-for="dark"` only under the dark selectors that `tokens.css` uses, and `data-for="light"`
   otherwise.
 - The load-failure warnings use the existing `agui-app-warnings` region and `Finding` with kind "Configuration".

@@ -6,7 +6,7 @@ Run these from the repository root after implementation. Node 24 or newer and uv
 
 ```sh
 npm ci --ignore-scripts
-npm run test:unit -- packages/inspector/tests/config/brand
+npm run test:unit -- packages/inspector/tests/config/brand.test.ts
 npm run test:unit -- packages/inspector/tests/hosted
 npm run test:unit -- packages/inspector/tests/foundation
 ```

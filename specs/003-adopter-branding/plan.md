@@ -103,8 +103,8 @@ packages/inspector/src/
 │   └── index.ts                      # parseBrand(); parseConfig(text, page?); loadConfig(url, fetch, page)
 └── app/
     ├── startup.ts                    # hands the page's origin and location to loadConfig; Started.brand
-    ├── brand.tsx                     # new: the top bar's mark and name
-    ├── index.tsx                     # uses <Brand>; merges the load-failure warnings
+    ├── brand.tsx                     # new: the top bar's mark and name; stateless, takes the failed logos as a prop
+    ├── index.tsx                     # uses <Brand>; keeps the failed logos and merges their warnings
     └── app.css                       # logo size, theme-matched visibility, name ellipsis
 
 packages/python/
@@ -117,6 +117,8 @@ packages/inspector/tests/
 └── hosted/app.test.tsx               # markup: default, name, logo, dark logo
 
 tests/e2e/branding/brand.spec.ts      # hosted, embedded, Python, static; light and dark; rejected values; network
+tests/e2e/hosted/serving.ts           # the Python and generic static serving helpers, moved out of the theme spec and shared
+tests/e2e/hosted/support.ts           # `files` entries may answer 302 (a same-origin logo that redirects)
 
 website/content/docs/
 ├── configuration.mdx                 # field, rules, warnings, compatibility note
