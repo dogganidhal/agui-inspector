@@ -477,6 +477,97 @@ test('an invalid profile file is a visible error and leaves the current profile 
 });
 
 // ---------------------------------------------------------------------------------------------
+// Spec 004: automatic replies are set in the panel and kept in the profile
+// ---------------------------------------------------------------------------------------------
+
+const replyChoice = (page: Page, name: string) => page.getByRole('group', { name: 'Interrupt replies' }).getByRole('button', { name, exact: true });
+
+test('the panel sets the three automatic-reply settings; they survive a reload, an export and an import, and none reaches the run input', async ({ page, site }) => {
+  await open(page, site);
+  await selectAgent(page, 'Support assistant', /^Plain agent/);
+  await expect(replyChoice(page, 'By hand')).toHaveAttribute('aria-pressed', 'true');
+  const plain = await send(page, site, 'same message');
+
+  await page.getByRole('textbox', { name: 'Tool name' }).fill('pick_color');
+  await page.getByRole('textbox', { name: 'Tool description' }).fill('Pick a color');
+  await page.getByRole('button', { name: 'Add tool' }).click();
+  await expect(page.getByText('Pick a color · answered by hand')).toBeVisible();
+  await replyChoice(page, 'Resolve').click();
+  await page.getByRole('textbox', { name: 'Interrupt reason' }).fill('approval');
+  await page.getByRole('textbox', { name: 'Payload', exact: true }).fill('{"approved": true}');
+  await page.getByRole('button', { name: 'Add payload' }).click();
+  await page.getByRole('textbox', { name: 'Scripted result for pick_color' }).fill(' teal\n');
+  await expect(page.getByText('Pick a color · answered with a scripted result')).toBeVisible();
+
+  const stored = JSON.parse(await page.evaluate(() => localStorage.getItem('agui-inspector.profile') ?? 'null')) as { version: number; profile: Record<string, unknown> };
+  expect(stored.version).toBe(0);
+  expect(stored.profile).toMatchObject({ interruptReply: 'resolve', interruptPayloads: { approval: { approved: true } }, toolResults: { pick_color: ' teal\n' } });
+
+  // None of the three reaches the run input: the same keys, and the tool exactly as declared.
+  const input = await send(page, site, 'same message');
+  expect(Object.keys(input).sort()).toEqual(Object.keys(plain).sort());
+  expect(input.tools).toEqual([{ name: 'pick_color', description: 'Pick a color', parameters: { type: 'object', properties: {} } }]);
+  expect(JSON.stringify(input)).not.toMatch(/teal|approved|interruptReply|interruptPayloads|toolResults/);
+
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'Support assistant', exact: true })).toBeVisible();
+  await selectAgent(page, 'Support assistant', /^Plain agent/);
+  await expect(replyChoice(page, 'Resolve')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('textbox', { name: 'Payload for approval' })).toHaveValue('{\n  "approved": true\n}');
+  await expect(page.getByRole('textbox', { name: 'Scripted result for pick_color' })).toHaveValue(' teal\n');
+
+  const exported = await exportProfile(page);
+  const file = JSON.parse(exported) as { version: number; profile: Record<string, unknown> };
+  expect(file.version).toBe(0);
+  expect(Object.keys(file.profile).sort()).toEqual(['context', 'forwardedProps', 'injectA2uiTool', 'interruptPayloads', 'interruptReply', 'protocolVersion', 'renderA2ui', 'toolResults', 'tools']);
+  expect(file.profile).toMatchObject({ interruptReply: 'resolve', interruptPayloads: { approval: { approved: true } }, toolResults: { pick_color: ' teal\n' } });
+
+  // Undo everything in the panel: nothing is left of the three settings, in the profile or in the export.
+  await replyChoice(page, 'By hand').click();
+  await page.getByRole('button', { name: 'Remove payload for approval' }).click();
+  await page.getByRole('button', { name: 'Remove tool pick_color' }).click();
+  await expect(page.getByText('No payloads.')).toBeVisible();
+  const cleared = JSON.parse(await exportProfile(page)) as { profile: Record<string, unknown> };
+  expect(Object.keys(cleared.profile).sort()).toEqual(['context', 'forwardedProps', 'injectA2uiTool', 'protocolVersion', 'renderA2ui', 'tools']);
+
+  await importText(page, exported);
+  await expect(replyChoice(page, 'Resolve')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('textbox', { name: 'Payload for approval' })).toHaveValue('{\n  "approved": true\n}');
+  await expect(page.getByRole('textbox', { name: 'Scripted result for pick_color' })).toHaveValue(' teal\n');
+  expect(await exportProfile(page)).toBe(exported);
+});
+
+test('a profile file from 0.1.0 loads with every reply by hand, and a bad automatic-reply setting is a visible error that changes nothing', async ({ page, site }) => {
+  await open(page, site);
+  await protocolField(page).fill('1.4');
+  const base = { protocolVersion: '2.0', tools: [{ name: 'pick_color', description: '' }], context: [], renderA2ui: true, injectA2uiTool: false, forwardedProps: {} };
+  const file = (patch: object) => JSON.stringify({ version: 0, profile: { ...base, ...patch } });
+
+  const cases: Array<[label: string, text: string, message: RegExp]> = [
+    ['an unknown interrupt reply', file({ interruptReply: 'manual' }), /interruptReply must be "resolve" or "cancel"/],
+    ['a script for a tool the profile does not have', file({ toolResults: { nope: 'x' } }), /toolResults: no tool named "nope"/],
+    ['an empty script', file({ toolResults: { pick_color: '' } }), /toolResults\.pick_color must be nonempty text/],
+    ['an empty reason', file({ interruptPayloads: { '': 1 } }), /interruptPayloads: an interrupt reason cannot be empty/],
+    ['a null payload', file({ interruptPayloads: { approval: null } }), /interruptPayloads\.approval cannot be null/],
+    ['payloads that are not an object', file({ interruptPayloads: [] }), /interruptPayloads must be an object/],
+  ];
+  for (const [label, text, message] of cases) {
+    await importText(page, text);
+    await expect(page.getByRole('alert').filter({ hasText: message }), label).toBeVisible();
+    await expect(protocolField(page), `${label}: the previous profile is intact`).toHaveValue('1.4');
+    await expect(replyChoice(page, 'By hand'), `${label}: nothing was applied`).toHaveAttribute('aria-pressed', 'true');
+  }
+
+  await importText(page, file({}));
+  await expect(protocolField(page)).toHaveValue('2.0');
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await expect(replyChoice(page, 'By hand')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByText('No payloads.')).toBeVisible();
+  await expect(page.getByText('· answered by hand')).toBeVisible();
+  expect(runs(site)).toEqual([]);
+});
+
+// ---------------------------------------------------------------------------------------------
 // Network allowlist, keyboard
 // ---------------------------------------------------------------------------------------------
 

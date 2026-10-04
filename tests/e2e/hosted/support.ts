@@ -5,12 +5,13 @@
 // a static host's file would; the agents record what they receive, so a spec compares what reached
 // them (cookies, headers, bodies) with what the page claims.
 //
-// Self-contained on purpose: it imports the build script and nothing from another lane's tests.
+// Self-contained on purpose: it imports the build script and the reference agent's scenarios, and nothing from another lane's tests.
 import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import { expect, test as base, type Page } from '@playwright/test';
+import { interactiveResponse, type RunInput } from '../../../examples/reference-agent/scenarios.ts';
 import { buildApp } from '../../../scripts/build.mjs';
 
 export const root = path.resolve(import.meta.dirname, '..', '..', '..');
@@ -133,6 +134,13 @@ function answer(pathname: string, input: { threadId?: unknown; runId?: unknown; 
     return void response.end('{"error":"threadId and runId must be strings"}');
   }
   const { threadId, runId } = input;
+  if (pathname === '/interactive') {
+    // The reference agent's interactive scenarios (interrupts, client tools), so a spec can drive replies through the real app.
+    const reply = interactiveResponse(input as RunInput);
+    response.writeHead(reply.status, { 'content-type': reply.contentType, 'cache-control': 'no-store' });
+    for (const chunk of reply.chunks) response.write(chunk);
+    return void response.end();
+  }
   const activity =
     pathname === '/surface'
       ? [{ type: 'ACTIVITY_SNAPSHOT', messageId: 'activity-1', activityType: 'a2ui-surface', content: { a2ui_operations: formOperations }, replace: true }]

@@ -560,6 +560,42 @@ test('the settings view saves the profile in this browser, and a saved profile i
   await expect(page.getByRole('switch', { name: /Render A2UI/i })).not.toBeChecked();
 });
 
+test('the settings panel\'s automatic replies reach the next run through the app, are marked in the conversation, and survive a session export and import', async ({ page, openSite }, info) => {
+  const site = await openSite({ config: agentConfig((o) => `${o.agent.origin}/interactive`) });
+  await open(page, site);
+  await page.getByRole('group', { name: 'Inspection pane' }).getByRole('button', { name: 'Settings' }).click();
+  await page.getByRole('group', { name: 'Interrupt replies' }).getByRole('button', { name: 'Resolve', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Interrupt reason' }).fill('approval');
+  await page.getByRole('textbox', { name: 'Payload', exact: true }).fill('{"approved": true}');
+  await page.getByRole('button', { name: 'Add payload' }).click();
+
+  await send(page, 'interrupt');
+  const conversation = page.locator('[data-view="conversation"]');
+  await expect(conversation).toContainText('Resumed with i-approve=resolved:{"approved":true}, i-contact=resolved:{}');
+  await expect(page.locator('[data-view="replies"]'), 'no reply card waits: nobody clicked').toHaveCount(0);
+  const posted = site.agent.seen.filter((request) => request.method === 'POST' && request.path === '/interactive').map((request) => JSON.parse(request.body) as { parentRunId?: string; runId: string; resume?: unknown });
+  expect(posted).toHaveLength(2);
+  expect(posted[1]?.parentRunId).toBe(posted[0]?.runId);
+  expect(posted[1]?.resume).toEqual([
+    { interruptId: 'i-approve', status: 'resolved', payload: { approved: true } },
+    { interruptId: 'i-contact', status: 'resolved', payload: {} },
+  ]);
+  expect(JSON.stringify(posted[1]), 'the request does not say the reply was automatic').not.toMatch(/automatic/i);
+  await expect(conversation).toContainText('automatic · i-approve, i-contact');
+
+  await page.getByRole('group', { name: 'Inspection pane' }).getByRole('button', { name: 'Inspection' }).click();
+  await page.getByRole('button', { name: 'Export session' }).click();
+  const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('dialog').getByRole('button', { name: 'Export session' }).click()]);
+  const file = info.outputPath('session.json');
+  await download.saveAs(file);
+  expect(readFileSync(file, 'utf8')).toContain('"automaticReplies"');
+
+  await page.reload();
+  await page.locator('input[type="file"]').first().setInputFiles(file);
+  await expect(page.getByText('Imported recording: inspection only')).toBeVisible();
+  await expect(page.locator('[data-view="conversation"]')).toContainText('automatic · i-approve, i-contact');
+});
+
 // ---------------------------------------------------------------------------------------------
 // Layout, keyboard and labels
 // ---------------------------------------------------------------------------------------------
