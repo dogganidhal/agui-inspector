@@ -351,7 +351,9 @@ test('the A2UI core stays framework-free and independent of the optional render 
 test('nothing in the A2UI sources fetches, opens or sends anything on its own', () => {
   for (const { file, text } of [...sourcesUnder('core/a2ui'), ...sourcesUnder('views/a2ui')]) {
     assert.doesNotMatch(text, /\bfetch\(|XMLHttpRequest|sendBeacon|window\.open|new WebSocket|new EventSource|@import/, file);
-    assert.doesNotMatch(text, /https?:\/\//, `${file} names no remote address`);
+    // Catalog ids are addresses by spelling only: nothing requests them. Only the table of ids spells them.
+    const spelled = file === 'catalogs.ts' ? text.replaceAll(/https:\/\/a2ui\.org\/specification\/[\w./-]+/g, '') : text;
+    assert.doesNotMatch(spelled, /https?:\/\//, `${file} names no remote address`);
   }
 });
 

@@ -407,6 +407,27 @@ test('a missing or invalid stored choice, or storage that throws, leaves the roo
 
 const themeFile = (theme: unknown) => JSON.stringify({ version: 0, agents: [{ id: 'support', url: `${AGENT}/run` }], theme });
 
+const aliasFile = (catalogAliases: unknown) => JSON.stringify({ version: 0, agents: [{ id: 'support', url: `${AGENT}/run` }], catalogAliases });
+
+test('the catalog aliases in config.json are handed to the page with no extra request, and a bad one is a warning, in every deployment mode', async () => {
+  const aliases = { 'https://catalog.invalid/old/basic.json': 'https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json' };
+  const hosted = page({ [`${PAGE}/hosting-config.json`]: hostedFile(), [`${PAGE}/config.json`]: aliasFile({ ...aliases, '': 'x' }) });
+  const embedded = page({ [`${PAGE}/config.json`]: aliasFile(aliases) });
+  const bare = page({ [`${PAGE}/hosting-config.json`]: hostedFile(), [`${PAGE}/config.json`]: agentsFile({ id: 'support', url: `${AGENT}/run` }) });
+  for (const [name, site, warnings] of [['hosted', hosted, 1], ['embedded', embedded, 0]] as const) {
+    const result = started(await startPage(site.env));
+    assert.deepEqual(result.catalogAliases, aliases, name);
+    assert.equal(result.warnings.length, warnings, name);
+    assert.equal(result.error, undefined, name);
+    assert.equal(result.selectedAgentId, 'support', name);
+    assert.deepEqual(site.seen.map((request) => request.url), [`${PAGE}/hosting-config.json`, `${PAGE}/config.json`], `${name}: the same two requests as without aliases`);
+  }
+  const plain = started(await startPage(bare.env));
+  assert.equal(plain.catalogAliases, undefined);
+  assert.deepEqual(plain.warnings, []);
+  assert.deepEqual(hosted.policies, bare.policies, 'the content security policy is the same with and without aliases');
+});
+
 test('the theme in config.json is handed to the page with no extra request, in every deployment mode', async () => {
   const theme = { light: { '--agui-accent': '#2563eb' }, dark: { '--agui-accent': '#93c5fd', '--agui-radius': '4px' } };
   const hosted = page({ [`${PAGE}/hosting-config.json`]: hostedFile(), [`${PAGE}/config.json`]: themeFile(theme) });

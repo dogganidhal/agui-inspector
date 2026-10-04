@@ -133,9 +133,9 @@ test('malformed operations are reported with their position and the valid ones s
   await expect(alert).toContainText('Operation 2');
   await expect(alert).toContainText('not an object');
   await expect(alert).toContainText('Operation 3');
-  await expect(alert).toContainText('no version');
+  await expect(alert).toContainText('no version and no v0.8 message name');
   await expect(alert).toContainText('Operation 4');
-  await expect(alert).toContainText('Only A2UI v0.9 is supported');
+  await expect(alert).toContainText('declares version v0.8');
   await expect(alert).toContainText('Operation 5');
   await expect(alert).toContainText('Catalog not found');
   await expect(alert).toContainText('Operation 6');

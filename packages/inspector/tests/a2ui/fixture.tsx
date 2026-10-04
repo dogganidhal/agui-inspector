@@ -6,9 +6,9 @@ import { useState, type ReactElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import { A2uiSurface, basicCatalog, type ReactComponentImplementation } from '@a2ui/react/v0_9';
 import { MessageProcessor } from '@a2ui/web_core/v0_9';
-import type { A2uiAction, JsonValue } from '../../src/contracts';
+import type { A2uiAction, CatalogAliases, JsonValue } from '../../src/contracts';
 import { A2uiView, a2uiActivity } from '../../src/views/a2ui/index';
-import { continuation, type Operation } from '../../../../examples/reference-agent/a2ui-scenarios';
+import { continuation, v08Continuation, type Operation } from '../../../../examples/reference-agent/a2ui-scenarios';
 import '../../src/views/theme/index';
 import '../../src/views/a2ui/a2ui.css';
 
@@ -20,9 +20,12 @@ interface State {
   control?: JsonValue;
   /** When set, the view is reached the way the conversation view reaches it: through the whole activity content. */
   activity?: JsonValue;
+  /** The config's catalog aliases. The view reads them once, so a change starts a new view. */
+  aliases?: CatalogAliases;
+  generation: number;
 }
 
-const state: State = { operations: null, renderEnabled: true, continuing: false };
+const state: State = { operations: null, renderEnabled: true, continuing: false, generation: 0 };
 const actions: A2uiAction[] = [];
 
 declare global {
@@ -36,6 +39,8 @@ declare global {
       control(operations: JsonValue): void;
       /** An `a2ui-surface` activity's whole content, so a lifecycle snapshot (`status`, no operations) can be shown. */
       activity(content: JsonValue): void;
+      /** The config's `catalogAliases`. Starts a new view, so call it before `set`. */
+      aliases(map: CatalogAliases | undefined): void;
     };
   }
 }
@@ -59,7 +64,9 @@ function Control({ operations }: { operations: JsonValue }): ReactElement {
 function onAction(action: A2uiAction): void {
   actions.push(action);
   if (state.continuing) {
-    state.operations = continuation(state.operations as unknown as readonly Operation[], action) as unknown as JsonValue;
+    // The v0.8 story answers its own two actions, as the reference agent does; everything else is the v0.9 form.
+    const answer = action.name === 'submit_expense' || action.name === 'withdraw_expense' ? v08Continuation : continuation;
+    state.operations = answer(state.operations as unknown as readonly Operation[], action) as unknown as JsonValue;
     draw();
   }
 }
@@ -71,9 +78,9 @@ function draw(): void {
   root.render(
     <main style={{ background: 'var(--bg)', color: 'var(--fg)', minHeight: '100vh', padding: 16 }}>
       {state.activity === undefined ? (
-        <A2uiView activityId="a2ui-surface-1" operations={state.operations} renderEnabled={state.renderEnabled} onAction={onAction} />
+        <A2uiView key={state.generation} activityId="a2ui-surface-1" operations={state.operations} renderEnabled={state.renderEnabled} catalogAliases={state.aliases} onAction={onAction} />
       ) : (
-        a2uiActivity({ messageId: 'a2ui-surface-1', activityType: 'a2ui-surface', content: state.activity }, { renderEnabled: state.renderEnabled, onAction })
+        a2uiActivity({ messageId: 'a2ui-surface-1', activityType: 'a2ui-surface', content: state.activity }, { renderEnabled: state.renderEnabled, ...(state.aliases !== undefined && { catalogAliases: state.aliases }), onAction })
       )}
       {state.control !== undefined && <Control operations={state.control} />}
     </main>,
@@ -100,6 +107,11 @@ window.__a2ui = {
   },
   activity(content) {
     state.activity = content;
+    draw();
+  },
+  aliases(map) {
+    state.aliases = map;
+    state.generation++;
     draw();
   },
 };

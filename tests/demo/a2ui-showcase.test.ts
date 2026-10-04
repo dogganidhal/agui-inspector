@@ -481,8 +481,8 @@ test('sandbox probe: every refusal is reported at its position, the rest still d
     issues.map((issue) => [issue.index! - first, issue.source, issue.message]),
     [
       [1, 'operation', 'This operation is not an object.'],
-      [2, 'operation', 'This operation has no version. Only A2UI v0.9 is supported.'],
-      [3, 'operation', 'This operation is A2UI v0.8. Only A2UI v0.9 is supported.'],
+      [2, 'operation', 'This operation has no version and no v0.8 message name. A2UI v0.9 operations declare "version": "v0.9".'],
+      [3, 'operation', 'This operation declares version v0.8. A2UI v0.9 operations declare "v0.9", and v0.8 messages have no version.'],
       [4, 'operation', 'Catalog not found: https://catalog.invalid/custom.json'],
       [5, 'operation', 'Surface not found for message: ghost'],
     ],

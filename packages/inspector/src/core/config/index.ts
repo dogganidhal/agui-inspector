@@ -9,7 +9,8 @@
 // make the inspector fetch a route it was not handed.
 import type { AgentCapabilities } from '@ag-ui/core';
 import { AgentCapabilitiesSchema } from '@ag-ui/core/schemas';
-import { CAPABILITY_GROUPS, FORMAT_VERSION, THEME_PROPERTIES, type AgentConfig, type BrandConfig, type ConfigFile, type JsonValue, type ThemeConfig, type ThemeMap } from '../../contracts.ts';
+import { CAPABILITY_GROUPS, FORMAT_VERSION, THEME_PROPERTIES, type AgentConfig, type BrandConfig, type CatalogAliases, type ConfigFile, type JsonValue, type ThemeConfig, type ThemeMap } from '../../contracts.ts';
+import { KNOWN_CATALOGS, isBuiltIn } from '../a2ui/catalogs.ts';
 import { parsePreset } from '../presets/index.ts';
 import { describeError, fail, isJsonObject, isRecord, logoSource, NO_PAGE, ok, themeValueProblem, unexpectedKey, urlProblem, type PageLocation, type Result } from './validation.ts';
 
@@ -67,7 +68,10 @@ function parseAgent(value: unknown, index: number): Result<AgentConfig> {
 }
 
 /** A name from the file, quoted and cut short so a hostile one cannot flood the page. */
-const shown = (name: string) => JSON.stringify(name.length > 48 ? `${name.slice(0, 48)}…` : name);
+const shown = (name: string, limit = 48) => JSON.stringify(name.length > limit ? `${name.slice(0, limit)}…` : name);
+
+/** Catalog ids are addresses, and two of them can differ only near the end, so they get a longer cut. */
+const shownId = (id: string) => shown(id, 120);
 
 /** One light or dark map: every accepted property is kept, every other one is a warning. */
 function parseThemeMap(value: unknown, where: string, warnings: string[]): ThemeMap | undefined {
@@ -126,6 +130,28 @@ function parseBrand(value: unknown, page: PageLocation, warnings: string[]): Bra
   return Object.keys(brand).length > 0 ? brand : undefined;
 }
 
+/**
+ * The optional `catalogAliases` field: former catalog ids that stand for a bundled catalog (FR-013, FR-016).
+ * Each bad entry is a warning and is dropped, so the file still loads. Built with `Object.fromEntries` so a key
+ * named `__proto__` stays plain data.
+ */
+function parseCatalogAliases(value: unknown, warnings: string[]): CatalogAliases | undefined {
+  if (!isRecord(value)) {
+    warnings.push('catalogAliases must be an object from a catalog id to a bundled catalog id; it was ignored');
+    return undefined;
+  }
+  const accepted: [string, string][] = [];
+  for (const [id, target] of Object.entries(value)) {
+    const entry = `catalogAliases: ${shownId(id)}`;
+    if (id === '') warnings.push(`${entry} is not a catalog id; it was ignored`);
+    else if (isBuiltIn(id)) warnings.push(`${entry} is already a built-in catalog id; it was ignored`);
+    else if (typeof target !== 'string') warnings.push(`${entry} must map to a catalog id (a string); it was ignored`);
+    else if (!Object.hasOwn(KNOWN_CATALOGS, target)) warnings.push(`${entry} maps to ${shownId(target)}, which is not a catalog this inspector bundles; it was ignored`);
+    else accepted.push([id, target]);
+  }
+  return accepted.length > 0 ? Object.fromEntries(accepted) : undefined;
+}
+
 /** Version 0 only; a file without a version is the historical form and reads as version 0. `page` is where logos must stay. */
 export function parseConfig(text: string, page: PageLocation = NO_PAGE): Result<ParsedConfig> {
   let json: unknown;
@@ -135,7 +161,7 @@ export function parseConfig(text: string, page: PageLocation = NO_PAGE): Result<
     return fail(`Configuration is not valid JSON: ${describeError(error)}`);
   }
   if (!isRecord(json)) return fail('Configuration must be a JSON object with an "agents" list');
-  const extra = unexpectedKey(json, ['version', 'agents', 'theme', 'brand'], 'configuration', 'configuration');
+  const extra = unexpectedKey(json, ['version', 'agents', 'theme', 'brand', 'catalogAliases'], 'configuration', 'configuration');
   if (extra) return fail(extra);
   if ('version' in json && json.version !== FORMAT_VERSION) {
     return fail(`Unsupported configuration version ${JSON.stringify(json.version)}; this inspector reads version ${FORMAT_VERSION}`);
@@ -152,7 +178,8 @@ export function parseConfig(text: string, page: PageLocation = NO_PAGE): Result<
   const warnings: string[] = [];
   const theme = json.theme === undefined ? undefined : parseTheme(json.theme, warnings);
   const brand = json.brand === undefined ? undefined : parseBrand(json.brand, page, warnings);
-  return ok({ version: FORMAT_VERSION, agents, ...(theme !== undefined && { theme }), ...(brand !== undefined && { brand }), warnings });
+  const catalogAliases = json.catalogAliases === undefined ? undefined : parseCatalogAliases(json.catalogAliases, warnings);
+  return ok({ version: FORMAT_VERSION, agents, ...(theme !== undefined && { theme }), ...(brand !== undefined && { brand }), ...(catalogAliases !== undefined && { catalogAliases }), warnings });
 }
 
 /** Fetches `url` through the callback and parses it. This is the only request made. */

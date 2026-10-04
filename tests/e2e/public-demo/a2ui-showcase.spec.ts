@@ -354,7 +354,7 @@ test('self-repair: the lifecycle on one activity ends on the valid surface, or o
   expectNothingLeft(requested, site);
 });
 
-test('sandbox probe: media, openUrl, an unknown component, an unknown catalog, v0.8 and a malformed list are refused and reported, and nothing leaves the page', async ({ page, site, requested }) => {
+test('sandbox probe: media, openUrl, an unknown component, an unknown catalog, a declared v0.8 version and a malformed list are refused and reported, and nothing leaves the page', async ({ page, site, requested }) => {
   await openShowcase(page, site);
   await quick(page, 'Probe the sandbox').click();
   const view = page.locator('[data-view="a2ui"]');
@@ -366,8 +366,8 @@ test('sandbox probe: media, openUrl, an unknown component, an unknown catalog, v
   // One message per bad operation, after its position (the list starts at 1), and the operations around them still draw.
   for (const message of [
     'This operation is not an object.',
-    'This operation has no version. Only A2UI v0.9 is supported.',
-    'This operation is A2UI v0.8. Only A2UI v0.9 is supported.',
+    'This operation has no version and no v0.8 message name. A2UI v0.9 operations declare "version": "v0.9".',
+    'This operation declares version v0.8. A2UI v0.9 operations declare "v0.9", and v0.8 messages have no version.',
     'Catalog not found: https://catalog.invalid/custom.json',
     'Surface not found for message: ghost',
   ]) {

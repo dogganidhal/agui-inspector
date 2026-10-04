@@ -1,19 +1,17 @@
 import type { ReactElement } from 'react';
 import { Catalog } from '@a2ui/web_core/v0_9';
 import { basicCatalog, createComponentImplementation, type ReactComponentImplementation } from '@a2ui/react/v0_9';
-import { deniedOpenUrl, type BlockedResource, type ReportBlocked } from '../../core/a2ui/actions';
+import { deniedOpenUrl, type ReportBlocked } from '../../core/a2ui/actions';
+import { catalogIds } from '../../core/a2ui/catalogs';
 import { COMPONENTS, unknownComponent } from './components';
+import { BlockedView, type BlockedKind } from './parts';
 
 const MEDIA = new Set<string>(['Image', 'Video', 'AudioPlayer']);
 
-/** Stands in for a component that would load its `url`: it names the address as plain text and loads nothing. */
+/** Stands in for a component that would load its `url`: see `BlockedView`. */
 function blocked(original: ReactComponentImplementation): ReactComponentImplementation {
-  const kind = original.name as BlockedResource['kind'];
-  return createComponentImplementation(original, ({ props }): ReactElement => (
-    <span className="agui-a2ui-blocked" role="note" data-blocked={kind}>
-      Blocked {kind}: {String((props as { url?: unknown }).url ?? '')}
-    </span>
-  ));
+  const kind = original.name as BlockedKind;
+  return createComponentImplementation(original, ({ props }): ReactElement => <BlockedView kind={kind} url={String((props as { url?: unknown }).url ?? '')} />);
 }
 
 /**
@@ -55,20 +53,18 @@ export function createBundledCatalog(report: ReportBlocked): Catalog<ReactCompon
   );
 }
 
-/**
- * The id middleware 0.0.11 puts on its default catalog, `<spec>/basic_catalog.json`: the renderer's
- * `<spec>/catalogs/basic/catalog.json` one level up. It is the only alias; others wait for 1.0.0.
- */
-const MIDDLEWARE_CATALOG_ID = basicCatalog.id.replace('/catalogs/basic/catalog.json', '/basic_catalog.json');
+/** The ids besides the basic one that stand for it with no config: the built-in alias, which is middleware 0.0.11's default id. */
+const BUILT_IN_IDS = catalogIds('v0.9').filter((id) => id !== basicCatalog.id);
 
 /**
- * What a session resolves `createSurface` against: the bundled catalog, then the same catalog under
- * the middleware id. Nothing is fetched and the operations are not rewritten; any other id is an error.
+ * What a session resolves `createSurface` against: the bundled catalog, then the same catalog under every
+ * alias id (the built-in one and the config's). Nothing is fetched and the operations are not rewritten; any
+ * other id is an error.
  */
-export function createBundledCatalogs(report: ReportBlocked): Catalog<ReactComponentImplementation>[] {
+export function createBundledCatalogs(report: ReportBlocked, aliasIds: readonly string[] = BUILT_IN_IDS): Catalog<ReactComponentImplementation>[] {
   const bundled = createBundledCatalog(report);
   return [
     bundled,
-    withStandIns(new Catalog(MIDDLEWARE_CATALOG_ID, bundled.protocolVersion, [...bundled.components.values()], [...bundled.functions.values()], bundled.themeSchema)),
+    ...aliasIds.map((id) => withStandIns(new Catalog(id, bundled.protocolVersion, [...bundled.components.values()], [...bundled.functions.values()], bundled.themeSchema))),
   ];
 }

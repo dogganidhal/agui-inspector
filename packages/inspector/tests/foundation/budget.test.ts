@@ -1,7 +1,7 @@
 // F03 T009: the bundle budget accounts for every shipped asset and fails above either limit.
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { gzipSync } from 'node:zlib';
@@ -211,14 +211,20 @@ test('the real scaffold build is counted completely: every emitted file, nothing
   assert.equal(status, 0, out);
 });
 
-test('the representative build includes the pinned v0.9 renderer and reports headroom, not certification', () => {
+test('the build holds the v0.8 renderer and still no DOMPurify, as dependencies.mdx says', () => {
+  const script = readFileSync(path.join(scratch, 'scaffold', 'app.js'), 'utf8');
+  assert.ok(script.includes('a2ui-structural-styles'), 'the v0.8 renderer and its style guard are in the bundle');
+  assert.doesNotMatch(script, /dompurify/i, 'the renderers do not pull DOMPurify in');
+});
+
+test('the representative build includes the pinned v0.8 and v0.9 renderers and reports headroom, not certification', () => {
   const scaffold = measure(path.join(scratch, 'scaffold'));
   const result = spawnSync(process.execPath, [script, '--representative'], { cwd: root, encoding: 'utf8' });
   const out = result.stdout + result.stderr;
   assert.equal(result.status, 0, out);
   assert.match(out, /headroom/i);
   assert.match(out, /not certified/i);
-  assert.match(out, /a2ui v0\.9 renderer/i);
+  assert.match(out, /a2ui v0\.8 and v0\.9 renderers/i);
 
   const representative = measure(path.join(root, '.build', 'representative'));
   assert.ok(representative.files.some((file) => file.path === 'index.html'));

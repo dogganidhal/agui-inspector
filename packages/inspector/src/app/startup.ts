@@ -7,7 +7,7 @@
 // Every request after step 2 goes through the runtime's guarded transport, so it obeys the allowlist
 // fixed in step 1. A bad hosting-config.json stops the start with a message; it never falls back to a
 // wider policy.
-import type { AgentConfig, BrandConfig, ClientProfileSettings, JsonValue, SessionStore, ThemeConfig, TransportPolicy } from '../contracts.ts';
+import type { AgentConfig, BrandConfig, CatalogAliases, ClientProfileSettings, JsonValue, SessionStore, ThemeConfig, TransportPolicy } from '../contracts.ts';
 import { loadConfig, type ParsedConfig, type Result } from '../core/config/index.ts';
 import { defaultProfile, loadProfile, type StorageLike } from '../core/profiles/index.ts';
 import { createRuntime, guardedFetchText, resolveTarget, type Runtime } from '../core/runtime/index.ts';
@@ -51,6 +51,8 @@ export interface Started {
   readonly theme?: ThemeConfig;
   /** The validated brand from `config.json`; the top bar shows it. */
   readonly brand?: BrandConfig;
+  /** The validated catalog aliases from `config.json`; the A2UI view resolves catalog ids with them. */
+  readonly catalogAliases?: CatalogAliases;
   /** Theme and brand values that were rejected. The page shows them; none of them stops the start. */
   readonly warnings: readonly string[];
   /** Why the configuration or the saved profile could not be used. */
@@ -112,8 +114,9 @@ export async function startPage(env: StartupEnvironment): Promise<StartResult> {
   let agents: readonly AgentConfig[] = [];
   let theme: ThemeConfig | undefined;
   let brand: BrandConfig | undefined;
+  let catalogAliases: CatalogAliases | undefined;
   let warnings: readonly string[] = [];
-  if (loaded.ok) ({ agents, theme, brand, warnings } = loaded.value);
+  if (loaded.ok) ({ agents, theme, brand, catalogAliases, warnings } = loaded.value);
   else if (hosting.value.config !== undefined || !NOT_FOUND.test(loaded.error)) problems.push(loaded.error);
 
   if (env.storage !== undefined) {
@@ -134,6 +137,7 @@ export async function startPage(env: StartupEnvironment): Promise<StartResult> {
     warnings,
     ...(theme !== undefined && { theme }),
     ...(brand !== undefined && { brand }),
+    ...(catalogAliases !== undefined && { catalogAliases }),
     ...(first !== undefined && { selectedAgentId: first.id }),
     ...(problems.length > 0 && { error: problems.join(' ') }),
   };

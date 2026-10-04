@@ -28,7 +28,7 @@
 ## Warnings
 
 A bad entry never stops startup and never removes a good one. Each warning shows in the page's configuration
-warnings with the kind "Configuration". Names are quoted and cut at 48 characters.
+warnings with the kind "Configuration". Ids are quoted and cut at 120 characters.
 
 | Input | Warning (exact text) |
 | --- | --- |

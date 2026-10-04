@@ -338,7 +338,7 @@ function Root({ started, storage }: { started: Started; storage?: StorageLike })
     warnings: started.warnings,
     ...(storage !== undefined && { storage }),
     ...(started.brand !== undefined && { brand: started.brand }),
-    renderActivity: (entry) => a2uiActivity(entry, { renderEnabled: profile.renderA2ui, onAction }),
+    renderActivity: (entry) => a2uiActivity(entry, { renderEnabled: profile.renderA2ui, onAction, ...(started.catalogAliases !== undefined && { catalogAliases: started.catalogAliases }) }),
     ...(recording ? { notice: RECORDING_NOTICE } : state.notice !== undefined && { notice: state.notice }),
     settings: {
       agents,
