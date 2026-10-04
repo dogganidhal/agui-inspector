@@ -58,7 +58,7 @@ Captured evidence is what was sent and received: the request body exactly as sen
 
 Transport status describes only the connection: `completed`, `transport-error` or `user-stopped`. It says nothing about the protocol. A `completed` exchange can hold a run that ended in an error event, and a `user-stopped` one can hold a run that never sent a terminal event. A user stop is not an error. The exchange keeps the bytes already read and gets no finding.
 
-Derived data (the conversation, the current state, expanded chunk events) is built from the captured frames. It is labeled derived wherever it appears and never has a raw frame index.
+Derived data (the conversation, subagent lanes and their timeline, the current state, expanded chunk events) is built from the captured frames. It is labeled derived wherever it appears and never has a raw frame index.
 
 ## How the stream becomes frames
 
@@ -85,7 +85,7 @@ The newest listed exchange opens first. When the session holds only hidden prepa
 
 ## Arriving from the conversation
 
-A run id or a frame reference in the conversation opens its evidence here. The list opens the exchange and the frame's detail, scrolls the row to the middle of the pane, marks it with `aria-current` and gives it focus. A filter that lists the frame stays as it is. A filter that would hide the frame is cleared, and a toast says so. Nothing is sent and the recording does not change. See [following a reference](./event-views.mdx#following-a-reference).
+A run id or a frame reference in the conversation opens its evidence here. The list opens the exchange and the frame's detail, scrolls the row to the middle of the pane, marks it with `aria-current` and gives it focus. A filter that lists the frame stays as it is. A filter that would hide the frame is cleared, and a toast says so. Nothing is sent and the recording does not change. A row of the subagent timeline whose lane left the transcript opens the start frame of its subagent the same way. See [following a reference](./event-views.mdx#following-a-reference).
 
 ## Next steps
 

@@ -33,6 +33,12 @@ export const SCENARIOS = {
  */
 export const INTERRUPT_FOREVER = 'interrupt forever';
 
+/**
+ * The message that asks the interactive agent for nested and parallel subagents. It is not a `SCENARIOS` entry: those
+ * are the demo's quick messages, and this run is for the subagent lanes and timeline tests (specs/009-subagent-lanes).
+ */
+export const SUBAGENTS = 'subagents';
+
 export const INTERRUPTS = [
   {
     id: 'i-approve',
@@ -134,6 +140,45 @@ function lastUserText(input: RunInput): string {
 }
 
 /**
+ * A run with a parent step, two subagents that run in parallel (`researcher` and `writer`, their events interleaved),
+ * a third that `researcher` starts (`fact-checker`, with a tool call), a finished subagent with a result, one that
+ * fails, and a parent message after. Every event of a subagent carries its `subagentRunId`.
+ */
+function subagentsRun({ runId }: RunIds): object[] {
+  const research = `sub-researcher-${runId}`;
+  const write = `sub-writer-${runId}`;
+  const check = `sub-fact-checker-${runId}`;
+  const inside = (subagentRunId: string, event: object) => ({ ...event, subagentRunId });
+  return [
+    { type: 'STEP_STARTED', stepName: 'delegate' },
+    ...say(`m-intro-${runId}`, 'I will ask two helpers to work on this together.'),
+    { type: 'TOOL_CALL_START', toolCallId: `tc-research-${runId}`, toolCallName: 'delegate_research' },
+    { type: 'TOOL_CALL_ARGS', toolCallId: `tc-research-${runId}`, delta: '{"topic":"synthetic"}' },
+    { type: 'TOOL_CALL_END', toolCallId: `tc-research-${runId}` },
+    { type: 'SUBAGENT_STARTED', subagentRunId: research, name: 'researcher', description: 'Finds sources for the topic', parentToolCallId: `tc-research-${runId}` },
+    { type: 'SUBAGENT_STARTED', subagentRunId: write, name: 'writer', description: 'Drafts the summary' },
+    { type: 'STEP_FINISHED', stepName: 'delegate' },
+    inside(write, { type: 'TEXT_MESSAGE_START', messageId: `m-write-${runId}`, role: 'assistant' }),
+    inside(research, { type: 'TEXT_MESSAGE_START', messageId: `m-research-${runId}`, role: 'assistant' }),
+    inside(write, { type: 'TEXT_MESSAGE_CONTENT', messageId: `m-write-${runId}`, delta: 'Drafting the summary. ' }),
+    inside(research, { type: 'TEXT_MESSAGE_CONTENT', messageId: `m-research-${runId}`, delta: 'Looking for sources. ' }),
+    { type: 'SUBAGENT_STARTED', subagentRunId: check, name: 'fact-checker', description: 'Checks one claim', parentSubagentRunId: research },
+    inside(check, { type: 'TOOL_CALL_START', toolCallId: `tc-lookup-${runId}`, toolCallName: 'lookup_claim' }),
+    inside(check, { type: 'TOOL_CALL_ARGS', toolCallId: `tc-lookup-${runId}`, delta: '{"claim":"synthetic"}' }),
+    inside(check, { type: 'TOOL_CALL_END', toolCallId: `tc-lookup-${runId}` }),
+    inside(check, { type: 'TOOL_CALL_RESULT', messageId: `m-lookup-${runId}`, toolCallId: `tc-lookup-${runId}`, content: 'confirmed', role: 'tool' }),
+    inside(write, { type: 'TEXT_MESSAGE_CONTENT', messageId: `m-write-${runId}`, delta: 'It stops before the end.' }),
+    inside(write, { type: 'TEXT_MESSAGE_END', messageId: `m-write-${runId}` }),
+    { type: 'SUBAGENT_FINISHED', subagentRunId: check, result: { claim: 'confirmed' }, outcome: { type: 'success' } },
+    inside(research, { type: 'TEXT_MESSAGE_CONTENT', messageId: `m-research-${runId}`, delta: 'Two sources found.' }),
+    inside(research, { type: 'TEXT_MESSAGE_END', messageId: `m-research-${runId}` }),
+    { type: 'SUBAGENT_FINISHED', subagentRunId: research, result: { sources: 2 }, outcome: { type: 'success' } },
+    { type: 'SUBAGENT_ERROR', subagentRunId: write, message: 'The draft ran out of budget', code: 'budget_exceeded' },
+    ...say(`m-done-${runId}`, 'The research is done. The writer failed.'),
+  ];
+}
+
+/**
  * The interactive agent. A resume answers the interrupts, tool results answer the tool calls, a surface
  * action is acknowledged, and otherwise the last user message picks the scenario, in that order. The one
  * exception is INTERRUPT_FOREVER, which interrupts again whatever the run carries.
@@ -180,6 +225,8 @@ export function interactiveResponse(input: RunInput): ScenarioResponse {
     case SCENARIOS.neverFinishes:
       // Streams a little and then stays open until the client goes away: no message end, no terminal event.
       return sse([open, ...say(`m-${runId}`, 'This response stays open until you press Stop.').slice(0, 2)], 'hold-until-abort');
+    case SUBAGENTS:
+      return sse([open, ...subagentsRun(input), done]);
     case SCENARIOS.state:
       return sse([
         open,

@@ -83,3 +83,7 @@ export const send = (page: Page, id: string, events: ReadonlyArray<object | stri
 
 /** What the state view asked the page to reveal. */
 export const revealed = (page: Page) => page.evaluate(() => (window as unknown as { __conversation: Host }).__conversation.revealed.map((target) => ({ ...target })));
+
+/** Ends an exchange the way the transport would: completed, or with another transport state such as `user-stopped`. */
+export const close = (page: Page, id: string, transport = 'completed') =>
+  page.evaluate(([exchange, how]) => (window as unknown as { __conversation: Host }).__conversation.close(exchange as string, how as string), [id, transport]);

@@ -15,7 +15,9 @@ import '../../src/views/conversation/conversation.css';
 const host = harness((callback) => void requestAnimationFrame(callback));
 
 const noop = () => undefined;
-/** What the state view asked the page to reveal, in order: the page's navigation is outside this host. */
+/** `?reveal` gives the conversation view a reveal action, so its run ids and frame references are buttons. Off by default, as the views mount on their own. */
+const withReveal = new URLSearchParams(location.search).has('reveal');
+/** What the conversation and state views asked the page to reveal, in order: the page's navigation is outside this host. */
 const revealed: EvidenceTarget[] = [];
 const props: ConversationViewProps = {
   store: host.store,
@@ -34,6 +36,7 @@ function Page(): ReactElement {
       <div data-pane="conversation">
         <ConversationView
           {...props}
+          {...(withReveal && { onReveal: (target: EvidenceTarget) => void revealed.push(target) })}
           renderActivity={(entry) => (entry.activityType === 'rendered-demo' ? <p data-testid="rendered-activity">Surface for {entry.messageId}</p> : undefined)}
         />
       </div>
@@ -53,7 +56,7 @@ declare global {
       /** Appends the chunk expansions to the store, the way the assembly does. Returns how many were added. */
       publish(): number;
       session(): ReturnType<typeof host.session>;
-      /** The targets the state view asked to reveal. */
+      /** The targets the views asked to reveal. */
       revealed: EvidenceTarget[];
     };
   }

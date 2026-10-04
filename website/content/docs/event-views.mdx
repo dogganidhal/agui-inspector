@@ -12,6 +12,7 @@ The recorder keeps raw frames: the text received, in arrival order, with its off
 - Durations of runs and steps are the closing frame's offset minus the opening frame's offset. A tooltip says "Derived from frame offsets, not received".
 - Parsed tool arguments show once the call completes. Until then the raw fragments show, and stay inspectable.
 - Expanded chunk events are derived entries whose source is the chunk frame. The chunk stays in the frames list, and the entry it opened has a dashed `from …_CHUNK` tag.
+- The status, start and duration of a subagent lane, and every bar of the subagent timeline, come from frame offsets (see [Subagent lanes](#subagent-lanes)).
 - The current state is the snapshots and deltas applied in order (see [State](#state)). The state at an earlier point, and the diff of each change, are derived from the same frames.
 - The transcript is built from events, plus the messages in each run's recorded input.
 
@@ -72,7 +73,7 @@ In the frames list, run events also mark run boundaries. [Runs](#runs) explains 
 
 ### Subagents
 
-- `SUBAGENT_STARTED`, `SUBAGENT_FINISHED` and `SUBAGENT_ERROR` share one dashed marker for each subagent, under its parent run, with a line for each start, finish or error.
+- `SUBAGENT_STARTED`, `SUBAGENT_FINISHED` and `SUBAGENT_ERROR` make a lane for each subagent in each run, with a line for each start, finish or error. Events that carry the subagent's `subagentRunId` go inside the lane. See [Subagent lanes](#subagent-lanes).
 
 ### Custom and raw
 
@@ -155,7 +156,75 @@ Each expansion is a derived entry (`derivation: chunk-expansion`) whose `sources
 
 ## Message snapshots
 
-`MESSAGES_SNAPSHOT` replaces the transcript, so you can see what the snapshot did. The protocol client would merge it instead. The divider lists the messages it added and the ones it left out, with their text. Some entries stay so later deltas can find them: a message still streaming, an open step or subagent, an activity the snapshot does not restate, and the run headers.
+`MESSAGES_SNAPSHOT` replaces the transcript, so you can see what the snapshot did. The protocol client would merge it instead. The divider lists the messages it added and the ones it left out, with their text. Some entries stay so later deltas can find them: a message still streaming, an open step, a subagent lane that is still open or holds something still arriving, an activity the snapshot does not restate, and the run headers. A lane that has ended leaves the transcript, and its row stays on the [subagent timeline](#subagent-timeline).
+
+## Subagent lanes
+
+A run can start subagents. Each subagent gets a lane in the conversation, one lane for each subagent in each run. The lane holds what the subagent produced: its messages, reasoning, tool calls, steps, activities and custom and raw events, in the order they arrived. An event belongs to a lane when it carries that subagent's `subagentRunId`. An event without one stays in the main flow, even while a lane is open. Subagents that run in parallel get separate lanes, so their events never mix.
+
+A subagent that another subagent starts (`parentSubagentRunId`) sits inside the lane of its parent. Lanes nest to any depth. A lane sits where its start event arrived: in the main flow, in the step that was open, or in its parent's lane. The conversation groups work by subagent, so it does not show strict arrival order. The frames list shows arrival order, and the timeline shows how subagents overlap.
+
+State events carry a `subagentRunId` too, but they are not in the conversation, so they are not in lanes. Whole messages in a run's input or in a `MESSAGES_SNAPSHOT` stay where they were in 0.1.0.
+
+The lane header shows the name, the invocation id, the description and the status. It also shows the start offset, the duration, the tool call and message that started the subagent, and how many messages, tool calls and subagents the lane holds directly. The start offset and the duration are derived from frame offsets. Select the header to collapse the lane or open it again. A new lane is open. A collapsed lane keeps its status and its counts. Its body starts with the lifecycle lines, each with a frame reference, and then the entries.
+
+### Status
+
+The latest lifecycle line of the subagent in that run decides its status. Each status has its own word and its own glyph, so you can tell them apart without color.
+
+| Status | Glyph | Meaning |
+| --- | --- | --- |
+| Running | `▸` | No end event yet, the run has no terminal event, and the exchange is still open |
+| Finished | `✓` | `SUBAGENT_FINISHED` with a success outcome, or none |
+| Suspended | `‖` | `SUBAGENT_FINISHED` with a suspended outcome. It lists the interrupt ids when the event names them |
+| Error | `✕` | `SUBAGENT_ERROR`, with its message and code. The run keeps its own outcome |
+| Stopped by you | `■` | You stopped the exchange before an end event |
+| No end event | `?` | The stream or the run ended without an end event for it. No outcome is made up |
+
+A failed subagent does not fail its run. If a run ends with `RUN_ERROR` while a subagent is open, the subagent shows No end event, and the run header shows the error.
+
+Some streams have gaps, and the lane says so:
+
+- Events that carry a `subagentRunId` with no `SUBAGENT_STARTED` make a lane tagged "Start not received". It has no name, description or start offset.
+- A subagent whose parent has no lane in the same run sits under the run, tagged "Parent … not seen in this run".
+- A run that continues a subagent an earlier run suspended gets its own lane for it, tagged "Continued".
+- A lane that has only lifecycle lines says "No events in this lane."
+
+## Subagent timeline
+
+When a thread has subagents, a "Subagent timeline" shows above the transcript. It has one chart for each run that has subagents. A chart has a time axis, a row for the run, and a row for each subagent lane, with nested subagents under their parent. Each bar starts at the offset of the frame that started the subagent and ends at the offset of the frame that ended it. A subagent that has not ended runs to the last frame of the exchange. Parallel subagents overlap on the axis.
+
+The axis starts at the request, as the offsets in the frames list do, and ends where the frames list's ticks end. Each run has its own axis, because each request has its own clock. The positions and durations come from the offsets at which frames arrived. The optional `timestamp` of an event is not used.
+
+Each status also has its own bar end. Running has an open end, Finished and Error are solid bars, Suspended is a dashed outline, and Stopped by you and No end event are dotted outlines. The glyph from the table above sits at the end of the bar. A chart shows its first 100 subagent rows, and a button shows the rest.
+
+The timeline is open when it first shows, and you can collapse it. A chart that is wider than the pane scrolls inside its own box.
+
+### Jump between a lane and its row
+
+A row is a button. Select it to jump to its lane. The conversation opens any lane or step that hides it, scrolls to it and puts keyboard focus on the lane header. A lane's "Show in timeline" button does the reverse: it opens the timeline, shows the whole chart if the row is past the first 100, and puts focus on the row.
+
+A lane that a `MESSAGES_SNAPSHOT` took out of the transcript keeps its row, which says "Replaced transcript". Selecting that row shows the subagent's start frame in the frames list. This follows [Following a reference](#following-a-reference).
+
+### Keys
+
+The rows of the timeline are one tab stop. Press Tab to move focus to them, then use these keys:
+
+| Key | Action |
+| --- | --- |
+| Down arrow | Next row, across charts |
+| Up arrow | Previous row |
+| Home | First row |
+| End | Last row |
+| Enter or Space | Jump to the lane of the row |
+
+A lane header is a button. Enter or Space collapses or opens the lane. Tab then reaches "Show in timeline" and the frame references. The arrow keys act only while a row has focus, so the message box keeps its keys. A screen reader reads each row and lane header with the subagent's name and id, its status, its duration, its start and what it is nested under.
+
+### Subagents on a live run and in a recording
+
+On a live run, a lane and a row appear when the subagent starts, and a running bar grows with every frame. When the end event arrives, the status and the bar change. A lane you collapsed stays collapsed.
+
+An imported recording shows the same lanes and the same timeline as the live capture did. They need no extra field in the file, so recordings from 0.1.0 work too. Using lanes and the timeline sends no request, writes nothing to browser storage and does not change the recording.
 
 ## State
 

@@ -11,7 +11,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import { expect, test as base, type Page } from '@playwright/test';
-import { interactiveResponse, type RunInput } from '../../../examples/reference-agent/scenarios.ts';
+import { interactiveResponse, SUBAGENTS, type RunInput } from '../../../examples/reference-agent/scenarios.ts';
 import { buildApp } from '../../../scripts/build.mjs';
 
 export const root = path.resolve(import.meta.dirname, '..', '..', '..');
@@ -106,6 +106,12 @@ const historyEvents = [
   { type: 'STATE_DELTA', delta: [{ op: 'replace', path: '/round', value: 11 }] },
 ];
 
+/** The reference agent's scripted "subagents" run (nested and parallel subagents, one failing), without the RUN_STARTED and RUN_FINISHED that `answer` adds. */
+const subagentEvents = (runId: string): object[] =>
+  interactiveResponse({ threadId: 'unused', runId, messages: [{ role: 'user', content: SUBAGENTS }] })
+    .chunks.map((chunk) => JSON.parse(new TextDecoder().decode(chunk).replace(/^data: /, '').trim()) as object)
+    .slice(1, -1);
+
 const sse = (events: readonly object[]) => events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join('');
 
 async function readBody(request: IncomingMessage): Promise<string> {
@@ -150,7 +156,9 @@ function answer(pathname: string, input: { threadId?: unknown; runId?: unknown; 
           ? revealEvents(Array.isArray(input.messages) ? input.messages.filter((message) => (message as { role?: unknown }).role === 'user').length : 1)
           : pathname === '/state-history'
             ? historyEvents
-            : [{ type: 'TEXT_MESSAGE_START', messageId: 'msg-1', role: 'assistant' }, { type: 'TEXT_MESSAGE_CONTENT', messageId: 'msg-1', delta: AGENT_REPLY }, { type: 'TEXT_MESSAGE_END', messageId: 'msg-1' }];
+            : pathname === '/subagents'
+              ? subagentEvents(runId)
+              : [{ type: 'TEXT_MESSAGE_START', messageId: 'msg-1', role: 'assistant' }, { type: 'TEXT_MESSAGE_CONTENT', messageId: 'msg-1', delta: AGENT_REPLY }, { type: 'TEXT_MESSAGE_END', messageId: 'msg-1' }];
   response.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store' });
   response.end(sse([{ type: 'RUN_STARTED', threadId, runId }, ...activity, { type: 'RUN_FINISHED', threadId, runId, outcome: { type: 'success' } }]));
 }

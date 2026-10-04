@@ -21,12 +21,13 @@ import type {
   RunEntry,
   RunStatus,
   StepEntry,
-  SubagentEntry,
   ToolCallEntry,
 } from '../../core/projection/index';
 import { Card, CardBody, CardFooter, CardHeader, CodeBlock, FamilyDot, Finding, Icon, Label, SegmentedControl, Tag, type TagVariant } from '../theme/primitives';
+import { LaneBlock, LaneNavProvider, useLaneNav } from './lanes';
 import { DERIVED_NOTE, Disclosure, FrameRef, RevealProvider, formatMs, formatOffset, useProjection, useReveal } from './shared';
 import { ConversationText, MarkdownModeProvider, MarkdownToggle, type TextMode } from './markdown';
+import { SubagentTimeline } from './timeline';
 import { SnapshotMarker } from './state';
 
 /** Optional hooks for the assembly. */
@@ -242,10 +243,12 @@ function ToolBlock({ entry, frames }: { entry: ToolCallEntry; frames: Frames }):
 // ---- steps, subagents, activities, markers ----
 
 function StepBlock({ entry, frames, extras }: { entry: StepEntry; frames: Frames; extras: ConversationViewExtras }): ReactElement {
+  const jump = useLaneNav()?.lane;
   return (
     <div className="agui-conv-step" data-entry="step">
       <Disclosure
         defaultOpen
+        {...(jump?.path.has(entry.id) && { reveal: jump.nonce })}
         summary={
           <>
             <span>Step</span>
@@ -258,40 +261,6 @@ function StepBlock({ entry, frames, extras }: { entry: StepEntry; frames: Frames
           <Entries list={entry.children} frames={frames} extras={extras} />
         </div>
       </Disclosure>
-    </div>
-  );
-}
-
-const PHASE: Record<SubagentEntry['lines'][number]['phase'], { label: string; variant: TagVariant }> = {
-  started: { label: 'started', variant: 'neutral' },
-  finished: { label: 'finished', variant: 'ok' },
-  error: { label: 'error', variant: 'err' },
-};
-
-function SubagentBlock({ entry, frames }: { entry: SubagentEntry; frames: Frames }): ReactElement {
-  return (
-    <div className="agui-conv-nest" data-entry="subagent" data-subagent={entry.subagentRunId}>
-      <div className="agui-conv-who">
-        <Icon name="branch" size={14} />
-        <b>Subagent</b>
-        {entry.name !== undefined && <span className="agui-conv-mono">{entry.name}</span>}
-        <Tag variant="neutral">{entry.subagentRunId}</Tag>
-        {entry.parentRunId !== undefined && <span className="agui-conv-muted">under run <span className="agui-conv-mono">{entry.parentRunId}</span></span>}
-        {entry.parentToolCallId !== undefined && <span className="agui-conv-muted">via tool call <span className="agui-conv-mono">{entry.parentToolCallId}</span></span>}
-      </div>
-      {entry.description !== undefined && <div className="agui-conv-muted">{entry.description}</div>}
-      <ul className="agui-conv-lines">
-        {entry.lines.map((line, i) => (
-          <li key={i}>
-            <Tag variant={PHASE[line.phase].variant}>{PHASE[line.phase].label}</Tag>
-            <span className="agui-conv-mono agui-conv-evidence">{formatOffset(line.offsetMs)}</span>
-            {line.outcome !== undefined && <Tag variant="line">{line.outcome}</Tag>}
-            {line.code !== undefined && <Tag variant="line">{line.code}</Tag>}
-            {line.detail !== undefined && <span className="agui-conv-value">{line.detail}</span>}
-            <FrameRef frameId={line.frameId} frames={frames} />
-          </li>
-        ))}
-      </ul>
     </div>
   );
 }
@@ -364,7 +333,7 @@ function Entries({ list, frames, extras }: { list: readonly ConversationEntry[];
           case 'step':
             return <StepBlock key={entry.id} entry={entry} frames={frames} extras={extras} />;
           case 'subagent':
-            return <SubagentBlock key={entry.id} entry={entry} frames={frames} />;
+            return <LaneBlock key={entry.id} entry={entry} frames={frames} renderChildren={(list) => <Entries list={list} frames={frames} extras={extras} />} />;
           case 'activity':
             return <ActivityBlock key={entry.id} entry={entry} extras={extras} />;
           case 'snapshot':
@@ -410,7 +379,10 @@ export function ConversationView({ store, threadId, renderActivity, onReveal }: 
       ) : (
         <MarkdownModeProvider value={textMode}>
           <RevealProvider value={onReveal}>
-            <Entries list={model.entries} frames={frames} extras={extras} />
+            <LaneNavProvider entries={model.entries} lanes={model.subagents}>
+              <SubagentTimeline model={model} {...(onReveal !== undefined && { onReveal })} />
+              <Entries list={model.entries} frames={frames} extras={extras} />
+            </LaneNavProvider>
           </RevealProvider>
         </MarkdownModeProvider>
       )}
