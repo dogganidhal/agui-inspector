@@ -9,9 +9,8 @@ other `[P]` tasks of its phase and can run alongside them. `[USn]` maps to the u
 **Tests**: Required. The constitution asks for regression coverage and the spec lists the cases. Each phase writes its
 tests with its code.
 
-**Status**: Implemented except T012 and T013, which wait for the subagent projection of spec 009 (PR #98) as the
-maintainer asked ("build your subagent rows and `subagentRunId` nesting on 009's `model.subagents`, do not ship a
-second derivation"), and T029 and T030, which close the work. Deviations from the plan as written are listed in
+**Status**: Implemented, on the subagent lanes of spec 009 (PR #98) as the maintainer asked ("build your subagent rows
+on 009's `model.subagents`, do not ship a second derivation"). Deviations from the plan as written are listed in
 "Implementation notes" at the end of this file.
 
 **Scope guard**: Touch only the files named here. The shared files are `views/inspection/index.tsx` (a tab, state and
@@ -56,8 +55,8 @@ first: rebase and keep what merged.
 
 **Independent test**: The delegation run has `sub-a` under `tc-search` and `sub-b` under `sub-a`.
 
-- [ ] T012 [US2] In `packages/inspector/src/core/projection/waterfall.ts` add subagent rows: for each `subagent` entry and each exchange in which one of its `lines` has a frame, one row with id `<exchangeId>:subagent-<subagentRunId>`, label its name (or the id), start at the `started` line of that exchange (else the first line), end at the `finished` or `error` line of that exchange (open without one), tags `error`, `suspended` (a `finished` line with outcome `suspended`) and `continued` (no `started` line in the exchange), facts for description and parent tool call. Put each row under the row that holds its entry in the projection, then apply the nesting of the data model in arrival order: under the tool row of `parentToolCallId` if that tool has a row in the run, else under the subagent row of `parentSubagentRunId` if it has one, then move each step, message, reasoning or tool row whose first frame (own exchange) carries a `subagentRunId` under that subagent's row if it has one. Refuse a move when the new parent is inside the moving row's subtree. Re-sort children. A comment says that the attribution is read from the first frame of an entry (`frame.parsed.subagentRunId`) and may use the projection's if spec 009 adds one. Depends on T006.
-- [ ] T013 [US2] Add cases to `packages/inspector/tests/inspection/waterfall.test.ts`: in the delegation run `sub-a` (600 to 1200) is under `tc-search`, `sub-b` (920 to 1150) is under `sub-a`, `m-a` and `tc-fetch` are under `sub-a`, `m-b` is under `sub-b`, `sub-c` (1300 to 1350, tag `error`) is under step `research`, and the whole tree equals the one in plan.md; a subagent with an unknown `parentToolCallId` and `parentSubagentRunId` stays where the projection put it; two subagents that name each other as parent, and a tool call attributed to the subagent it spawned, leave every row present and the tree acyclic (count the rows against the projection's entries); an entry attributed to an unknown subagent stays in its step; a `suspended` finish gets its tag; a subagent continued in a second run (no start line there, a finish line) has a row in each run with `continued` on the second; messages attributed to a subagent that has no row in their run stay in their step. Extend `waterfall-view.test.tsx` with the indentation levels of the nested rows (`aria-level` 4 for `m-a`, 5 for `m-b`).
+- [x] T012 [US2] In `packages/inspector/src/core/projection/waterfall.ts` add subagent rows from the projection's lanes (spec 009, `SubagentEntry`), not from the frames: one row for each `subagent` entry of the run, id the entry's id, label its name (or the id), start `startOffsetMs` else `firstOffsetMs`, end `endOffsetMs` only when the status is `finished`, `suspended` or `error` (the end offset of an unfinished lane is the last frame, which is not an end), tags `error`, `suspended`, `continued` and `start not received`, facts for description, parent tool call, parent message and parent subagent run, and children from the lane's `children`. Then move each subagent row under the tool row named by its `parentToolCallId` when that call has a row in the run, in arrival order, refusing a move that puts a row inside its own subtree. A comment names spec 009 as the source and says the waterfall derives no subagent fact. Depends on T006.
+- [x] T013 [US2] Add cases to `packages/inspector/tests/inspection/waterfall.test.ts`: in the delegation run `sub-a` (600 to 1200) is under `tc-search`, `sub-b` (920 to 1150) is in `sub-a`, `m-a` and `tc-fetch` are in `sub-a`, `m-b` is in `sub-b`, `sub-c` (1300 to 1350, tag `error`) is under step `research`, and the whole tree is asserted; an error, a suspended and an unfinished subagent (open while streaming and after a stop); a missing parent call, a cycle through two calls and a call of the subagent's own lane leave every row; 30 nested subagents keep every row; a subagent continued in a second run has a row in each with `continued` and `start not received` on the second; a messages snapshot removes no row. Extend `waterfall-view.test.tsx` with the levels of the nested rows (`aria-level` 4 for `sub-a`, 5 for `m-a`, 6 for `m-b`), and the e2e specs with the keyboard path into a subagent run and Enter on it.
 
 **Checkpoint**: Delegation shows as a tree with times. US2 passes.
 
@@ -114,7 +113,7 @@ first: rebase and keep what merged.
 - [x] T026 [P] Add to `tests/e2e/inspection/waterfall.spec.ts` the contrast check of SC-010 and FR-016 in both themes: the text of rows, kind words, tags and the bar fills against their backgrounds at WCAG 2.2 AA (copy the method of `tests/e2e/hosted/evidence-contrast.spec.ts`), and a check that open, error and waiting states have text.
 - [x] T027 [P] Document the view in plain short sentences, no em dashes, no bold labels: add a "Waterfall" section to `website/content/docs/inspection.mdx` (what a row is, the six kinds, nesting, subagent nesting, open rows and the two labels, arrival times and what they mean, one axis per run, the details area, the keys, live and imported behavior, what is not shown), a pointer under Steps and Subagents in `website/content/docs/event-views.mdx`, and a "Waterfall wiring" section in `website/content/docs/internals.mdx` (modules, `threadId`, state in `InspectionView`, the snapshot rule, attribution). Create `packages/inspector/tests/inspection/waterfall-docs.test.ts`: the pages name the Waterfall tab, the keys, "no end seen" and "running". Run the humanizer skill over the new text.
 - [x] T028 [P] Add a changeset `.changeset/run-waterfall.md` with `agui-inspector` and `agui-inspector-python` at `minor` and one plain sentence (the inspection pane gains a waterfall of runs, steps, messages, tool calls and subagent runs).
-- [ ] T029 Run `npm run check:ci`. Record the measured bundle total (against 1,227,500 and 308,758 on main) in the PR body and in the Technical Context of plan.md. Fix what fails.
+- [x] T029 Run `npm run check:ci`. Record the measured bundle total (against 1,227,500 and 308,758 on main) in the PR body and in the Technical Context of plan.md. Fix what fails.
 - [ ] T030 Run `speckit-converge` if code and spec disagree. Run `/ponytail:ponytail-review` on the diff and fix its findings. Run the humanizer skill on the PR body. Rebase on `origin/main`, push with `--force-with-lease`, update the PR body, mark the PR ready.
 
 ## Dependencies
@@ -139,7 +138,7 @@ asks for one spec per view, and this spec is one view.
 What changed between the plan and the code, so the record matches what shipped.
 
 - The delegation producer takes `{ subagents: false }` to leave out the three subagent runs and the events attributed to
-  them, and exports `DELEGATION_END_MS`. Tests that do not depend on subagents use it, so they stay valid when T012 lands.
+  them. Tests that do not look at subagents use it.
 - A message row's label is its role, and there is no role tag. A reasoning row's label is its message id. A run row has
   a `connection error` tag when the exchange has a transport error, and a `Connection` fact with its text.
 - `VisibleRow.expanded` is true for a run row that is open even when it has no rows under it, so its axis shows.
@@ -154,3 +153,8 @@ What changed between the plan and the code, so the record matches what shipped.
   group. A path prefix such as `.../waterfall` is not accepted by the runner.
 - Ids are unique within a thread in AG-UI, and the projection merges events that reuse an id. The contrast spec therefore
   plays its two runs in two threads.
+- Spec 009 merged before the subagent rows were written, so they use its lanes. The waterfall still projects the session
+  without its `MESSAGES_SNAPSHOT` frames: a snapshot drops messages, tool calls, reasoning and the children of lanes from
+  the entries, and only the lanes stay in `model.subagents` (research R4 has the measurement).
+- A subagent row nests under its calling tool row, which the projection does not do, so a tool call that starts a
+  subagent holds it. Cycles are refused, and a test builds one.

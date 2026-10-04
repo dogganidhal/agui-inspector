@@ -1,6 +1,5 @@
 // The run waterfall builder (spec 011): the rows, nesting, times and open rows of a recorded thread, checked against the
-// arrival offsets of the frames the reader recorded. Subagent runs are not covered here yet: they wait for the
-// subagent projection of spec 009.
+// arrival offsets of the frames the reader recorded. Subagent runs are the lanes of the conversation projection (spec 009).
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { RunAgentInput } from '@ag-ui/core';
@@ -255,4 +254,107 @@ test('a session that is exported and imported builds the same waterfall', async 
   const result = parseSession(serializeSession(session));
   assert.ok(result.ok);
   assert.deepEqual(buildWaterfall(restoreSession(result.session).snapshot()), buildWaterfall(session));
+});
+
+// ---------------------------------------------------------------------------------------------
+// Subagent runs
+// ---------------------------------------------------------------------------------------------
+
+const started = (id: string, extra: Record<string, unknown> = {}) => ({ type: 'SUBAGENT_STARTED', subagentRunId: id, name: `agent ${id}`, ...extra });
+const finished = (id: string, extra: Record<string, unknown> = {}) => ({ type: 'SUBAGENT_FINISHED', subagentRunId: id, ...extra });
+const call = (id: string, by?: string) => [
+  { type: 'TOOL_CALL_START', toolCallId: id, toolCallName: `tool ${id}`, ...(by !== undefined && { subagentRunId: by }) },
+  { type: 'TOOL_CALL_END', toolCallId: id, ...(by !== undefined && { subagentRunId: by }) },
+];
+
+test('subagent runs nest under the call that started them, under the subagent that started them, and hold what they did', () => {
+  const waterfall = buildWaterfall(delegation());
+  assert.deepEqual(
+    flatten(waterfall).map(({ kind, label, depth, startMs, endMs, open }) => [kind, label, depth, startMs, endMs, open]),
+    [
+      ['run', 'run1', 0, 100, 1800, false],
+      ['step', 'plan', 1, 150, 460, false],
+      ['reasoning', 'think-1', 2, 200, 310, false],
+      ['message', 'assistant', 2, 350, 450, false],
+      ['step', 'research', 1, 500, 1500, false],
+      ['tool', 'search_documents', 2, 520, 1400, false],
+      ['subagent', 'researcher', 3, 600, 1200, false],
+      ['message', 'assistant', 4, 620, 780, false],
+      ['tool', 'fetch_page', 4, 800, 900, false],
+      ['subagent', 'summarizer', 4, 920, 1150, false],
+      ['message', 'assistant', 5, 940, 1100, false],
+      ['message', 'assistant', 2, 580, 1250, false],
+      ['subagent', 'checker', 2, 1300, 1350, false],
+      ['step', 'answer', 1, 1550, 1760, false],
+      ['message', 'assistant', 2, 1600, 1650, false],
+      ['tool', 'pick_color', 2, 1700, 1720, false],
+    ],
+  );
+  const researcher = rowOf(waterfall, 'subagent', 'researcher');
+  assert.equal(researcher.subject, 'sub-a');
+  assert.deepEqual(researcher.facts, [{ name: 'Description', value: 'Reads the documents' }, { name: 'Parent tool call', value: 'tc-search' }]);
+  assert.deepEqual(researcher.tags, []);
+  assert.deepEqual(rowOf(waterfall, 'subagent', 'summarizer').facts, [{ name: 'Parent subagent run', value: 'sub-a' }]);
+  // A subagent run ends inside the time the call that started it was open, as its events say.
+  const search = rowOf(waterfall, 'tool', 'search_documents');
+  assert.ok((researcher.startMs as number) >= (search.startMs as number) && (researcher.endMs as number) <= (search.endMs as number));
+});
+
+test('a subagent that failed, one that was suspended and one without an end say so, and only an end event gives an end', () => {
+  const waterfall = run([RUN, started('e'), { type: 'SUBAGENT_ERROR', subagentRunId: 'e', message: 'it failed', code: 'bad' }, started('s'), finished('s', { outcome: { type: 'suspended', interruptIds: ['i1'] } }), started('o'), DONE]);
+  const state = (label: string) => {
+    const row = rowOf(waterfall, 'subagent', label);
+    return [row.tags.map((tag) => `${tag.text}/${tag.variant}`), row.open, row.endMs];
+  };
+  assert.deepEqual(state('agent e'), [['error/err'], false, 30]);
+  assert.deepEqual(state('agent s'), [['suspended/warn'], false, 50]);
+  assert.deepEqual(state('agent o'), [[], true, undefined]);
+  assert.equal(waterfall.runs[0]?.row.open, false);
+});
+
+test('a subagent that never finished is open while the run streams and after the stream stopped', () => {
+  for (const [options, live] of [[{ live: true, transport: 'streaming' as const }, true], [{ transport: 'user-stopped' as const }, false]] as const) {
+    const waterfall = run([RUN, started('o'), { type: 'TEXT_MESSAGE_START', messageId: 'm1', role: 'assistant', subagentRunId: 'o' }], options);
+    const agent = rowOf(waterfall, 'subagent', 'agent o');
+    assert.equal(agent.open, true);
+    assert.equal(agent.endMs, undefined);
+    assert.equal(waterfall.runs[0]?.live, live);
+    assert.deepEqual(agent.children.map((child) => child.kind), ['message'], 'what carries its id is inside it');
+  }
+});
+
+test('a missing, a circular and a self-referring parent call leave every row in the tree', () => {
+  // A started by a call that is inside B, B started by a call that is inside A: the second move would make a cycle.
+  const cycle = run([RUN, started('a', { parentToolCallId: 'tc-b' }), ...call('tc-a', 'a'), started('b', { parentToolCallId: 'tc-a' }), ...call('tc-b', 'b'), DONE]);
+  // A subagent started by a call of its own lane, one started by a call that does not exist.
+  const odd = run([RUN, started('c', { parentToolCallId: 'tc-c' }), ...call('tc-c', 'c'), started('d', { parentToolCallId: 'tc-nowhere' }), DONE]);
+  const names = (waterfall: ReturnType<typeof buildWaterfall>) => flatten(waterfall).map((row) => `${row.depth}:${row.label}`);
+  assert.deepEqual(names(cycle), ['0:r1', '1:agent b', '2:tool tc-b', '3:agent a', '4:tool tc-a']);
+  assert.deepEqual(names(odd), ['0:r1', '1:agent c', '2:tool tc-c', '1:agent d']);
+});
+
+test('a subagent started by a subagent sits in it, at any depth, and a thread of nested ones keeps every row', () => {
+  const events = [RUN, started('l1')];
+  for (let level = 2; level <= 30; level += 1) events.push(started(`l${level}`, { parentSubagentRunId: `l${level - 1}` }));
+  events.push(DONE);
+  const rows = flatten(run(events));
+  assert.equal(rows.length, 31);
+  assert.deepEqual(rows.map((row) => row.depth), Array.from({ length: 31 }, (_, i) => i));
+});
+
+test('a subagent continued in a later run has a row in each run it appears in', () => {
+  const h = harness();
+  playRun(h, 'ex1', timed([RUN, started('x'), finished('x', { outcome: { type: 'suspended' } }), DONE]), { runId: 'r1' });
+  playRun(h, 'ex2', timed([{ ...RUN, runId: 'r2' }, { type: 'TEXT_MESSAGE_START', messageId: 'm2', role: 'assistant', subagentRunId: 'x' }, { type: 'TEXT_MESSAGE_END', messageId: 'm2', subagentRunId: 'x' }, finished('x'), { ...DONE, runId: 'r2' }]), { runId: 'r2' });
+  const waterfall = buildWaterfall(h.session());
+  const [second, first] = waterfall.runs.map((group) => group.row.children[0]);
+  assert.deepEqual([first?.kind, first?.tags.map((tag) => tag.text)], ['subagent', ['suspended']]);
+  assert.deepEqual([second?.kind, second?.tags.map((tag) => tag.text), second?.endMs], ['subagent', ['continued', 'start not received'], 40]);
+  assert.deepEqual(second?.children.map((child) => child.kind), ['message']);
+});
+
+test('a messages snapshot takes nothing out of the waterfall, subagent runs and what they hold included', () => {
+  const h = harness();
+  playRun(h, 'ex1', timed([RUN, started('x'), { type: 'TEXT_MESSAGE_START', messageId: 'm1', role: 'assistant', subagentRunId: 'x' }, { type: 'TEXT_MESSAGE_END', messageId: 'm1', subagentRunId: 'x' }, finished('x'), { type: 'MESSAGES_SNAPSHOT', messages: [{ id: 'u9', role: 'user', content: 'only this' }] }, DONE]), { runId: 'r1' });
+  assert.deepEqual(flatten(buildWaterfall(h.session())).map((row) => `${row.depth}:${row.kind}`), ['0:run', '1:subagent', '2:message']);
 });

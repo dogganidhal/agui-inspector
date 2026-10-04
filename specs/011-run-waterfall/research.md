@@ -73,19 +73,25 @@ means the parent agent produced it). `SUBAGENT_STARTED` carries its own `subagen
 `parentSubagentRunId` (nested delegation) and an optional `parentToolCallId` (agents exposed to a model as tools).
 `SUBAGENT_FINISHED` may end suspended, which is terminal for the stream and not for the subagent.
 
-The projection reads `subagentRunId` only to infer chunk lanes. It does not attribute entries. The builder reads it
-from the first frame of an entry (`frame.parsed.subagentRunId`), a lookup of a few lines.
+Spec 009 (PR #98, merged) made the projection attribute entries to subagent lanes. A `SubagentEntry` is one invocation in
+one run. It holds the entries that carry its `subagentRunId` (steps it opened hold their own children, nested lanes are
+children), and has `status`, `startOffsetMs`, `firstOffsetMs`, `endOffsetMs`, `continued`, `parentToolCallId`,
+`parentMessageId` and `parentLaneId`. `ConversationModel.subagents` lists every lane, the same objects the entries hold.
+The waterfall reads these and derives no subagent fact of its own. It does not use `timelineOf`, which has no rows for
+steps, messages or tool calls.
 
-Parent of a subagent row, in order: the row of the tool call named by `parentToolCallId` if that call has a row in
-this run, the row of `parentSubagentRunId` if that subagent has a row in this run, the row that holds it in the
-projection (a step or the run). Parent of any other row: the row of its `subagentRunId` if the subagent has a row in
-this run, else the row that holds it in the projection. Re-parenting is applied in arrival order and refused when the
-new parent is inside the row's own subtree, so malformed or circular parents leave the row where the projection put
-it.
+What the waterfall adds is one rule: a subagent started by a tool call (`parentToolCallId`) sits under that call's row,
+because a waterfall of tool calls should show a delegating call as holding the subagent run. The projection puts the
+lane in the flow that held the call. The move is applied in arrival order and refused when the call is inside the lane's
+own subtree, so malformed or circular parents leave the row where the projection put it.
 
-Coordination with spec 009 (subagent lanes and a timeline): on 2026-10-04 the `gh-79-subagent-lanes` worktree had no
-commit and no spec beyond `main`. The waterfall therefore keeps its own attribution lookup and states in the PR that
-it will use 009's if it lands first. The waterfall lives in the inspection pane, and 009 lives in the conversation.
+A lane's `endOffsetMs` is the last frame of the exchange when no end event came, so the waterfall gives a lane an end only
+when its status is `finished`, `suspended` or `error`.
+
+Is the `MESSAGES_SNAPSHOT` filter still needed with lanes in the projection? Yes. Measured on 2026-10-04 on `main` with the
+frozen workload, the session as recorded gives 10 runs, 40 steps, 2 messages, no tool calls and no subagent entries in
+`entries` (the 20 lanes stay in `model.subagents`, without their children). Without the snapshot frames it gives 100 steps,
+160 messages, 140 tool calls, 60 reasoning messages and 20 lanes. The lane rule keeps lanes in the list, not what they held.
 
 ## R5: Drawing
 

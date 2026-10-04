@@ -66,6 +66,20 @@ test('a tool call has an arguments bar and a wait bar, every other row one bar, 
   assert.ok(styles.some(([left, width]) => left === 27.37 && width === 2.11), 'search_documents arguments 520 to 560 ms');
 });
 
+test('subagent runs are rows of their own kind, nested to their depth, and say how they ended', () => {
+  const full = html(delegation());
+  const rows = [...full.matchAll(/role="treeitem"[^>]*/g)].map((match) => match[0]);
+  assert.deepEqual(rows.map((row) => Number(/aria-level="(\d+)"/.exec(row)?.[1])), [1, 2, 3, 3, 2, 3, 4, 5, 5, 5, 6, 3, 3, 2, 3, 3]);
+  assert.equal((full.match(/<span class="agui-wf-kind">subagent<\/span>/g) ?? []).length, 3);
+  for (const label of ['researcher', 'summarizer', 'checker']) assert.match(full, new RegExp(`class="agui-wf-label"[^>]*>${label}<`));
+  const checker = items(full).find(([, inner]) => inner.includes('>checker<'));
+  assert.match(checker?.[1] ?? '', />error</);
+  assert.match(checker?.[0] ?? '', /aria-label="subagent, checker, level 3, started \+1\.300, ended \+1\.350, 50 ms, error"/);
+  const nested = rows.map((row) => /aria-expanded="(\w+)"/.exec(row)?.[1]);
+  assert.equal(nested[6], 'true', 'the researcher holds rows');
+  assert.equal(nested[11], undefined, 'a message holds none');
+});
+
 test('the newest run is open and an older run is closed, and a closed run has no axis', () => {
   const h = harness();
   playRun(h, 'ex1', timed([RUN, DONE]), { runId: 'r1' });

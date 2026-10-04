@@ -17,7 +17,8 @@ The design adds one core module, one view and almost no shared code:
 - `core/projection/waterfall.ts` (new, framework-free) turns a session into run groups of rows. It does not read the
   stream a second time. It runs the existing conversation projection over the session without its
   `MESSAGES_SNAPSHOT` frames (a snapshot makes the projection drop streamed rows, which a timeline must keep), reads
-  timing from the entries' frames, and reads the `subagentRunId` that events carry to nest rows under subagent runs.
+  timing from the entries' frames, and takes subagent rows from the projection's lanes (`SubagentEntry`, spec 009),
+  which already hold what a subagent run did and which lane it sits in.
 - `views/inspection/waterfall-model.ts` (new, no React) flattens the rows that are visible and holds the key map of
   the tree, so both are unit-tested without a browser.
 - `views/inspection/waterfall.tsx` and `waterfall.css` (new) draw the groups, the tree, the bars and the details.
@@ -72,7 +73,7 @@ Constitution 1.2.0.
 | Rule | Assessment |
 | --- | --- |
 | I: wire first | Pass. The waterfall reads frames through the existing projection and changes none. Rows and times are labelled derived, carry no frame index and name their first and last frame. A frame that is not valid adds no row and keeps its place and finding in the frames list. An end that no frame carried is never shown: such a row is open. The protocol client's stream is untouched. |
-| II: protocol, not a framework | Pass. The rows come from the projection and from the `subagentRunId` that `@ag-ui/core` defines on events. The builder is in `core` with no React. The view is in `views`. No chat framework. |
+| II: protocol, not a framework | Pass. The rows come from the projection, which reads the events and the `subagentRunId` that `@ag-ui/core` defines. The builder is in `core` with no React. The view is in `views`. No chat framework. |
 | III: generic core | Pass. Nothing server-specific. |
 | IV: local-only and credentials | Pass. No request, no storage, no logging, no header. Row labels are text from received events and are shown as received. |
 | V: small and auditable | Pass. No dependency. The builder reuses the projection and adds one tree-building pass. No abstraction beyond the two modules the view needs. |
@@ -160,13 +161,14 @@ The reasons and the alternatives are in [research.md](research.md). The short ve
    the projection has closed them.
 4. **One axis per run, from dispatch.** 0 is when the request was sent, as in the frames list, and the axis ends at
    the later of the latest frame and the exchange's elapsed time, the same rule the frames timeline uses.
-5. **Nesting is structure plus attribution.** A step holds what the projection put inside it. A subagent nests under
-   the tool call named by `parentToolCallId` when that call is a row of the run, else under its
-   `parentSubagentRunId`, else where its start arrived. A step, message, reasoning message or tool call that carries a
-   `subagentRunId` nests under that subagent's row. A re-parent that would make a cycle is refused, so the tree
-   always holds every row.
-6. **A subagent is a segment per run.** The entry spans the thread. A row exists for each run in which the subagent
-   has a start, finish or error event, so a suspended subagent continued in a later run has two rows.
+5. **Nesting is the projection's structure plus one rule.** A step holds what the projection put inside it, and a
+   subagent lane holds the entries that carry its id and the lanes it started (`parentSubagentRunId`). The one rule
+   added here: a subagent nests under the tool call named by `parentToolCallId` when that call is a row of the run. A
+   move that would put a row inside its own subtree is refused, so the tree always holds every row.
+6. **A subagent is a lane, which is a segment per run.** The projection makes one lane for each run in which a
+   subagent appears, so a suspended subagent continued in a later run has two rows. A lane's status, start and end
+   offsets and `continued` flag are the projection's. Only a lane that ended by an event (finished, suspended or error)
+   has an end in the waterfall; the lane's end offset of an unfinished lane is the last frame, which is not an end.
 7. **The tree pattern, flat.** `role="tree"` with one tab stop (roving `tabindex`), `aria-level`, `aria-expanded`,
    `aria-setsize` and `aria-posinset` on each `treeitem`. Selection follows focus. Enter shows the first frame.
    Bars and axes are `aria-hidden`; the item's `aria-label` carries kind, label, level, times and state.
@@ -203,9 +205,8 @@ Spec scenario to test:
   function). The state history (010) edits `app/index.tsx` or the State tab, the Markdown work (012) edits the
   conversation, the subagent lanes (009) edit the conversation and may edit `core/projection/index.ts`. The waterfall
   touches none of those files except the one-line prop in `app/index.tsx`.
-- **Subagent attribution.** The waterfall reads `subagentRunId` from the first frame of an entry itself. If spec 009
-  adds the same fact to the projection, the builder switches to it and drops its own lookup. At the time of this plan
-  the 009 branch had no commit and no spec, so there was nothing to reuse yet.
+- **Subagent lanes.** The waterfall reads the lanes of spec 009 and derives no subagent fact itself (spec 009 merged as
+  #98 before this was finished). If a field it reads changes there, `waterfall.ts` and its tests change with it.
 - **Very large runs.** A single run with thousands of rows draws them all. The workload has about 48 rows per run, so
   this is not measured. If a recording proves otherwise, windowing the visible rows is a change inside
   `waterfall.tsx` and `visibleRows` and needs no change to the model.

@@ -77,6 +77,8 @@ The [waterfall](./inspection.mdx#waterfall) draws each step as a bar from its st
 
 - `SUBAGENT_STARTED`, `SUBAGENT_FINISHED` and `SUBAGENT_ERROR` make a lane for each subagent in each run, with a line for each start, finish or error. Events that carry the subagent's `subagentRunId` go inside the lane. See [Subagent lanes](#subagent-lanes).
 
+The [waterfall](./inspection.mdx#waterfall) shows each subagent run as a row of its run, nested under the tool call that started it, with its messages and tool calls inside it.
+
 ### Custom and raw
 
 - `CUSTOM` shows a marker with its name and value.

@@ -15,6 +15,7 @@ test('the inspection page has a Waterfall section that says what a row is, what 
   for (const word of Object.values(KIND_WORD)) assert.ok(waterfall.includes(`\`${word}\``), `the kind word ${word}`);
   for (const text of ['running', 'no end seen', 'waiting for result', 'answered by the client', 'arrival times', 'never makes up an end']) assert.ok(waterfall.includes(text), text);
   assert.match(waterfall, /never changes it and never sends a request/);
+  for (const text of ['parentToolCallId', 'continued', 'nested under the tool call that started it']) assert.ok(waterfall.includes(text), text);
 });
 
 test('the Waterfall section lists every key of the tree', () => {

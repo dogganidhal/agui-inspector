@@ -355,8 +355,8 @@ written time.
   fixed unit, so it is not used.
 - Each run has its own time axis, so a short run is as readable as a long one. Comparing runs on one shared scale is
   out of scope.
-- The set of rows and their parents come from the projection that builds the conversation, plus the subagent id that
-  events carry. The waterfall reuses that projection and does not add a second reading of the stream. If the
-  subagent lanes work adds the same attribution to the projection, the waterfall uses it.
+- The set of rows and their parents come from the projection that builds the conversation, including its subagent
+  lanes (spec 009). The waterfall reuses that projection and does not add a second reading of the stream. Its one
+  nesting rule of its own is that a subagent run sits under the tool call that started it.
 - Out of scope: zooming and panning the axis, filtering or searching rows, exporting the waterfall, rows for state,
   activity, custom and raw events, a shared scale across runs, and any change to what is recorded.

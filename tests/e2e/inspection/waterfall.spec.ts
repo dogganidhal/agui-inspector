@@ -82,7 +82,7 @@ const test = base.extend<{ requested: string[] }, { site: Site }>({
   },
 });
 
-const DELEGATION = delegationRun({ threadId: 't1', runId: 'ex1' }, { subagents: false });
+const DELEGATION = delegationRun({ threadId: 't1', runId: 'ex1' });
 
 const inspectionTabs = (page: Page) => page.getByRole('group', { name: 'Inspection view' });
 const tree = (page: Page) => page.getByRole('tree', { name: 'Run waterfall' });
@@ -149,6 +149,7 @@ test('a stream cut before RUN_FINISHED leaves open rows that say no end seen and
   await showWaterfall(page);
   await play(page, 'ex1', DELEGATION.slice(0, 24), { transport: 'user-stopped' });
   await expect(row(page, /^run, ex1,/)).toContainText('Stopped by you');
+  await expect(row(page, /^subagent, researcher,/)).toContainText('no end seen');
   const openRows = page.locator('[role="treeitem"][data-open="true"]');
   await expect.poll(async () => (await names(rows(page))).filter((label) => label.includes('no end seen')).length).toBeGreaterThan(1);
   const labels = await names(rows(page));
@@ -171,7 +172,7 @@ test('a selection and a closed step stay as they were while more frames arrive',
   await page.evaluate(() => {
     for (let i = 0; i < 100; i += 1) window.__waterfall.push('ex1', { type: 'CUSTOM', name: 'tick', value: i }, 3000 + i);
   });
-  for (const event of DELEGATION.slice(30, 40)) await pushOne(page, 'ex1', event);
+  for (const event of DELEGATION.slice(30)) await pushOne(page, 'ex1', event);
   await expect(row(page, /^step, answer,/)).toBeVisible();
   await expect(row(page, /^step, research,/)).toHaveAttribute('aria-selected', 'true');
   await expect(row(page, /^step, research,/)).toHaveAttribute('aria-expanded', 'false');
@@ -183,7 +184,7 @@ test('from the keyboard alone: reach the tree, walk every row, open and close a 
   await open(page, site);
   await showWaterfall(page);
   await play(page, 'ex1', DELEGATION, { elapsedMs: 1900 });
-  await expect(rows(page)).toHaveCount(10);
+  await expect(rows(page)).toHaveCount(16);
 
   const first = rows(page).first();
   await tabTo(page, first);
@@ -196,6 +197,7 @@ test('from the keyboard alone: reach the tree, walk every row, open and close a 
 
   const labels = await names(rows(page));
   expect(labels[0]).toMatch(/^run, ex1, level 1, started \+0\.100, ended \+1\.800/);
+  expect(labels.some((label) => label.startsWith('text, assistant, level 6,')), 'the deepest row, in the inner subagent run, is level 6').toBe(true);
   for (let i = 0; i < labels.length; i += 1) {
     if (i > 0) await page.keyboard.press('ArrowDown');
     expect(await focused(page)).toBe(labels[i]);
@@ -218,9 +220,17 @@ test('from the keyboard alone: reach the tree, walk every row, open and close a 
   await expect(rows(page)).toHaveCount(8);
   await page.keyboard.press('ArrowRight');
   await expect(row(page, /^step, research,/)).toHaveAttribute('aria-expanded', 'true');
-  await expect(rows(page)).toHaveCount(10);
+  await expect(rows(page)).toHaveCount(16);
   await page.keyboard.press('ArrowRight');
   expect(await focused(page)).toMatch(/^tool, search_documents, level 3,/);
+  await page.keyboard.press('ArrowRight');
+  expect(await focused(page), 'the subagent run is inside the call that started it').toMatch(/^subagent, researcher, level 4,/);
+  // Left closes an open row first and steps to the parent from a closed one.
+  await page.keyboard.press('ArrowLeft');
+  await expect(row(page, /^subagent, researcher,/)).toHaveAttribute('aria-expanded', 'false');
+  await page.keyboard.press('ArrowLeft');
+  expect(await focused(page)).toMatch(/^tool, search_documents, level 3,/);
+  await page.keyboard.press('ArrowLeft');
   await page.keyboard.press('ArrowLeft');
   expect(await focused(page)).toMatch(/^step, research, level 2,/);
 
@@ -254,6 +264,12 @@ test('Enter and the frame buttons show the row in the frames list, and the water
   await expect(row(page, /^tool, search_documents,/)).toHaveAttribute('aria-selected', 'true');
   await expect(row(page, /^step, plan,/)).toHaveAttribute('aria-expanded', 'false');
 
+  await row(page, /^subagent, researcher,/).focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('[aria-current="true"]')).toContainText('SUBAGENT_STARTED');
+  await showWaterfall(page);
+  await row(page, /^tool, search_documents,/).focus();
+
   const last = details(page).getByRole('button', { name: /^Show frame #\d+ in the frames list$/ }).last();
   await expect(details(page)).toContainText('Arguments complete');
   await last.click();
@@ -270,7 +286,7 @@ test('a new thread starts the waterfall again', async ({ page, site }) => {
   await expect(page.getByText('No run in this thread yet.')).toBeVisible();
   await expect(details(page)).toContainText('Select a row');
   await page.evaluate(() => window.__waterfall.setThread('t1'));
-  await expect(rows(page)).toHaveCount(10);
+  await expect(rows(page)).toHaveCount(16);
   await expect(page.locator('[aria-selected="true"]')).toHaveCount(0);
 });
 
@@ -405,7 +421,7 @@ for (const scheme of ['light', 'dark'] as const) {
     await showWaterfall(page);
 
     // A run stopped by the user, with open rows. Ids are unique within a thread, so the finished run is in another thread.
-    await play(page, 'ex1', delegationRun({ threadId: 't1', runId: 'ex1' }, { subagents: false }).slice(0, 24), { transport: 'user-stopped' });
+    await play(page, 'ex1', delegationRun({ threadId: 't1', runId: 'ex1' }).slice(0, 24), { transport: 'user-stopped' });
     await row(page, /^tool, search_documents,/).click();
     await expect(details(page)).toContainText('Arguments complete');
     await expectReadable(page);
@@ -413,7 +429,7 @@ for (const scheme of ['light', 'dark'] as const) {
     await expect(rows(page).filter({ hasText: 'no end seen' }).first()).toBeVisible();
 
     // A finished run with a call that waits for its result.
-    await play(page, 'ex2', delegationRun({ threadId: 't2', runId: 'ex2' }, { subagents: false }), { threadId: 't2', elapsedMs: 1900 });
+    await play(page, 'ex2', delegationRun({ threadId: 't2', runId: 'ex2' }), { threadId: 't2', elapsedMs: 1900 });
     await page.evaluate(() => window.__waterfall.setThread('t2'));
     await row(page, /^tool, pick_color,/).click();
     await expect(details(page)).toContainText('waiting for result');

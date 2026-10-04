@@ -45,7 +45,7 @@ async function target(pageOrigin: () => string): Promise<Target> {
     response.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store' });
     response.on('close', () => !response.writableFinished && closed.push(pathname));
     if (pathname === '/delegation') {
-      for (const { event } of delegationRun(input, { subagents: false })) {
+      for (const { event } of delegationRun(input)) {
         response.write(`data: ${JSON.stringify(event)}\n\n`);
         await sleep(FRAME_PAUSE_MS);
       }
@@ -115,16 +115,18 @@ test('a delegation run is a waterfall of its steps, messages and calls, the same
     await expect(page.locator('[data-entry="run"][data-status="finished"]')).toHaveCount(1);
     await showWaterfall(page);
 
-    await expect(rows(page)).toHaveCount(10);
+    await expect(rows(page)).toHaveCount(16);
     const live = await names(rows(page));
     expect(live[0]).toMatch(/^run, [^,]+, level 1, started \+0\.\d{3}, ended \+(\d\.\d{3}), .*Finished, open$/);
     const ended = Number(/ended \+(\d\.\d{3})/.exec(live[0] as string)?.[1]);
     expect(ended, 'the run spans the real pauses between the frames').toBeGreaterThan(0.4);
-    expect(live.map((label) => label.split(',')[0])).toEqual(['run', 'step', 'reasoning', 'text', 'step', 'tool', 'text', 'step', 'text', 'tool']);
+    expect(live.map((label) => label.split(',')[0])).toEqual(['run', 'step', 'reasoning', 'text', 'step', 'tool', 'subagent', 'text', 'tool', 'subagent', 'text', 'text', 'subagent', 'step', 'text', 'tool']);
     expect(live.find((label) => label.startsWith('tool, pick_color'))).toContain('waiting for result');
     expect(live.filter((label) => label.includes('no end seen') || label.includes('running'))).toEqual([]);
     await expect(row(page, /^step, research,/)).toHaveAttribute('aria-level', '2');
     await expect(row(page, /^tool, search_documents,/)).toHaveAttribute('aria-level', '3');
+    await expect(row(page, /^subagent, researcher,/)).toHaveAttribute('aria-level', '4');
+    await expect(row(page, /^subagent, checker,/)).toContainText('error');
 
     // Using the waterfall sent nothing, wrote nothing and left the recording as it was.
     const sent = site.agent.seen.length;
@@ -150,7 +152,7 @@ test('a delegation run is a waterfall of its steps, messages and calls, the same
     await fresh.locator('input[type="file"]').first().setInputFiles({ name: 'run.json', mimeType: 'application/json', buffer: Buffer.from(file) });
     await expect(fresh.getByText('Imported recording: inspection only')).toBeVisible();
     await showWaterfall(fresh);
-    await expect(rows(fresh)).toHaveCount(10);
+    await expect(rows(fresh)).toHaveCount(16);
     expect(await names(rows(fresh))).toEqual(live);
     expect(await exportFile(fresh), 'and exporting it again gives back the same bytes').toBe(file);
     expect(site.agent.seen.length, 'importing and reading sent nothing to the agent').toBe(sent);

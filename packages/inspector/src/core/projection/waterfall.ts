@@ -6,11 +6,16 @@
 // the arrival offsets of the frames the projection names for each entry. A row ends at the frame that ends
 // it, by event type, or it does not end: it is open, and no end is made up for it.
 //
+// Subagent rows come from the projection's lanes (`SubagentEntry`): which entries a subagent run holds, which lane it sits
+// in and when it began and ended are the projection's facts, not read again here. The one rule added here is that a
+// subagent started by a tool call sits under that call's row.
+//
 // The projection is run over the session without its `MESSAGES_SNAPSHOT` frames. A snapshot replaces the
-// transcript there, which drops messages and tool calls that streamed earlier. That is right for a
-// conversation and wrong for a timeline, where a message that took three seconds did take three seconds.
+// transcript there, which drops messages and tool calls that streamed earlier, and only the lanes survive in
+// `ConversationModel.subagents`. That is right for a conversation and wrong for a timeline, where a message that took
+// three seconds did take three seconds.
 import type { ExchangeId, FrameId, InspectionSession, RawFrame } from '../../contracts.ts';
-import { projectConversation, type ConversationEntry, type MessageEntry, type ReasoningEntry, type RunEntry, type RunStatus, type StepEntry, type ToolCallEntry } from './index.ts';
+import { projectConversation, type ConversationEntry, type MessageEntry, type ReasoningEntry, type RunEntry, type RunStatus, type StepEntry, type SubagentEntry, type ToolCallEntry } from './index.ts';
 
 export type RowKind = 'run' | 'step' | 'message' | 'reasoning' | 'tool' | 'subagent';
 
@@ -115,6 +120,9 @@ export function buildWaterfall(session: InspectionSession, threadId?: string): W
     const settled = run.status !== 'stopped' && run.status !== 'no-terminal';
 
     /** The frames of an entry that belong to this run's exchange: offsets of another exchange are not comparable. */
+    const toolRows = new Map<string, WaterfallRow>();
+    const laneRows: Array<{ lane: SubagentEntry; row: WaterfallRow; siblings: WaterfallRow[] }> = [];
+
     const own = (entry: { frames: readonly FrameId[] }): RawFrame[] =>
       entry.frames.flatMap((id) => {
         const frame = frameById.get(id);
@@ -170,12 +178,14 @@ export function buildWaterfall(session: InspectionSession, threadId?: string): W
         tags.push({ text: entry.pending ? 'waiting for result' : 'no result', variant: 'warn' });
         endMs = argsEnd.offsetMs;
       }
-      return row(entry, 'tool', entry.name, entry.toolCallId, frames, {
+      const made = row(entry, 'tool', entry.name, entry.toolCallId, frames, {
         ...(endMs !== undefined && { endMs }),
         ...(argsEnd !== undefined && { argsEndMs: argsEnd.offsetMs }),
         ...(result !== undefined && { resultMs: result.offsetMs }),
         tags,
       });
+      toolRows.set(entry.toolCallId, made);
+      return made;
     };
 
     const step = (entry: StepEntry): WaterfallRow | undefined => {
@@ -188,13 +198,40 @@ export function buildWaterfall(session: InspectionSession, threadId?: string): W
       });
     };
 
+    const subagent = (entry: SubagentEntry): WaterfallRow | undefined => {
+      const frames = own(entry);
+      if (frames.length === 0) return undefined;
+      const tags: RowTag[] = [];
+      if (entry.status === 'error') tags.push({ text: 'error', variant: 'err' });
+      if (entry.status === 'suspended') tags.push({ text: 'suspended', variant: 'warn' });
+      if (entry.continued) tags.push({ text: 'continued', variant: 'line' });
+      if (entry.startOffsetMs === undefined) tags.push({ text: 'start not received', variant: 'line' });
+      // The lane's end offset is the last frame of the exchange when no end event came, so only a status with an end event has an end.
+      const ended = entry.status === 'finished' || entry.status === 'suspended' || entry.status === 'error';
+      const facts = [
+        ['Description', entry.description],
+        ['Parent tool call', entry.parentToolCallId],
+        ['Parent message', entry.parentMessageId],
+        ['Parent subagent run', entry.parentSubagentRunId],
+      ].flatMap(([name, value]) => (value === undefined ? [] : [{ name: name as string, value }]));
+      return row(entry, 'subagent', entry.name ?? entry.subagentRunId, entry.subagentRunId, frames, {
+        startMs: entry.startOffsetMs ?? entry.firstOffsetMs,
+        ...(ended && { endMs: entry.endOffsetMs }),
+        tags,
+        facts,
+        children: rowsOf(entry.children),
+      });
+    };
+
     function rowsOf(entries: readonly ConversationEntry[]): WaterfallRow[] {
       const rows: WaterfallRow[] = [];
       for (const entry of entries) {
         const made =
-          entry.kind === 'step' ? step(entry) : entry.kind === 'message' ? message(entry) : entry.kind === 'reasoning' ? reasoning(entry) : entry.kind === 'tool' ? tool(entry) : undefined;
-        // Subagent runs, activities, custom, raw and encrypted entries, snapshots and issues are not rows here.
-        if (made !== undefined) rows.push(made);
+          entry.kind === 'step' ? step(entry) : entry.kind === 'message' ? message(entry) : entry.kind === 'reasoning' ? reasoning(entry) : entry.kind === 'tool' ? tool(entry) : entry.kind === 'subagent' ? subagent(entry) : undefined;
+        // Activities, custom, raw and encrypted entries, snapshots and issues are not rows here.
+        if (made === undefined) continue;
+        rows.push(made);
+        if (entry.kind === 'subagent') laneRows.push({ lane: entry, row: made, siblings: rows });
       }
       return rows;
     }
@@ -223,6 +260,14 @@ export function buildWaterfall(session: InspectionSession, threadId?: string): W
       ...(lastOf.has(run.exchangeId) && { lastFrame: lastOf.get(run.exchangeId) as FrameId }),
       children: rowsOf(inRun.get(run.exchangeId) ?? []),
     };
+    // A subagent started by a tool call sits under that call's row, unless the call is inside the subagent's own rows.
+    const inside = (root: WaterfallRow, target: WaterfallRow): boolean => root === target || root.children.some((child) => inside(child, target));
+    for (const { lane, row: laneRow, siblings } of laneRows) {
+      const caller = lane.parentToolCallId === undefined ? undefined : toolRows.get(lane.parentToolCallId);
+      if (caller === undefined || inside(laneRow, caller)) continue;
+      siblings.splice(siblings.indexOf(laneRow), 1);
+      (caller.children as WaterfallRow[]).push(laneRow);
+    }
     return { exchangeId: run.exchangeId, row: runRow, status: run.status, live: LIVE.has(exchange?.transport ?? ''), latestMs, axisMs };
   });
 

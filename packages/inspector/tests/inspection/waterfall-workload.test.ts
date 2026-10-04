@@ -47,7 +47,7 @@ test('the 5,000-frame workload builds quickly, keeps every row the snapshot woul
   assert.ok(elapsed < 500, `building the waterfall of 5,000 frames took ${elapsed.toFixed(0)} ms`);
   assert.equal(waterfall.runs.length, 10);
   // The workload sends a MESSAGES_SNAPSHOT: the conversation keeps 2 of these 160 messages and none of the tool calls.
-  assert.deepEqual(Object.fromEntries(counts), { run: 10, step: 100, message: 160, tool: 140, reasoning: 60 });
+  assert.deepEqual(Object.fromEntries(counts), { run: 10, step: 100, message: 160, tool: 140, reasoning: 60, subagent: 20 });
   const ids = new Set<string>();
   const visit = (row: WaterfallRow) => {
     assert.ok(!ids.has(row.id), `duplicate row id ${row.id}`);

@@ -68,7 +68,7 @@ export function buildWaterfall(session: InspectionSession, threadId?: string): W
 | --- | --- |
 | Run | `<exchangeId>:run` |
 | Step, message, reasoning, tool call | the projection's entry id, which is `<first frame id>:<kind>-<id>` |
-| Subagent | `<exchangeId>:subagent-<subagentRunId>` |
+| Subagent | the lane's entry id, which is `<first frame id>:subagent-<subagentRunId>` |
 
 Frame ids are recorded in the session file, so ids are the same after an import.
 
@@ -114,14 +114,21 @@ A tool call's bar has two spans: arguments from start to `argsEndMs`, and the wa
 
 ### Nesting
 
-1. Each row starts under the row that holds its entry in the projection: the run, or the open step it was added to.
-2. Subagent rows are created per exchange from the entry's lines.
-3. In arrival order, each subagent row moves under the row of its `parentToolCallId` if that tool call has a row in
-   the run, else under the row of its `parentSubagentRunId` if that subagent has a row in the run.
-4. In arrival order, each step, message, reasoning or tool row whose first frame carries a `subagentRunId` moves under
-   that subagent's row if the subagent has a row in the run.
-5. A move is refused when the new parent is inside the moving row's own subtree.
-6. Children are sorted by `startMs`, then by the arrival index of the first frame.
+1. Each row sits where the projection put its entry: in the run, in the step that was open, or in a subagent lane. A lane
+   (`SubagentEntry`) holds the entries that carry its `subagentRunId`, the steps it opened and the lanes it started
+   (`parentSubagentRunId`), so the waterfall derives none of that.
+2. A subagent row moves under the row of its `parentToolCallId` when that tool call has a row in the run. Moves are applied
+   in arrival order.
+3. A move is refused when the tool call is inside the subagent row's own subtree, directly or through earlier moves.
+4. Children are in the projection's order, which is the arrival order of their first frame and so their start order.
+
+### Subagent rows
+
+One row for each `SubagentEntry` of the run (a lane is one invocation in one run). Label: its name, else its id. Subject: its
+`subagentRunId`. Start: `startOffsetMs`, else `firstOffsetMs`. End: `endOffsetMs` when the status is `finished`, `suspended`
+or `error`, otherwise none (the lane's end offset is then the last frame of the exchange, which is not an end). Tags:
+`error` (err), `suspended` (warn), `continued` (the lane's `continued`) and `start not received` (no `startOffsetMs`).
+Facts: description, parent tool call, parent message and parent subagent run, when present.
 
 ## Visible rows (views/inspection/waterfall-model.ts)
 
