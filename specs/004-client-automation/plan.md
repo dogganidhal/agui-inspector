@@ -76,7 +76,7 @@ does not touch it.
 
 1. `contracts.ts`: `ClientProfileSettings.interruptReply?`, `.interruptPayloads?`, `.toolResults?`; `InterruptAnswer.automatic?`,
    `ToolResultDraft.automatic?`; `AutomaticReplies`; `Run.automaticReplies?`.
-2. `core/profiles/index.ts`: validate and copy the three fields in `parseProfileSettings`, carry them in `envelope`, update
+2. `core/profiles/index.ts`: validate and copy the three fields in `parseProfileSettings`, plus four small edit helpers for the panel (`setInterruptReply`, `setInterruptPayload`, `setToolResult`, `removeTool`) that leave no empty map and remove a tool together with its script, carry them in `envelope`, update
    the comments that count seven settings.
 3. `core/runtime/replies.ts`: `AUTOMATIC_REPLY_LIMIT`, `automate` (which also picks the payload for an interrupt's
    reason), `automaticReplies`.
@@ -128,13 +128,15 @@ packages/inspector/src/views/connection/index.tsx         # Automatic tags, tool
 packages/inspector/src/views/conversation/index.tsx       # Result label
 examples/reference-agent/scenarios.ts                     # INTERRUPT_FOREVER
 examples/reference-agent/interactive-scenarios.ts         # re-export
-packages/inspector/tests/runtime/{replies,runtime}.test.ts, connection-view.test.tsx, docs.test.ts
+packages/inspector/tests/runtime/{replies,automation}.test.ts, connection-view.test.tsx, docs.test.ts
 packages/inspector/tests/config/{settings.test.ts,settings-view.test.tsx}
 packages/inspector/tests/foundation/contracts.test.ts
-packages/inspector/tests/conversation/                    # projection marks
+packages/inspector/tests/conversation/{input.test.ts,automatic.test.tsx,support.ts}   # projection marks, the view, the harness option
 packages/inspector/tests/inspection/session.test.ts       # round trip with marks
 tests/demo/scenarios.test.ts                              # the new scenario, and SCENARIOS unchanged
-tests/e2e/runtime/automation.spec.ts                      # new: resolve, cancel, scripted, mixed, limit, Stop
+tests/e2e/runtime/automation.spec.ts                      # new: resolve, cancel, payload, scripted, mixed, marks, limit
+tests/e2e/runtime/{support.ts,interactive.spec.ts}        # the shared fixtures moved into support.ts, so both specs use them
+tests/e2e/hosted/support.ts                               # an /interactive route that serves the reference agent's scenarios
 tests/e2e/config/settings.spec.ts                         # panel controls, export, import, reload
 tests/e2e/hosted/app.spec.ts                              # the real app reads the panel's setting
 website/content/docs/{runs,configuration,recordings,event-views,internals,demo,demo-internals}.mdx
@@ -150,7 +152,7 @@ only new files are the e2e spec, the changesets and this directory.
 | Layer | Cases |
 | --- | --- |
 | `replies.test.ts` (pure) | `automate`: resolve, cancel, none; the payload for a reason replaces the starting answer, is cloned, is not checked against the schema, is ignored by cancel, and a reason without a payload keeps the starting answer; reasons `constructor`, `toString`, `__proto__` match no payload; script match by name; no match for empty name or `constructor`, `toString`, `__proto__`; mixed batch; answered replies untouched; same object when nothing changes. `automaticReplies`: ids, undefined when empty. |
-| `runtime.test.ts` | Equality: automatic continuation body equals the manual one under a fixed identifier source, for interrupts (resolve, cancel) and tools, in full and turn message modes. Chain stops at 10 and sets the notice. The count resets on a message, a manual answer, a manual continuation, a surface action, a new thread and a target change. Pause clears. Stop ends the chain and a stopped run is not answered. Failed preparation leaves marked answers, sends nothing more, and the manual `continueRun` works. A profile change while waiting answers nothing. The profile in force at run end decides. `send` resolves after the chain. Default profile: nothing answered (the existing test stays). `Run.automaticReplies` written, absent for manual. A2UI action not automated. |
+| `automation.test.ts` | Equality: automatic continuation body equals the manual one under a fixed identifier source, for interrupts (resolve, cancel) and tools, in full and turn message modes. Chain stops at 10 and sets the notice. The count resets on a message, a manual answer, a manual continuation, a surface action, a new thread and a target change. Pause clears. Stop ends the chain and a stopped run is not answered. Failed preparation leaves marked answers, sends nothing more, and the manual `continueRun` works. A profile change while waiting answers nothing. The profile in force at run end decides. `send` resolves after the chain. Default profile: nothing answered (the existing test stays). `Run.automaticReplies` written, absent for manual. A2UI action not automated. |
 | `settings.test.ts` | Parse accepts 0.1.0 profiles, all three fields, `{}`; rejects bad mode, non-object, an empty reason, unknown tool, empty or non-text script, extra keys, credential-looking keys; a payload map is kept when the mode is cancel or absent; `null`, a list and an empty object are valid payloads. Export contains the fields only when set. Export then import equals. Save and load through storage. |
 | `settings-view.test.tsx` | The segmented control, the payload group (add, edit, remove, invalid JSON not applied), the script field, clearing, removing a tool removes its script, labels. |
 | `contracts.test.ts` | The envelope still has no volatile field. |
