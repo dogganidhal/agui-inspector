@@ -4,16 +4,23 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { JsonValue } from '../../src/contracts.ts';
-import { classify, surfaceKey } from '../../src/core/a2ui/operations.ts';
+import type { SurfaceIssue } from '../../src/core/a2ui/index.ts';
+import { classify, surfaceKey, type Entry } from '../../src/core/a2ui/operations.ts';
 
 const NOT_AN_OBJECT = 'This operation is not an object.';
 const NO_VERSION = 'This operation has no version and no v0.8 message name. A2UI v0.9 operations declare "version": "v0.9".';
 const declares = (value: string) => `This operation declares version ${value}. A2UI v0.9 operations declare "v0.9", and v0.8 messages have no version.`;
 
+/** The entries (`index:version`) and the refusals (`[index, message]`) of a list. */
 const sorted = (operations: JsonValue[], offset?: number) => {
-  const { entries, refused } = classify(operations, offset);
-  return { versions: entries.map((entry) => `${entry.index}:${entry.version}`), refused: refused.map((issue) => [issue.index, issue.message]) };
+  const items = classify(operations, offset);
+  return {
+    versions: items.flatMap((item) => ('version' in item ? [`${item.index}:${item.version}`] : [])),
+    refused: items.flatMap((item) => ('source' in item ? [[item.index, item.message]] : [])),
+  };
 };
+const refusalsOf = (operations: JsonValue[]) => classify(operations).filter((item): item is SurfaceIssue => 'source' in item);
+const entriesOf = (operations: JsonValue[]) => classify(operations).filter((item): item is Entry => 'version' in item);
 
 test('an object that declares v0.9 is v0.9, whatever it holds', () => {
   const { versions, refused } = sorted([
@@ -77,15 +84,15 @@ test('three refusals, each with its own text and its position', () => {
 
 test('a refusal carries the entry as received', () => {
   const entry = { version: 'v0.8', beginRendering: { surfaceId: 's', root: 'r' } };
-  const { refused } = classify([entry]);
-  assert.equal(refused[0]?.source, 'operation');
-  assert.equal(refused[0]?.operation, entry, 'the very object, not a copy');
+  const [refused] = refusalsOf([entry]);
+  assert.equal(refused?.source, 'operation');
+  assert.equal(refused?.operation, entry, 'the very object, not a copy');
 });
 
 test('a hostile declared version is cut', () => {
-  const { refused } = classify([{ version: 'v'.repeat(500) }]);
-  assert.ok((refused[0]?.message.length ?? 0) < 200);
-  assert.ok(refused[0]?.message.includes('…'));
+  const [refused] = refusalsOf([{ version: 'v'.repeat(500) }]);
+  assert.ok((refused?.message.length ?? 0) < 200);
+  assert.ok(refused?.message.includes('…'));
 });
 
 test('positions continue from an offset', () => {
@@ -94,7 +101,7 @@ test('positions continue from an offset', () => {
 
 test('surfaceKey names the version and the surface id of every message kind', () => {
   const key = (operation: JsonValue) => {
-    const [entry] = classify([operation]).entries;
+    const [entry] = entriesOf([operation]);
     return entry === undefined ? 'refused' : surfaceKey(entry);
   };
   assert.equal(key({ version: 'v0.9', createSurface: { surfaceId: 'a', catalogId: 'c' } }), 'v0.9:a');
@@ -108,12 +115,12 @@ test('surfaceKey names the version and the surface id of every message kind', ()
 });
 
 test('the same surface id in two versions gives two keys', () => {
-  const [v08, v09] = classify([{ surfaceUpdate: { surfaceId: 'same', components: [] } }, { version: 'v0.9', createSurface: { surfaceId: 'same', catalogId: 'c' } }]).entries;
+  const [v08, v09] = entriesOf([{ surfaceUpdate: { surfaceId: 'same', components: [] } }, { version: 'v0.9', createSurface: { surfaceId: 'same', catalogId: 'c' } }]);
   assert.notEqual(surfaceKey(v08!), surfaceKey(v09!));
 });
 
 test('a shape that names no surface has no key', () => {
-  const key = (operation: JsonValue) => surfaceKey(classify([operation]).entries[0]!);
+  const key = (operation: JsonValue) => surfaceKey(entriesOf([operation])[0]!);
   assert.equal(key({ version: 'v0.9', createSurface: { surfaceId: 5 } }), undefined);
   assert.equal(key({ version: 'v0.9', createSurface: 'x' }), undefined);
   assert.equal(key({ version: 'v0.9', other: { surfaceId: 's' } }), undefined);

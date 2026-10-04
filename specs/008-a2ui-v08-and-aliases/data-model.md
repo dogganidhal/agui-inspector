@@ -66,8 +66,8 @@ export interface Entry {
   readonly operation: JsonValue; // as received
 }
 
-/** Splits a list by version (R2). `offset` is the position of the first entry, for a tail. Positions are the received ones. */
-export function classify(operations: readonly JsonValue[], offset?: number): { entries: readonly Entry[]; refused: readonly SurfaceIssue[] };
+/** Sorts a list by version (R2), in order: each item is an entry, or the issue that refuses it. `offset` is the position of the first item, for a tail. Positions are the received ones. */
+export function classify(operations: readonly JsonValue[], offset?: number): readonly (Entry | SurfaceIssue)[];
 /** The surface id an entry names, if its shape names one. */
 export function surfaceKey(entry: Entry): string | undefined; // `${version}:${surfaceId}`
 ```

@@ -284,7 +284,7 @@ not covered yet.
   `mount_inspector`. Versions are never edited by hand.
 - [x] T030 Run `npm run check:ci` and fix what it finds. While iterating, use targeted e2e runs with `--workers=2`.
 - [x] T031 If the code and the spec disagree, run `/speckit-converge`. Write the missing work into this file.
-- [ ] T032 Run `/ponytail:ponytail-review` on the diff and fix what it finds. Run the humanizer skill on the new docs
+- [x] T032 Run `/ponytail:ponytail-review` on the diff and fix what it finds. Run the humanizer skill on the new docs
   text and on the PR body.
 - [ ] T033 Rebase on `origin/main` (keep merged features intact, expect conflicts in `parseConfig`, `mount_inspector`
   and `a2ui.mdx` from the branding work), push with `--force-with-lease`, update the PR body with

@@ -39,20 +39,16 @@ function versionOf(operation: JsonValue): A2uiVersion | string {
 }
 
 /**
- * Sorts a list by version. `offset` is the position of its first entry in the whole list, for a tail that
- * is applied after the entries before it. It checks nothing else: the v0.9 processor and the v0.8 schema
- * say what is wrong inside an entry.
+ * Sorts a list by version, in order: each item is an entry, or the issue that refuses it. `offset` is the
+ * position of the first item in the whole list, for a tail that is applied after the entries before it. It
+ * checks nothing else: the v0.9 processor and the v0.8 schema say what is wrong inside an entry.
  */
-export function classify(operations: readonly JsonValue[], offset = 0): { readonly entries: readonly Entry[]; readonly refused: readonly SurfaceIssue[] } {
-  const entries: Entry[] = [];
-  const refused: SurfaceIssue[] = [];
-  operations.forEach((operation, at) => {
+export function classify(operations: readonly JsonValue[], offset = 0): readonly (Entry | SurfaceIssue)[] {
+  return operations.map((operation, at) => {
     const index = offset + at;
     const found = versionOf(operation);
-    if (found === 'v0.8' || found === 'v0.9') entries.push({ index, version: found, operation });
-    else refused.push({ source: 'operation', message: found, index, operation });
+    return found === 'v0.8' || found === 'v0.9' ? { index, version: found, operation } : { source: 'operation', message: found, index, operation };
   });
-  return { entries, refused };
 }
 
 /** `<version>:<surface id>` for the surface an entry names, or undefined when its shape names none. */

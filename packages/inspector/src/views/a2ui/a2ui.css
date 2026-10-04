@@ -301,9 +301,6 @@ textarea.agui-a2ui-input { resize: vertical; }
   background: var(--a2ui-card-background);
 }
 .agui-a2ui-surface[data-version="v0.8"] .a2ui-text :is(p, h1, h2, h3, h4, h5) { margin: 0; }
-.agui-a2ui-surface[data-version="v0.8"] .a2ui-textfield,
-.agui-a2ui-surface[data-version="v0.8"] .a2ui-multiplechoice,
-.agui-a2ui-surface[data-version="v0.8"] .a2ui-datetime-input { max-width: 100%; }
 .agui-a2ui-surface[data-version="v0.8"] .a2ui-datetime-input { max-width: 16rem; }
 .agui-a2ui-v08-check { display: inline-flex; align-items: center; gap: var(--a2ui-checkbox-gap); }
 .agui-a2ui-v08-slider { display: grid; gap: calc(var(--u) * 1.5); }

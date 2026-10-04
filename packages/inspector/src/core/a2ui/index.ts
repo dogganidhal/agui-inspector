@@ -158,19 +158,14 @@ export function createSurfaceSession<T extends ComponentApi>(options: SurfaceSes
   };
 
   const run = (operations: readonly JsonValue[], offset: number) => {
-    const { entries, refused } = classify(operations, offset);
-    const refusals = new Map(refused.map((issue) => [issue.index, issue]));
-    let next = 0;
-    for (let index = offset; index < offset + operations.length; index++) {
-      const refusal = refusals.get(index);
-      if (refusal !== undefined) {
-        issues.push(refusal);
+    for (const item of classify(operations, offset)) {
+      if ('source' in item) {
+        issues.push(item);
         continue;
       }
-      const entry = entries[next++]!;
-      const key = surfaceKey(entry);
+      const key = surfaceKey(item);
       if (key !== undefined && !order.includes(key)) order.push(key);
-      apply(entry);
+      apply(item);
     }
   };
 

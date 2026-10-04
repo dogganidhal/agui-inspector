@@ -22,7 +22,7 @@ export function BlockedView({ kind, url }: { kind: BlockedKind; url: string }): 
 }
 
 /** A named icon is its name, humanised, in a small tag, because the inspector loads no icon font. */
-export const iconWords = (name: string): string => name.replace(/([A-Z])/g, ' $1').toLowerCase();
+const iconWords = (name: string): string => name.replace(/([A-Z])/g, ' $1').toLowerCase();
 
 /** An icon given as a path draws normally. Either way it is announced as an image when it has a label. */
 export function IconView({ name, label, style }: { name: string | { readonly svgPath: string }; label?: string | undefined; style?: CSSProperties | undefined }): ReactElement {
