@@ -1,0 +1,168 @@
+# Releases the Python package to PyPI and the npm package to npm, driven by Changesets. A pull request that changes
+# a package adds a changeset (npx changeset). A push to main opens or updates the "Version Packages" pull request from
+# the pending changesets. Merging that pull request is the release: the next run tags the new versions, builds the wheel,
+# the sdist and the npm tarball from the tagged commit with the strict gate, and publishes the tagged ones through trusted
+# publishing, PyPI with attestations and npm with provenance. Each package has its own version and tag, and only a
+# package that run tagged is published. Only a publish job holds the OIDC token, and none of them runs repository
+# code. No PyPI or npm token is stored anywhere.
+# The trusted publishers on PyPI and npm, the `pypi` and `npm` environments and the repository's pull request setting
+# are the maintainer's to configure (website/content/docs/releases.mdx); nothing here changes a setting.
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+# Nothing by default; each job names exactly what it needs.
+permissions: {}
+
+# One run at a time. A queued run waits instead of cancelling one that is tagging or publishing.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  version:
+    name: version pull request and tag
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      published: ${{ steps.changesets.outputs.published }}
+      packages: ${{ steps.changesets.outputs.published-packages }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+      - run: npm ci --ignore-scripts
+      # The version script refreshes uv.lock.
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: 0.12.22
+          enable-cache: false
+      # With pending changesets it opens or updates the version pull request. Without any, it tags every package
+      # whose current version has no tag yet and reports them. It publishes nothing itself.
+      - id: changesets
+        uses: changesets/action@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
+        with:
+          version-script: node scripts/changeset-version.mjs
+          publish-script: npm exec -- changeset git-tag
+          commit-message: "chore: version packages"
+          pr-title: "chore: version packages"
+          create-github-releases: false
+
+  build:
+    name: build wheel, sdist and npm tarball
+    needs: version
+    if: needs.version.outputs.published == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      UV_PYTHON: "3.14"
+      PACKAGES: ${{ needs.version.outputs.packages }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The tag was pushed a moment ago; the whole history brings it along.
+          fetch-depth: 0
+          persist-credentials: false
+      # For each package this run tagged, refuses a commit that does not carry the tag of its current version. Also
+      # refuses a Python package that still has the classifier PyPI rejects and an npm package that is still private.
+      - run: |
+          python3 - <<'PY'
+          import json, os, subprocess, sys, tomllib
+          released = {p["name"] for p in json.loads(os.environ["PACKAGES"])}
+          tags = subprocess.run(["git", "tag", "--points-at", "HEAD"], capture_output=True, text=True, check=True).stdout.split()
+          def require(name, version):
+              if f"{name}@{version}" not in tags:
+                  sys.exit(f"{name}@{version} is not a tag of this commit, which has {tags or 'no tags'}")
+          if "agui-inspector-python" in released:
+              project = tomllib.load(open("packages/python/pyproject.toml", "rb"))["project"]
+              require("agui-inspector-python", project["version"])
+              if any(c.startswith("Private ::") for c in project.get("classifiers", [])):
+                  sys.exit("pyproject.toml still has the Private :: Do Not Upload classifier, which PyPI rejects")
+          if "agui-inspector" in released:
+              npm = json.load(open("packages/inspector/package.json"))
+              require("agui-inspector", npm["version"])
+              if npm.get("private"):
+                  sys.exit("packages/inspector/package.json is still private, which npm refuses to publish")
+          PY
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+      - run: npm ci --ignore-scripts
+      - run: npm exec -- playwright install --with-deps chromium
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: 0.12.22
+          enable-cache: false
+      # The integrated gate. Strict: a suite that is not introduced yet fails instead of showing as pending.
+      - run: npm run check:ci -- --strict
+      # Reuses the build the gate just verified and writes the wheel and sdist to packages/python/dist.
+      - run: npm run package:python -- --no-build
+      - if: contains(needs.version.outputs.packages, 'agui-inspector-python')
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: python-dist
+          path: packages/python/dist/
+          if-no-files-found: error
+      # The npm tarball of the same build, so its dist directory is the one the wheel carries.
+      # npm pack does not create its destination directory.
+      - run: mkdir npm-dist && npm pack --workspace packages/inspector --pack-destination npm-dist
+      - if: contains(needs.version.outputs.packages, '"agui-inspector"')
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: npm-dist
+          path: npm-dist/
+          if-no-files-found: error
+
+  publish:
+    name: publish to PyPI
+    needs: [version, build]
+    if: contains(needs.version.outputs.packages, 'agui-inspector-python')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      id-token: write
+    environment:
+      name: pypi
+      url: https://pypi.org/project/agui-inspector/
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: python-dist
+          path: dist
+      # Trusted publishing; the action also signs and uploads PEP 740 attestations for the files.
+      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+
+  publish-npm:
+    name: publish to npm
+    needs: [version, build]
+    # The quotes keep the name from matching agui-inspector-python.
+    if: contains(needs.version.outputs.packages, '"agui-inspector"')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      id-token: write
+    environment:
+      name: npm
+      url: https://www.npmjs.com/package/agui-inspector
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: npm-dist
+          path: npm-dist
+      # npm 11.5.1 or newer, which Node 24 ships, trades the job's OIDC token for a short-lived publish token (trusted
+      # publishing). It runs no repository code: the job has no checkout and publishes the tarball as built.
+      # --provenance makes the publish fail, instead of going out unattested, if the signing step is not available.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+      - run: npm publish npm-dist/*.tgz --provenance

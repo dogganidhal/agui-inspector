@@ -1,11 +1,11 @@
 """L06 T046 (US2.3, FR-001, FR-040): the wheel and sdist carry the npm assets, and the wheel runs without Node.
 D01 T055-T058 (G-01, G-02): MIT license and third-party notices ship in the npm tarball, wheel and sdist, the
-manifests stay private, the DOMPurify override resolves exactly, and CI covers Python 3.10 and 3.14.
+root manifest stays private, the DOMPurify override resolves exactly, and CI covers Python 3.10 and 3.14.
 P03 T013, T016 (feature 002, FR-012): the public demo's worker, bootstrap, examples and registration are in none
 of the ordinary distributions, a demo build leaves the ordinary assets untouched, and the Pages deployment is
 main-only and ships no package.
-FR-040: the only workflow that publishes is the Changesets-driven Python release, with trusted publishing and no
-stored token.
+FR-040: the only workflow that publishes is the Changesets-driven release, with trusted publishing (PyPI attestations,
+npm provenance) and no stored token.
 
 setUpClass runs the real packaging script on the already built ``packages/inspector/dist``
 (``npm run build``), so these tests need Node and a build; a missing one is a failure, not a skip.
@@ -174,13 +174,20 @@ class DistributionTest(unittest.TestCase):
                 self.assertEqual((REPO / name).read_bytes(), tarball.extractfile(f"package/{name}").read(), name)
             self.assertIn("package/dist/index.html", tarball.getnames())
 
-    def test_npm_manifests_are_private_mit_and_pin_dompurify(self):
+    def test_npm_package_is_publishable_mit_with_provenance_metadata_and_the_root_stays_private(self):
         root = json.loads((REPO / "package.json").read_text())
         package = json.loads((REPO / "packages" / "inspector" / "package.json").read_text())
         self.assertIs(True, root["private"])
-        self.assertIs(True, package["private"])
+        self.assertNotIn("private", package)
         self.assertEqual("agui-inspector", package["name"])
         self.assertEqual("MIT", package["license"])
+        # npm provenance refuses a package whose repository is not the one that built it.
+        self.assertEqual(
+            {"type": "git", "url": "git+https://github.com/dogganidhal/agui-inspector.git", "directory": "packages/inspector"},
+            package["repository"],
+        )
+        self.assertNotIn("publishConfig", package)  # it would also stop a maintainer's manual first publish
+        self.assertIn("package/README.md", self.member_files("npm"))
         self.assertTrue(set(LICENSE_FILES) <= set(package["files"]))
         self.assertEqual({"dompurify": "3.4.16"}, root["overrides"])
         lock = json.loads((REPO / "package-lock.json").read_text())["packages"]
@@ -202,7 +209,7 @@ class DistributionTest(unittest.TestCase):
 
     def test_the_pages_workflow_deploys_the_demo_and_docs_from_main_and_ships_no_package(self):
         workflows = sorted(p.name for p in (REPO / ".github" / "workflows").glob("*.yml"))
-        self.assertEqual(["ci.yml", "pages.yml", "release-python.yml"], workflows)
+        self.assertEqual(["ci.yml", "pages.yml", "release.yml"], workflows)
         text = (REPO / ".github" / "workflows" / "pages.yml").read_text()
         self.assertIn("branches: [main]", text)
         self.assertIsNone(re.search(r"^\s*(tags|release|pull_request|pull_request_target|schedule):", text, re.M))
@@ -213,45 +220,64 @@ class DistributionTest(unittest.TestCase):
 
     def test_the_release_workflow_versions_with_changesets_and_publishes_only_through_trusted_publishing(self):
         workflows = REPO / ".github" / "workflows"
-        text = (workflows / "release-python.yml").read_text()
+        text = (workflows / "release.yml").read_text()
         code = re.sub(r"^\s*#.*$", "", text, flags=re.M)  # what the workflow does, not what its comments say
         # Only a push to main starts it, runs are serialized, and nothing is granted by default.
-        self.assertRegex(code, r"(?m)^on:\n  push:\n    branches: \[main\]\n+permissions: \{\}\n+concurrency:\n  group: release-python\n  cancel-in-progress: false\n")
+        self.assertRegex(code, r"(?m)^on:\n  push:\n    branches: \[main\]\n+permissions: \{\}\n+concurrency:\n  group: release\n  cancel-in-progress: false\n")
         self.assertIsNone(re.search(r"pull_request|workflow_dispatch|schedule:|workflow_run|^\s*tags:", code, re.M))
         # Every action is pinned to a full commit SHA, and the shared ones are the pull request workflow's pins.
         for ref in re.findall(r"^\s*(?:-\s+)?uses:\s*(\S+)", code, re.M):
             self.assertRegex(ref, r"^[\w.-]+/[\w./-]+@[0-9a-f]{40}$", ref)
         pins = lambda source: set(re.findall(r"uses:\s*((?:actions/(?:checkout|setup-node)|astral-sh/setup-uv)@\S+)", source))
         self.assertEqual(pins((workflows / "ci.yml").read_text()), pins(code))
-        # No stored credential, no other way to publish, tag or release.
-        self.assertIsNone(re.search(r"secrets\.|password:|packages: write|npm publish|changeset publish|twine|uv publish|gh release|git tag |git push", code))
+        # No stored credential, no other way to publish, tag or release. The one npm publish is checked below.
+        self.assertIsNone(re.search(r"secrets\.|password:|packages: write|changeset publish|twine|uv publish|gh release|git tag |git push", code))
         self.assertIsNone(re.search(r"npm (?:ci|install)(?![^\n]*--ignore-scripts)", code))
         self.assertEqual(1, code.count("contents: write"))
-        self.assertEqual(1, code.count("id-token: write"))
-        version, rest = code.split("\njobs:\n")[1].split("\n  build:\n")
-        build, publish = rest.split("\n  publish:\n")
+        self.assertEqual(2, code.count("id-token: write"))
+        self.assertEqual(1, code.count("npm publish"))
+        names, bodies = zip(*re.findall(r"\n  ([\w-]+):\n((?:(?!\n  \w).)*)", "\n" + code.split("\njobs:\n")[1], re.S))
+        self.assertEqual(("version", "build", "publish", "publish-npm"), names)
+        version, build, publish, publish_npm = bodies
         # The version job is the only one that writes: it opens the version pull request and pushes tags, no releases.
         self.assertIn("\n    permissions:\n      contents: write\n      pull-requests: write\n", version)
         self.assertRegex(version, r"uses: changesets/action@[0-9a-f]{40}")
         self.assertIn("version-script: node scripts/changeset-version.mjs", version)
         self.assertIn("publish-script: npm exec -- changeset git-tag", version)
         self.assertIn("create-github-releases: false", version)
-        # The build job reads only, runs after the version job, and only when a Python version was just tagged.
+        # The build job reads only, runs after the version job, and only when a package was just tagged.
         self.assertIn("\n    permissions:\n      contents: read\n", build)
         self.assertIn("\n    needs: version\n", build)
-        self.assertRegex(build, r"if: needs\.version\.outputs\.published == 'true' && contains\(needs\.version\.outputs\.packages, 'agui-inspector-python'\)")
+        self.assertIn("if: needs.version.outputs.published == 'true'\n", build)
         self.assertNotIn("id-token", build)
-        # It gates the tagged commit, then builds from it.
-        steps = ["--points-at", "npm ci --ignore-scripts", "npm run check:ci -- --strict", "npm run package:python -- --no-build", "actions/upload-artifact@"]
+        # It gates the tagged commit, then builds the wheel, the sdist and the npm tarball from it.
+        steps = [
+            "--points-at", "npm ci --ignore-scripts", "npm run check:ci -- --strict", "npm run package:python -- --no-build",
+            "name: python-dist", "npm pack --workspace packages/inspector", "name: npm-dist",
+        ]
         at = [build.find(step) for step in steps]
         self.assertNotIn(-1, at, steps)
         self.assertEqual(sorted(at), at)
-        # The publish job holds the only token grant, runs no repository code and uses the pypi environment.
-        self.assertIn("\n    permissions:\n      id-token: write\n", publish)
-        self.assertIn("\n    needs: build\n", publish)
-        self.assertIn("\n    environment:\n      name: pypi\n", publish)
-        self.assertIsNone(re.search(r"\brun:|actions/checkout", publish))
+        # Each package is checked and uploaded only when this run tagged it, so releasing one never publishes the other.
+        self.assertIn("PACKAGES: ${{ needs.version.outputs.packages }}", build)
+        self.assertIn('require("agui-inspector-python", project["version"])', build)
+        self.assertIn('require("agui-inspector", npm["version"])', build)
+        self.assertEqual(2, build.count("- if: contains(needs.version.outputs.packages, "))
+        upload = "\n        uses: actions/upload-artifact@"
+        self.assertIn("- if: contains(needs.version.outputs.packages, 'agui-inspector-python')" + upload, build)
+        self.assertIn("""- if: contains(needs.version.outputs.packages, '"agui-inspector"')""" + upload, build)
+        # The publish jobs hold the only token grants, run after the build when their package was tagged, and use their own environments.
+        jobs = ((publish, "pypi", "'agui-inspector-python'"), (publish_npm, "npm", """'"agui-inspector"'"""))
+        for job, environment, package in jobs:
+            self.assertIn("\n    permissions:\n      id-token: write\n", job)
+            self.assertIn("\n    needs: [version, build]\n", job)
+            self.assertIn(f"\n    if: contains(needs.version.outputs.packages, {package})\n", job)
+            self.assertIn(f"\n    environment:\n      name: {environment}\n", job)
+            self.assertNotIn("actions/checkout", job)
+        # PyPI runs nothing. npm runs one command, on the downloaded tarball, and refuses to publish without provenance.
+        self.assertIsNone(re.search(r"\brun:", publish))
         self.assertRegex(publish, r"uses: pypa/gh-action-pypi-publish@[0-9a-f]{40}")
+        self.assertEqual(["npm publish npm-dist/*.tgz --provenance"], re.findall(r"\brun: (.*)", publish_npm))
 
     def member_files(self, archive: str) -> dict[str, bytes]:
         """Every file of one distribution, by archive name."""

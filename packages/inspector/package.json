@@ -1,9 +1,21 @@
 {
   "name": "agui-inspector",
   "version": "0.0.0",
-  "private": true,
-  "description": "AG-UI inspector client and static assets. Private and not published.",
+  "description": "Static assets of the AG-UI inspector, a developer tool that records, validates and drives AG-UI servers.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dogganidhal/agui-inspector.git",
+    "directory": "packages/inspector"
+  },
+  "homepage": "https://dogganidhal.github.io/agui-inspector/docs/",
+  "bugs": "https://github.com/dogganidhal/agui-inspector/issues",
+  "keywords": [
+    "ag-ui",
+    "inspector",
+    "sse",
+    "a2ui"
+  ],
   "type": "module",
   "exports": {
     ".": "./src/static-path.js"

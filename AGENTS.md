@@ -111,9 +111,10 @@ These come from the [constitution](.specify/memory/constitution.md). Read it bef
   `views/theme/primitives.tsx`, and the favicon data URI in both `index.html` files). Change all or none. Repo assets stay
   black and white; adopters recolor through `--agui-accent`.
 - Workflows pin every action to a full commit SHA. `ci.yml` only checks, `pages.yml` only deploys the demo and the docs site, and
-  `release-python.yml` is the only publisher; tests fail if triggers or permissions widen.
-- Python package versions move only through Changesets. A change to what the wheel does or ships adds a changeset
-  (`npx changeset`, package `agui-inspector-python`). Never edit versions by hand.
+  `release.yml` is the only publisher, to PyPI and npm; tests fail if triggers or permissions widen.
+- Python and npm package versions move only through Changesets, each package on its own. A change to what the wheel or
+  the npm package does or ships adds a changeset (`npx changeset`): `agui-inspector-python` for the wheel,
+  `agui-inspector` for the npm package, and both for an inspector change. Never edit versions by hand.
 
 ## Style
 

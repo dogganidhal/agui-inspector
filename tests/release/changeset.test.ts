@@ -1,6 +1,7 @@
 // Releases: changesets version the Python package through a private package.json, and scripts/changeset-version.mjs
-// copies that version into pyproject.toml and uv.lock. These checks fail when the copies drift apart or the setup is
-// loosened in a way that would silently stop versioning or start publishing to npm.
+// copies that version into pyproject.toml and uv.lock. The npm package is versioned on its own beside it. These checks
+// fail when the copies drift apart or the setup is loosened in a way that would silently stop versioning, or publish
+// the Python holder to npm.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -36,10 +37,12 @@ test('the Python version holder is private, so changesets can never publish it t
   assert.deepEqual(JSON.parse(read('package.json')).workspaces, ['packages/inspector', 'packages/python']);
 });
 
-test('the changeset config versions and tags the private Python holder and leaves the npm package alone', () => {
+test('the changeset config versions and tags the npm package and the private Python holder, each on its own', () => {
   const config = JSON.parse(read('.changeset/config.json'));
   assert.deepEqual(config.privatePackages, { version: true, tag: true });
-  assert.deepEqual(config.ignore, ['agui-inspector']);
+  assert.equal(config.fixed, undefined);
+  assert.equal(config.linked, undefined);
+  assert.equal(config.ignore, undefined);
   assert.equal(config.baseBranch, 'main');
   assert.equal(config.commit, false);
 });

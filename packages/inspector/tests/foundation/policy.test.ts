@@ -25,10 +25,13 @@ function directDependencies(): Array<[name: string, version: string, manifest: s
   return manifests.flatMap(dependenciesOf);
 }
 
-test('manifests are private MIT packages with no bin, publish config or lifecycle scripts', () => {
+// agui-inspector is the one npm package that is published, from CI with provenance. Everything else is private.
+const published = 'packages/inspector/package.json';
+
+test('manifests are MIT, private unless published, with no bin, publish config or lifecycle scripts', () => {
   for (const manifest of [...manifests, website]) {
     const pkg = json(manifest);
-    assert.equal(pkg.private, true, `${manifest} is private`);
+    assert.equal(pkg.private, manifest === published ? undefined : true, `${manifest} is ${manifest === published ? 'publishable' : 'private'}`);
     assert.equal(pkg.license, 'MIT', `${manifest} is MIT licensed`);
     for (const forbidden of ['licenses', 'publishConfig', 'bin']) {
       assert.equal(forbidden in pkg, false, `${manifest} has no ${forbidden}`);
