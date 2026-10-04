@@ -4,17 +4,19 @@
 // for a failure of the inspector's own machinery names the seam, and the injection for each seam is below.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { AGUIError } from '@ag-ui/core';
+import { AGUIError, type AgentCapabilities } from '@ag-ui/core';
 import { ruleFixtures, started, stream, type Lands, type RuleFixture } from '../../../../examples/reference-agent/rule-fixtures.ts';
-import { scenarioBytes, scenarioSend } from '../../../../examples/reference-agent/recorder-fixtures.ts';
+import { fragment, scenarioBytes, scenarioSend } from '../../../../examples/reference-agent/recorder-fixtures.ts';
 import type { Finding, InspectionSession } from '../../src/contracts.ts';
 import { createFrameSink } from '../../src/core/frames/index.ts';
 import { createRecorder, type RecorderSink } from '../../src/core/recorder/index.ts';
 import { RULES, type CatalogueRuleId } from '../../src/core/rules/catalogue.ts';
 import { createSessionStore } from '../../src/core/store/index.ts';
+import { NO_FILTER, exchangeRows, indexSession, listExchanges } from '../../src/views/inspection/model.ts';
 import { AGENT, eventStream, rig } from '../runtime/support.ts';
 
 const decoder = new TextDecoder();
+const encoder = new TextEncoder();
 const support = { id: 'support', name: 'Support', url: AGENT } as const;
 
 async function drain(body: ReadableStream<Uint8Array> | null): Promise<void> {
@@ -100,8 +102,13 @@ async function injected(seam: Extract<RuleFixture, { injected: unknown }>['injec
       await runtime.send('play the fixture');
       return settle();
     }
-    case 'rule-step':
-      throw new Error('the rule step has no fixture until the compat step exists');
+    case 'rule-step': {
+      // A declaration whose read throws: the rule step fails on every JSON frame, and no frame is lost.
+      const hostile = { get state(): never { throw new Error('getter exploded'); } } as AgentCapabilities;
+      const recorder = createRecorder(createFrameSink(store, { declared: () => hostile }));
+      await drain((await recorder.record(clean.request, scenarioSend(clean))).body);
+      return settled(store);
+    }
     default:
       return seam satisfies never;
   }
@@ -114,7 +121,6 @@ const subjectsOf = (session: InspectionSession, rule: string): Lands[] => sessio
 const entries = Object.entries(ruleFixtures) as Array<[CatalogueRuleId, RuleFixture]>;
 
 for (const [rule, fixture] of entries) {
-  if ('injected' in fixture && fixture.injected === 'rule-step') continue;
   test(`${rule}: its fixture produces a finding with exactly that rule on ${fixture.lands.join(' and ')}`, async () => {
     const session = await play(fixture);
     const subjects = subjectsOf(session, rule);
@@ -128,9 +134,8 @@ for (const [rule, fixture] of entries) {
   });
 }
 
-test('every rule of this phase has a fixture', () => {
-  const missing = RULES.filter((rule) => rule.family !== 'compat' && rule.id !== 'capture.rule-check-failed' && !(rule.id in ruleFixtures)).map((rule) => rule.id);
-  assert.deepEqual(missing, []);
+test('every rule has a fixture, and no fixture belongs to a rule that is not in the catalogue', () => {
+  assert.deepEqual(RULES.filter((rule) => !(rule.id in ruleFixtures)).map((rule) => rule.id), []);
   assert.deepEqual(
     entries.filter(([rule]) => !RULES.some((candidate) => candidate.id === rule)),
     [],
@@ -144,4 +149,74 @@ test('a client rejection with no rule of its own keeps the client message in the
   assert.ok(finding);
   assert.match(finding.message, /SOMETHING_NEW/);
   assert.deepEqual(finding.subject.type, 'run');
+});
+
+test('every compat fixture is accepted by the real protocol client: no failure and no finding on the run', async () => {
+  const compat = entries.filter(([rule]) => rule.startsWith('compat.'));
+  assert.equal(compat.length, 5);
+  for (const [rule, fixture] of compat) {
+    assert.ok('scenario' in fixture);
+    const session = await viaClient(fixture);
+    assert.deepEqual(session.findings.filter((finding) => finding.subject.type === 'run'), [], `${rule}: the client takes the stream`);
+    assert.ok(session.findings.some((finding) => finding.rule === rule && finding.subject.type === 'frame'), `${rule}: and the frame still gets its finding`);
+  }
+});
+
+test('the rule step failing costs no frame: the fixture keeps every frame, reads the next ones and says so on each', async () => {
+  const session = await injected('rule-step');
+  assert.equal(session.frames.length, 2);
+  assert.deepEqual(session.frames.map((frame) => frame.schemaVerdict), ['valid', 'valid']);
+  assert.deepEqual(session.findings.map((finding) => [finding.rule, finding.subject.type]), [['capture.rule-check-failed', 'frame'], ['capture.rule-check-failed', 'frame']]);
+});
+
+// ---- evidence and the 5,000-frame workload (FR-018, SC-004, SC-007) ----------------------------------------------
+
+/** Reads the scenario's bytes with a reader built the way the page builds it, with or without a declaration. */
+async function framesOf(scenario: Extract<RuleFixture, { scenario: unknown }>['scenario'], declared: AgentCapabilities | undefined) {
+  const store = createSessionStore({ schedule: (callback) => queueMicrotask(callback) });
+  // A clock that ticks once per call, so two reads of the same bytes have the same offsets.
+  let tick = 0;
+  const recorder = createRecorder(createFrameSink(store, { declared: () => declared }), { now: () => (tick += 1), epoch: () => 1_700_000_000_000 });
+  try {
+    await drain((await recorder.record(scenario.request, scenarioSend(scenario))).body);
+  } catch {
+    // A scenario with no response has no frames.
+  }
+  return settled(store);
+}
+
+const EVERYTHING_FALSE: AgentCapabilities = { reasoning: { supported: false }, state: { deltas: false, snapshots: false }, humanInTheLoop: { interrupts: false } };
+
+test('frames are exactly what was received, whatever the agent declares: the same frames, the received bytes, and a parsed value that is the JSON of the data', async () => {
+  for (const [rule, fixture] of entries) {
+    if (!('scenario' in fixture)) continue;
+    const plain = await framesOf(fixture.scenario, undefined);
+    const judged = await framesOf(fixture.scenario, EVERYTHING_FALSE);
+    assert.deepEqual(judged.frames, plain.frames, `${rule}: a declaration changes no frame`);
+    assert.equal(plain.frames.map((frame) => frame.envelope).join(''), decoder.decode(scenarioBytes(fixture.scenario)), `${rule}: the envelopes are the received bytes`);
+    for (const frame of plain.frames) if (frame.data !== undefined && frame.jsonVerdict === 'valid') assert.deepEqual(frame.parsed, JSON.parse(frame.data), `${rule}: ${frame.id}`);
+  }
+});
+
+test('5,000 frames that each break the declaration are all kept, each gets one finding, and the inspection model builds from them', async () => {
+  const delta = { type: 'STATE_DELTA', delta: [{ op: 'add', path: '/n', value: 1 }] };
+  const events = [started, ...Array.from({ length: 4_998 }, () => delta), { type: 'RUN_FINISHED', threadId: 't-rule', runId: 'r-rule', outcome: { type: 'success' } }];
+  const scenario = { ...stream('workload-state-deltas', events), chunks: fragment(encoder.encode(events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join('')), [4096]) };
+  const begun = Date.now();
+  const plain = await framesOf(scenario, undefined);
+  const judged = await framesOf(scenario, { state: { deltas: false } });
+  assert.equal(plain.frames.length, 5_000);
+  assert.deepEqual(judged.frames, plain.frames, 'the same 5,000 frames');
+  assert.deepEqual(plain.findings, []);
+  assert.equal(judged.findings.length, 4_998);
+  assert.equal(new Set(judged.findings.map((finding) => finding.id)).size, 4_998);
+  assert.ok(judged.findings.every((finding) => finding.rule === 'capability.state-delta-unsupported'));
+
+  // The views build their model from the snapshot, with a finding on nearly every frame.
+  const index = indexSession(judged);
+  const [entry] = listExchanges(index, NO_FILTER).exchanges;
+  assert.equal(exchangeRows(entry!.entry, { ...NO_FILTER, issuesOnly: true }).shown, 4_998);
+  assert.equal(exchangeRows(entry!.entry, NO_FILTER).shown, 5_000);
+  // Linear work: a generous ceiling that only a quadratic mistake would break, on a slow machine too.
+  assert.ok(Date.now() - begun < 20_000, 'reading and indexing 5,000 findings is quick');
 });

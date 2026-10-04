@@ -535,3 +535,75 @@ test('a provider that throws, or a declaration that throws when read, costs no f
   assert.deepEqual(hostile.frames.map((frame) => frame.schemaVerdict), ['valid', 'valid', 'valid']);
   assert.deepEqual(hostile.findings.map((finding) => finding.rule), ['capture.rule-check-failed', 'capture.rule-check-failed', 'capture.rule-check-failed'], 'the next frames are still read, and each says so');
 });
+
+// ---- the older event versions the client accepts (specs/007, US3) -----------------------------------
+
+const rulesOf = (findings: readonly Finding[]) => findings.map((finding) => finding.rule);
+
+test('a retired THINKING event is a compat finding and no schema finding, and its frame is kept as received', () => {
+  const event = { type: 'THINKING_START', title: 'planning' };
+  const { frames, findings } = read(wire(RUN, event, DONE));
+  assert.deepEqual(rulesOf(findings), ['compat.retired-event-type']);
+  assert.equal(findings[0]!.kind, 'compat');
+  assert.match(findings[0]!.message, /^THINKING_START is a retired event type\. The protocol client reads it as REASONING_START\.$/);
+  assert.equal(frames[1]!.eventType, 'THINKING_START');
+  assert.equal(frames[1]!.schemaVerdict, 'unknown-type', 'the verdict is that of the data as received');
+  assert.deepEqual(frames[1]!.parsed, event, 'the parsed value keeps the retired shape');
+  assert.equal(frames[1]!.data, JSON.stringify(event));
+});
+
+test('a RUN_FINISHED that the client accepts after its upgrade ends the terminal check', () => {
+  const { frames, findings } = read(wire(RUN, { ...DONE, result: null }));
+  assert.deepEqual(rulesOf(findings), ['compat.null-optional-field'], 'no schema finding and no terminal.missing');
+  assert.match(findings[0]!.message, /^RUN_FINISHED\.result is null\. The protocol client reads it as absent\.$/);
+  assert.equal(frames[1]!.schemaVerdict, 'invalid', 'the received shape is not valid');
+  assert.equal((frames[1]!.parsed as { result: unknown }).result, null, 'and the parsed value still holds the null');
+
+  const lookalike = read(wire(RUN, { type: 'RUN_FINISHED', threadId: 't', outcome: null }));
+  assert.ok(rulesOf(lookalike.findings).includes('terminal.missing'), 'a finish that is still invalid after the upgrade does not count');
+});
+
+test('a frame that is still invalid after the upgrade gets a schema finding about the upgraded copy only', () => {
+  const { findings } = read(wire(RUN, { type: 'TOOL_CALL_START', toolCallId: 'c1', parentMessageId: null }, DONE));
+  assert.deepEqual(rulesOf(findings), ['schema.invalid-event', 'compat.null-optional-field']);
+  assert.match(findings[0]!.message, /toolCallName/);
+  assert.doesNotMatch(findings[0]!.message, /parentMessageId/, 'the null that the client accepts is not named twice');
+  assert.deepEqual(findings.map((finding) => finding.id), ['exchange-1:frame-1:finding', 'exchange-1:frame-1:finding-2']);
+});
+
+test('a retired event from an agent that declares no reasoning breaks two rules, and one rule counts once however many fields it covers', () => {
+  const retired = read(wire(RUN, { type: 'THINKING_TEXT_MESSAGE_CONTENT', delta: 'hm' }, DONE), { declared: () => ({ reasoning: { supported: false } }) });
+  assert.deepEqual(rulesOf(retired.findings), ['compat.retired-event-type', 'capability.reasoning-unsupported']);
+
+  const input = { threadId: 't', runId: 'r', state: {}, messages: [], tools: [{ name: 'a', description: 'd', parameters: null }, { name: 'b', description: 'd', parameters: null }], context: [], forwardedProps: null };
+  const nulls = read(wire({ ...RUN, rawEvent: null, input }, DONE));
+  assert.deepEqual(rulesOf(nulls.findings), ['compat.null-optional-field']);
+  assert.match(nulls.findings[0]!.message, /RUN_STARTED\.rawEvent.*forwardedProps.*tools\[0\]\.parameters.*tools\[1\]\.parameters are null/);
+});
+
+test('a legacy binary content part and a protocol version the client cannot read or that is newer are named, and a version it reads silently is not', () => {
+  const snapshot = { type: 'MESSAGES_SNAPSHOT', messages: [{ id: 'u1', role: 'user', content: [{ type: 'binary', mimeType: 'image/png', data: 'AAAA' }] }] };
+  const binary = read(wire(RUN, snapshot, DONE));
+  assert.deepEqual(rulesOf(binary.findings), ['compat.legacy-binary-content']);
+  assert.match(binary.findings[0]!.message, /^MESSAGES_SNAPSHOT\.messages\[0\]\.content\[0\] is a binary content part\./);
+
+  for (const [protocolVersion, expected] of [['2.0', ['compat.protocol-version-newer']], ['1.0.1', ['compat.protocol-version-unreadable']], ['1.0', []], ['0.9', []], [undefined, []]] as const) {
+    const { findings, frames } = read(wire({ ...RUN, ...(protocolVersion !== undefined && { protocolVersion }) }, DONE));
+    assert.deepEqual(rulesOf(findings), expected, String(protocolVersion));
+    assert.equal(frames[0]!.schemaVerdict, 'valid', 'a version rule never makes a valid frame invalid');
+  }
+});
+
+test('the upgrade never changes a frame: the parsed value is the JSON of the data and the envelopes are the received text', () => {
+  const chunks = wire(
+    { ...RUN, rawEvent: null },
+    { type: 'THINKING_START', title: 't' },
+    { type: 'THINKING_END' },
+    { type: 'MESSAGES_SNAPSHOT', messages: [{ id: 'u1', role: 'user', content: [{ type: 'binary', mimeType: 'image/png', data: 'AAAA' }] }] },
+    { ...DONE, outcome: null },
+  );
+  const { frames, findings } = read(chunks);
+  assert.ok(findings.length >= 4);
+  assert.equal(frames.map((frame) => frame.envelope).join(''), chunks.join(''));
+  for (const frame of frames) assert.deepEqual(frame.parsed, JSON.parse(frame.data!), frame.id);
+});

@@ -35,7 +35,7 @@ Each stream is `RUN_STARTED`, the event shown, then `RUN_FINISHED` unless the ta
 | `TOOL_CALL_CHUNK` with `parentMessageId: null` | invalid (`invalid_type`) | Delivered. |
 | `SUBAGENT_FINISHED` with `result: null` | invalid (`result: custom`) | Delivered. |
 | `RUN_STARTED.input` with `forwardedProps: null`, `tools[].parameters: null`, `resume[].payload: null`, or `metadata: null` on an image part | invalid (`input.forwardedProps: custom`, `input.tools.0.parameters: custom`) | Each delivered with the field absent. |
-| A `binary` content part in a message of `MESSAGES_SNAPSHOT` or `RUN_STARTED.input` | invalid (`messages.0.content: invalid_union`) | Delivered as an `image`, `audio`, `video` or `document` part chosen from the MIME type, with `data` or `url` as the `source` and `filename` as `metadata.filename`. A `binary` part with only an `id` cannot be converted: the client warns and keeps it, and a 1.0 peer rejects it. |
+| A `binary` content part in a message of `MESSAGES_SNAPSHOT` or `RUN_STARTED.input` | invalid (`messages.0.content: invalid_union`) | Delivered as an `image`, `audio`, `video` or `document` part chosen from the MIME type, with `data` or `url` as the `source` and `filename` as `metadata.filename`. A `binary` part with only an `id` cannot be converted: the client warns, then strips the part from its own copy. That is not an upgrade, so it gets no `compat` rule and stays a schema failure. |
 | `metadata: null` on an image part of `MESSAGES_SNAPSHOT` | invalid (`messages.0.content: invalid_union`) | Delivered with the field absent. |
 
 Every row was played through `HttpAgent`. The mirror's test repeats them, and fails if a row is wrong in either

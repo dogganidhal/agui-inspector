@@ -112,6 +112,34 @@ export const ruleFixtures: Partial<Record<CatalogueRuleId, RuleFixture>> = {
   /** At 1.0.1 every message the client can raise has its own rule, so only a synthetic error reaches this one. */
   'sequence.unclassified': { injected: 'client-error', lands: ['run'] },
 
+  'capture.rule-check-failed': { injected: 'rule-step', lands: ['frame'] },
+
+  'compat.retired-event-type': {
+    scenario: stream('rule-compat-retired-event-type', [
+      started,
+      { type: 'THINKING_START', title: 'planning' },
+      { type: 'THINKING_TEXT_MESSAGE_START' },
+      { type: 'THINKING_TEXT_MESSAGE_CONTENT', delta: 'hm' },
+      { type: 'THINKING_TEXT_MESSAGE_END' },
+      { type: 'THINKING_END' },
+      finished,
+    ]),
+    via: 'reader',
+    lands: ['frame'],
+  },
+  'compat.null-optional-field': { scenario: stream('rule-compat-null-optional-field', [started, { ...finished, result: null }]), via: 'reader', lands: ['frame'] },
+  'compat.legacy-binary-content': {
+    scenario: stream('rule-compat-legacy-binary-content', [
+      started,
+      { type: 'MESSAGES_SNAPSHOT', messages: [{ id: 'u1', role: 'user', content: [{ type: 'binary', mimeType: 'image/png', data: 'AAAA' }] }] },
+      finished,
+    ]),
+    via: 'reader',
+    lands: ['frame'],
+  },
+  'compat.protocol-version-newer': { scenario: stream('rule-compat-protocol-version-newer', [{ ...started, protocolVersion: '2.0' }, finished]), via: 'reader', lands: ['frame'] },
+  'compat.protocol-version-unreadable': { scenario: stream('rule-compat-protocol-version-unreadable', [{ ...started, protocolVersion: '1.0.1' }, finished]), via: 'reader', lands: ['frame'] },
+
   'capability.reasoning-unsupported': {
     scenario: stream('rule-capability-reasoning', [started, { type: 'REASONING_START', messageId: 'rs1' }, { type: 'REASONING_END', messageId: 'rs1' }, finished]),
     via: 'reader',

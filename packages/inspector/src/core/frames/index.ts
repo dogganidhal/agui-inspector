@@ -24,7 +24,7 @@ import type {
 } from '../../contracts.ts';
 import type { RecorderSink } from '../recorder/index.ts';
 import { kindOf, type CatalogueRuleId } from '../rules/catalogue.ts';
-import { capabilityRules, type RuleHit } from '../rules/frame-rules.ts';
+import { capabilityRules, upgradeFrame, type RuleHit } from '../rules/frame-rules.ts';
 
 export type FrameOutput = Pick<SessionStore, 'appendFrame' | 'addFinding'>;
 
@@ -92,6 +92,13 @@ export interface FrameReaderOptions {
   readonly declared?: () => AgentCapabilities | undefined;
 }
 
+interface Judgement {
+  readonly verdict: SchemaVerdict;
+  readonly problems: readonly string[];
+  /** The check itself threw, so `problems` is the inspector's own note and not the schema's. */
+  readonly unexpected: boolean;
+}
+
 const LF = 10;
 const CR = 13;
 const BOM = '﻿';
@@ -127,6 +134,16 @@ export function createFrameReader(output: FrameOutput, exchangeId: ExchangeId, o
   let frames = 0;
   let terminalSeen = false;
   let ended = false;
+
+  /** The schema check, which must not cost the frame when it throws: the frame is retained, marked invalid, and reading goes on. */
+  function judge(value: unknown): Judgement {
+    try {
+      const { verdict, problems } = check(value);
+      return { verdict, problems, unexpected: false };
+    } catch (error) {
+      return { verdict: 'invalid', problems: [`Schema validation failed unexpectedly (${error instanceof Error ? error.name : 'error'})`], unexpected: true };
+    }
+  }
 
   const offsetOf = (end: number) => markers.find((marker) => marker.end >= end)?.offsetMs ?? lastOffset;
   const append = (text: string) => {
@@ -176,28 +193,30 @@ export function createFrameReader(output: FrameOutput, exchangeId: ExchangeId, o
       jsonVerdict = 'invalid';
     }
 
-    let schemaVerdict: SchemaVerdict = 'not-applicable';
-    let problems: readonly string[] = [];
-    let unexpected = false;
     const rawType = asObject(parsed)?.type;
     const eventType = typeof rawType === 'string' ? rawType : undefined;
-    if (jsonVerdict === 'valid') {
-      try {
-        ({ verdict: schemaVerdict, problems } = check(parsed));
-      } catch (error) {
-        // A validator failure must not cost the frame. It is retained and marked, and reading goes on.
-        schemaVerdict = 'invalid';
-        unexpected = true;
-        problems = [`Schema validation failed unexpectedly (${error instanceof Error ? error.name : 'error'})`];
-      }
-    }
+    // `received` is what the baseline schema says about the data as it arrived, and it is the frame's verdict.
+    const received: Judgement = jsonVerdict === 'valid' ? judge(parsed) : { verdict: 'not-applicable', problems: [], unexpected: false };
 
-    // The rules read the parsed value and add findings beside the frame. A rule step that throws costs no frame.
+    // The rules read the parsed value and add findings beside the frame. A frame that the client accepts after its
+    // own upgrade is judged as upgraded, and an event that the client would count as finished counts as terminal.
+    // A rule step that throws costs no frame: the received verdict stands, and the failure is a finding.
+    let judged = received;
+    let judgedType = eventType;
     let hits: readonly RuleHit[] = [];
     if (jsonVerdict === 'valid') {
       try {
-        hits = capabilityRules(parsed, declared);
+        const upgraded = upgradeFrame(parsed);
+        if (upgraded.value !== parsed) {
+          judged = judge(upgraded.value);
+          const upgradedType = asObject(upgraded.value)?.type;
+          judgedType = typeof upgradedType === 'string' ? upgradedType : eventType;
+        }
+        hits = [...upgraded.hits, ...capabilityRules(parsed, declared)];
       } catch (error) {
+        judged = received;
+        judgedType = eventType;
+        hits = [];
         ruleFailure ??= error instanceof Error ? error.name : 'error';
       }
     }
@@ -209,10 +228,10 @@ export function createFrameReader(output: FrameOutput, exchangeId: ExchangeId, o
       ...(eventType !== undefined && { eventType }),
       summary: summarize(jsonVerdict, parsed, eventType),
       jsonVerdict,
-      schemaVerdict,
+      schemaVerdict: received.verdict,
       ...(jsonVerdict === 'valid' && { parsed }),
     };
-    if (schemaVerdict === 'valid' && eventType !== undefined && TERMINAL_TYPES.has(eventType)) terminalSeen = true;
+    if (judged.verdict === 'valid' && judgedType !== undefined && TERMINAL_TYPES.has(judgedType)) terminalSeen = true;
     output.appendFrame(frame);
 
     // A frame can have several findings. The first keeps the id it had in 0.1.0; later ones count up from 2.
@@ -223,8 +242,8 @@ export function createFrameReader(output: FrameOutput, exchangeId: ExchangeId, o
       output.addFinding({ id: `${frame.id}:finding${findings === 1 ? '' : `-${findings}`}`, kind: kindOf(rule), rule, message, subject });
     };
     if (jsonVerdict === 'invalid') finding('json.invalid', 'Data is not valid JSON');
-    else if (schemaVerdict === 'unknown-type') finding('schema.unknown-event-type', `${problems[0]}; it is not in the supported baseline`);
-    else if (schemaVerdict === 'invalid') finding(unexpected ? 'schema.check-failed' : 'schema.invalid-event', unexpected ? (problems[0] as string) : `Does not match the AG-UI event schema: ${problems.join('; ')}`);
+    else if (judged.verdict === 'unknown-type') finding('schema.unknown-event-type', `${judged.problems[0]}; it is not in the supported baseline`);
+    else if (judged.verdict === 'invalid') finding(judged.unexpected ? 'schema.check-failed' : 'schema.invalid-event', judged.unexpected ? (judged.problems[0] as string) : `Does not match the AG-UI event schema: ${judged.problems.join('; ')}`);
     for (const hit of hits) finding(hit.rule, hit.message);
     if (ruleFailure !== undefined) {
       finding('capture.rule-check-failed', `A rule check failed unexpectedly (${ruleFailure}). The frame was kept and read`);
