@@ -54,7 +54,7 @@ tab opens in under 1 s, on the fixed workload in research.md (R5): 5,000 frames,
 a state of about 3 KB.
 
 **Constraints**: Production bundle at most 2,000,000 bytes minified and 600,000 bytes gzipped. Baseline on main
-at `e400f85`: 1,227,500 and 308,758. Expected addition: under 10 KB minified. Measured at the end of implementation: +8,188 bytes minified and +2,404 gzipped (1,235,688 and 311,162 in total).
+at `e400f85`: 1,227,500 and 308,758. Expected addition: under 10 KB minified. Measured at the end of implementation: +8,071 bytes minified and +2,376 gzipped (1,235,571 and 311,134 in total).
 
 **Scale/Scope**: One view, three new source files (two in core, one in views), small edits to the projection,
 the patch module, the State view, one stylesheet, the docs and the tests.
