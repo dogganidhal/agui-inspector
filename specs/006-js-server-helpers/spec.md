@@ -33,10 +33,12 @@ constitution and the code, and took the recommended option.
 - Q: Do the helpers also ship as CommonJS? → A: No. They are ES modules with type definitions. A CommonJS host loads
   them with `require` on Node.js 22.12 or newer, or with a dynamic `import`. The documentation states Node.js 22.12 as
   the minimum for the helpers. The package gets no `engines` field here, because the static files do not need Node.js.
-- Q: Which framework versions do the tests cover? → A: Express 4 and 5, Hono 4, and Next.js 15 and 16 route handlers.
-  The plan lists the exact versions. Express and Hono are test dependencies with exact pins. Next.js is not a
+- Q: Which framework versions do the tests cover? → A: Express 5, Hono 4, and Next.js 15 and 16 route handlers. The
+  plan lists the exact versions. Express and Hono are test dependencies with exact pins. Next.js is not a
   dependency: the handlers take a web-standard request and the route parameters, so tests call them directly, and a
-  recorded run against a real Next.js application backs the claim.
+  recorded run against a real Next.js application backs the claim. The maintainer cut Express 4 on 2026-10-04 (it
+  would need an `npm:` alias and an exception to the exact-version policy). The documentation says the helper is tested
+  with Express 5 and needs only `app.use(path, handler)`, and claims nothing about other majors.
 - Q: Does the Express helper take only an application? → A: It takes anything with the application's `use` method, so a
   `Router` works as well. The mount path is relative to that router, and the redirect and the asset paths follow it.
 
@@ -235,8 +237,9 @@ documentation page.
   application with its default trailing slash setting MUST serve a working page, and the helper MUST NOT cause a redirect
   loop under any trailing slash setting. The one redirect rule in FR-005 serves all three helpers.
 - **FR-013**: Installing the npm package MUST install no web framework. Each helper MUST work with the framework version
-  the host has, within the versions the tests cover, which the documentation lists. The target is Express 4 and 5, Hono 4
-  and Next.js 15 and 16 route handlers. Frameworks needed to test the helpers are development dependencies only, and
+  the host has, within the versions the tests cover, which the documentation lists. The target is Express 5, Hono 4
+  and Next.js 15 and 16 route handlers. The Express helper needs only `app.use(path, handler)` from the host, and the
+  documentation says so. Frameworks needed to test the helpers are development dependencies only, and
   Next.js is not one of them.
 - **FR-014**: The three helpers MUST share one implementation of the contract, so they cannot drift apart, and that
   implementation MUST work without any of the three frameworks. It is an internal part of the package with a documented
@@ -305,8 +308,10 @@ documentation page.
   that run on Node.js are in scope, and the same code works on other runtimes that have a file system.
 - Next.js means the App Router with route handlers. The Pages Router and other frameworks (Fastify, Koa and so on) are
   not in scope. A host with another Node.js server can serve the assets by hand, as the documentation already says.
-- The supported versions of each framework are the ones the tests cover: Express 4 and 5, Hono 4, and Next.js 15 and 16.
+- The supported versions of each framework are the ones the tests cover: Express 5, Hono 4, and Next.js 15 and 16.
   The plan names the exact versions. If a version cannot be covered by a test, the documentation does not claim it.
+  For Express the documentation names the one call it needs, `app.use(path, handler)`, so a reader can judge another
+  major for themselves.
 - The helpers need Node.js 22.12 or newer. The package declares no `engines` field, because the static files alone work
   on older versions.
 - The command line tool (#75) is not part of this feature. This feature only leaves it a clean interface to reuse.

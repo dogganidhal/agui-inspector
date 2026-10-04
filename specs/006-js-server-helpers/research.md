@@ -2,7 +2,8 @@
 
 Evidence comes from spikes run on 2026-10-04 in a scratch directory outside the repository: a prototype of the core and
 the three helpers, packed with `npm pack`, installed into a Next.js application as a tarball (so it sits in
-`node_modules` like a real install), and run against real Express 4 and 5, Hono and Next.js. The spikes are not part of
+`node_modules` like a real install), and run against real Express 4 and 5, Hono and Next.js. Express 4 was a spike
+only: the maintainer cut it from the tests (decision 10). The spikes are not part of
 the change. The decisions below say what they proved.
 
 ## 1. Where the Node code lives and how it ships
@@ -132,7 +133,8 @@ The bridge reads no headers and no body. The inspector needs neither, and `Reque
 raw message can carry. Bodies are small and read whole, so `sendResponse` writes one buffer, which also gives a plain
 `Content-Length` and lets Node drop the body of a HEAD reply itself.
 
-Express specifics, checked on Express 4.22.3 and 5.2.1 and on a `Router` under `/api`: inside `app.use(path, ...)`,
+Express specifics, checked on Express 5.2.1 and on a `Router` under `/api` (the spike gave the same results on Express
+4.22.3, which no test covers): inside `app.use(path, ...)`,
 `req.url` is relative to the mount and `req.originalUrl` is what the client sent. The slash test and the redirect use
 `originalUrl`; the asset comes from `req.url`. A path that fails `decodeURIComponent` is not found.
 
@@ -141,7 +143,7 @@ Express specifics, checked on Express 4.22.3 and 5.2.1 and on a `Router` under `
 Decision: each helper takes a minimal structural type, not the framework's own: `{ use(path, handler) }` for Express
 and `{ all(path, handler) }` for Hono. The package declares no dependency or peer dependency on any of the three.
 
-Spike result: real Express 4 and 5 applications, an Express `Router`, a Hono application and a Hono application with
+Spike result: real Express 4 and 5 applications (the tests keep 5), an Express `Router`, a Hono application and a Hono application with
 `basePath` are all assignable to those types under `strict`, using `@types/express` and Hono's own types. The type check
 for Next.js (`next build` runs it) accepts the route handlers' types. A wrong argument (an agent without a `url`) is a
 type error.
@@ -156,21 +158,23 @@ so a `POST` reaches the core and gets a 405 with an `Allow` header instead of Ho
 
 ## 10. Which framework versions are tested
 
-Decision: Express 5.2.1 and Express 4.22.3 (the second as an npm alias, `express4`), Hono 4.13.13. Next.js is not a
-dependency. The Next.js handlers are called directly by the unit tests, with `params` as a promise (Next.js 15 and 16)
+Decision: Express 5.2.1 and Hono 4.13.13. Next.js is not a dependency. The Next.js handlers are called directly by the unit tests, with `params` as a promise (Next.js 15 and 16)
 and as a plain object (the 14 shape), and the spikes above ran them in Next.js 15.5.27 and 16.3.8.
 
-Rationale: the three frameworks differ at the edges (routing, decoding, trailing slashes), and Express is the only one
-with two live majors that the adapter touches. `next` is large, has its own build, and the handler takes only a
-`Request` and `params`. A one-time run in a real application backs the claim, and the claim is stated in the docs with
-the versions it was run on. If a version is not tested, the docs do not claim it.
+Rationale: the frameworks differ at the edges (routing, decoding, trailing slashes), so each one the docs name gets a
+real test. `next` is large, has its own build, and the handler takes only a `Request` and `params`. A one-time run in a
+real application backs the claim, and the claim is stated in the docs with the versions it was run on. If a version is
+not tested, the docs do not claim it. For Express the docs say the helper is tested with Express 5 and needs only
+`app.use(path, handler)`.
 
-Consequence for policy: `policy.test.ts` accepts `npm:name@x.y.z` for an alias and compares the lockfile with the
-version after the `@`. The rule "exact versions" stays.
+Alternatives considered:
 
-Alternatives considered: Express 5 only (leaves the larger part of existing Express apps unverified); `next` as a dev
-dependency with a real server in the browser tests (a second framework build in CI for a handler that is a plain
-function).
+- Express 4 as well, through an `npm:express@4` alias. The maintainer cut it: it needs an `npm:` alias, an exception to
+  the exact-version policy test and one more dependency row, for a version the adapter touches only through
+  `app.use(path, handler)`.
+- `next` as a dev dependency with a real server in the browser tests (a second framework build in CI for a handler that
+  is a plain function).
+
 
 ## 11. Tests
 

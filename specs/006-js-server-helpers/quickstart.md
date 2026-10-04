@@ -19,8 +19,8 @@ npm run typecheck
 npm run test:unit -- packages/inspector/tests/server
 ```
 
-They use a stand-in directory for the page, so they run without step 1. They cover, for the core and for Express (4 and
-5), Hono and Next.js: mounting, the disabled case, the warning, the content security policy, the redirect,
+They use a stand-in directory for the page, so they run without step 1. They cover, for the core and for Express 5, Hono
+and Next.js: mounting, the disabled case, the warning, the content security policy, the redirect,
 `config.json`, path traversal, methods and a host guard in front of the routes. A further test checks that the page
 bundle has no helper code.
 

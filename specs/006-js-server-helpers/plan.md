@@ -25,7 +25,7 @@ The work is one framework-free core and thin adapters:
 - The helpers ship as ES modules with declarations, compiled by the `tsc` the repository already pins into `lib/`, and
   never enter the browser bundle. The package gains no runtime dependency.
 
-Spikes on real Express 4 and 5, Hono and Next.js 15 and 16 shaped the design. [research.md](research.md) lists what each
+Spikes on real Express 4 and 5, Hono and Next.js 15 and 16 shaped the design. Only Express 5 stays in the tests. [research.md](research.md) lists what each
 proved, including one fix to `static-path.js` that Turbopack needs.
 
 ## Technical Context
@@ -35,7 +35,7 @@ repository and 22.12 or newer for adopters of the helpers. No React.
 
 **Primary Dependencies**: None at runtime: `node:fs`, `node:path`, `node:url`, `node:http` and the web-standard
 `Request`, `Response` and `URL`. Development only, exact pins, each with a row on the dependencies page: `express`
-5.2.1, `@types/express` 5.0.6, `express4` (alias of `express` 4.22.3) and `hono` 4.13.13. No `next` and no Next.js types.
+5.2.1, `@types/express` 5.0.6 and `hono` 4.13.13. No `next` and no Next.js types.
 
 **Storage**: None. The page and its files are read from the package's `dist` directory on each request.
 
@@ -53,7 +53,7 @@ no cache. This is a development tool.
 **Constraints**: The browser bundle and its limits do not change (2,000,000 bytes minified, 600,000 gzip). Zero new
 runtime dependencies. The helpers add no route, log or file read when disabled. Every response carries the policy header.
 
-**Scale/Scope**: Five source files of about 200 lines in all, one build step, one `exports` change, 4 test files, 2
+**Scale/Scope**: Five source files of about 200 lines in all, one build step, one `exports` change, 6 unit test files, 3
 browser specs, one docs page rewrite and a handful of one-line docs fixes.
 
 ## Constitution Check
@@ -68,7 +68,7 @@ target until issue #86 merges, and this plan follows the approved text.
 | II: the protocol, not a framework | The helpers are framework-free TypeScript with no React. The core runs without Express, Hono or Next.js, and the adapters import none of them. Nothing sits between the wire and the views. |
 | III: generic core, application presets | No server-specific route or convention in the core. An application sets agents, theme and path through arguments. |
 | IV: local-only operation, credential privacy | No telemetry, no third-party request, no cookie, no storage, no proxy. The helper reads no request header (the bridge copies method and URL only). `config.json` has no credential field. The page keeps the same-origin policy from `hosting-config.json`, which the helper serves unchanged, so an embedded page cannot widen it. |
-| V: small and auditable | No runtime dependency. Four development dependencies, each with purpose and rejected alternative on the dependencies page. One core, one bridge, three thin entries, one existing compiler. The hidden `assetsDir` option and the `npm:` alias are the two costs, both explained in research. |
+| V: small and auditable | No runtime dependency. Three development dependencies, each with purpose and rejected alternative on the dependencies page. One core, one bridge, three thin entries, one existing compiler. The hidden `assetsDir` option is the one cost, explained in research. |
 | VI: every event type has a view | Not touched. |
 | Shared bundle and distribution | The one static bundle is served unchanged. The Python wheel and `dist` do not change. Helper code goes to `lib`, which the wheel never stages. |
 | Embedded helpers | Mount nothing unless `enabled` is `true`. Warning with the mount path when enabled (Next.js: at the first request, the earliest moment the path is known, see research 13). Policy allows own-origin scripts only and forbids `eval`. |
@@ -118,12 +118,11 @@ packages/inspector/
 ├── lib/                     # build output, git-ignored, shipped
 └── tests/server/
     ├── core.test.ts
-    ├── express.test.ts      # Express 4 and 5
+    ├── express.test.ts      # Express 5
     ├── hono.test.ts
     ├── next.test.ts
     ├── node.test.ts
-    ├── bundle.test.ts       # no helper code in the page bundle
-    └── express4.d.ts        # types for the alias
+    └── bundle.test.ts       # no helper code in the page bundle
 
 scripts/build.mjs            # buildServer(): tsc, then check the exports targets exist
 tests/e2e/js-helpers/
@@ -137,8 +136,8 @@ website/content/docs/        # embedding, dependencies, development, status, ind
 README.md, packages/inspector/README.md
 ```
 
-Existing tests that change: `packages/inspector/tests/foundation/static-path.test.ts` (the exports are no longer only the
-static path) and `policy.test.ts` (accept `npm:name@x.y.z` aliases with an exact version).
+Existing test that changes: `packages/inspector/tests/foundation/static-path.test.ts` (the exports are no longer only the
+static path). The exact-version policy test stays as it is.
 
 **Structure Decision**: Server code gets its own directory and its own compile step because it ships as Node code, not
 in the browser bundle. It stays in the existing package because the issue says to ship from `agui-inspector`, and the
@@ -146,11 +145,10 @@ CLI of issue #75 will live there too.
 
 ## Complexity Tracking
 
-No constitution violation. The deviations below are the costs to review:
+No constitution violation. The costs below are the ones to review:
 
 | Cost | Why needed | Simpler alternative rejected because |
 | --- | --- | --- |
 | A second compile step (`tsc` to `lib/`) | Node refuses to strip types from installed packages | Shipping `.ts` fails at import. Hand-written JavaScript and `.d.ts` can drift. |
 | `assetsDir` option, hidden from declarations | Unit tests run before the build and cannot use `dist` | Building the page in every test run costs seconds for no added coverage. |
-| `express4` alias dependency and a loosened policy test | The spec promises Express 4 and 5 and claims only what a test covers | Express 5 only leaves the larger share of Express apps unverified. |
 | Change to `static-path.js` | Turbopack refuses `new URL('../dist', import.meta.url)` in a bundled dependency | A `serverExternalPackages` setting in the host breaks "no host configuration change". |

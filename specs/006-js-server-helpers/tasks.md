@@ -16,13 +16,11 @@ publish, tag or release step, and keep docs in short plain sentences with no em 
 
 ## Phase 1: Setup
 
-- [ ] T001 Add the four development dependencies with exact pins to the root `package.json` (`express` `5.2.1`,
-  `@types/express` `5.0.6`, `express4` as `npm:express@4.22.3`, `hono` `4.13.13`) and refresh `package-lock.json` with
-  `npm install --ignore-scripts`. Add one row each to `website/content/docs/dependencies.mdx` under development
-  dependencies (purpose and the alternative that falls short, see research 10). Change
-  `packages/inspector/tests/foundation/policy.test.ts` so an `npm:name@x.y.z` alias counts as exact: the version after the
-  `@` must match `^\d+\.\d+\.\d+$`, the lockfile is compared with it, and the docs row is found by the alias name.
-  Do not touch `THIRD_PARTY_NOTICES.txt` (development packages are not listed).
+- [ ] T001 Add the three development dependencies with exact pins to the root `package.json` (`express` `5.2.1`,
+  `@types/express` `5.0.6`, `hono` `4.13.13`) and refresh `package-lock.json` with
+  `npm install --ignore-scripts` (public registry only). Add one row each to `website/content/docs/dependencies.mdx`
+  under development dependencies (purpose and the alternative that falls short, see research 10). The exact-version
+  policy test stays as it is. Do not touch `THIRD_PARTY_NOTICES.txt` (development packages are not listed).
 - [ ] T002 [P] Create `packages/inspector/tsconfig.server.json` that extends `./tsconfig.json` with `noEmit` false,
   `outDir` `lib`, `rootDir` `src`, `declaration`, `stripInternal`, `rewriteRelativeImportExtensions`, and `include`
   `src/server/**/*` and `src/static-path.js`. Add `packages/inspector/lib/` to `.gitignore`. Add `"lib"` to `files` in
@@ -82,11 +80,10 @@ The core, the bridge and the proof that the page bundle stays clean.
 
 **Goal**: one call in an Express application serves the inspector at `/agui-inspector`.
 
-**Independent test**: Express 4 and 5 over real `http` servers in the unit tests, and the real page in Chromium.
+**Independent test**: Express 5 over a real `http` server in the unit tests, and the real page in Chromium.
 
-- [ ] T009 [US1] Write `packages/inspector/tests/server/express.test.ts` first, run once per Express major (`express`
-  and `express4`, the second typed by a one-line `declare module 'express4'` in
-  `packages/inspector/tests/server/express4.d.ts` that re-exports `express`). Over a real server on port 0 check:
+- [ ] T009 [US1] Write `packages/inspector/tests/server/express.test.ts` first, against Express 5 (`express`). Over a
+  real server on port 0 check:
   the page after the redirect, `config.json` and a nested asset at `/agui-inspector`; the redirect target and that the
   query survives; a custom `path` (`/tools/inspect`, trailing `/` dropped) with `/agui-inspector` giving the host's own
   404; the helper on an Express `Router` that the application mounts at `/api`; a malformed `%` escape and
@@ -168,8 +165,7 @@ behaves like Next.js's router.
 guard in front of the routes.
 
 - [ ] T018 [P] [US4] Add to `packages/inspector/tests/server/express.test.ts`: `enabled` of `false`, left out and `'false'`
-  add no route (the router's stack length is unchanged: `app.router.stack` in Express 5, `app._router?.stack` in
-  Express 4), log nothing, read nothing (a missing `assetsDir` does not throw)
+  add no route (the router's stack length, `app.router.stack`, is unchanged), log nothing, read nothing (a missing `assetsDir` does not throw)
   and give the host's 404 for the page, `config.json`, the slash form and the redirect path; `enabled: true` logs one
   `console.warn` (mocked with `node:test`) naming `/agui-inspector` and, for a custom path, that path; the policy header
   on every status the helper returns; a guard registered with `app.use` before the helper answers `401` for the page,
@@ -217,8 +213,9 @@ guard in front of the routes.
   prefix is not added), and that Next.js logs at the first request;
   authentication with the guard placement for each framework (Express and Hono register the guard before the helper,
   Next.js uses `middleware.ts` or `proxy.ts`); theming; CommonJS use and the Node.js 22.12 minimum; the Node.js runtime
-  limit (no edge runtime); and the framework versions tested (Express 4.22 and 5.2, Hono 4.13, and Next.js 15.5 and
-  16.3 by hand, see T027). Say that the hosts differ from the Python page only where the table says so.
+  limit (no edge runtime); and the framework versions tested (Express 5.2, Hono 4.13, and Next.js 15.5 and
+  16.3 by hand, see T027) and, for Express, that the helper is tested with Express 5 and needs only
+  `app.use(path, handler)`. Say that the hosts differ from the Python page only where the table says so.
 - [ ] T024 [P] [US5] Fix the sentences that say the helpers are planned or missing: `website/content/docs/development.mdx`
   (the layout, that `npm run build` also writes `packages/inspector/lib`, and the "no CLI and no server helper" line),
   `website/content/docs/status.mdx` (the JS helpers row), `website/content/docs/index.mdx`, `README.md` and

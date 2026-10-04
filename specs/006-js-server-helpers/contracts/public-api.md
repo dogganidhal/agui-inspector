@@ -10,7 +10,8 @@ What a host imports and what it gets. Everything here is checked by a test (see 
 | `agui-inspector/hono` | `mountInspector(app, options)` | `app` is a Hono application |
 | `agui-inspector/next` | `inspectorRoute(options)` | returns `{ GET, HEAD }` for a route file |
 
-All three are ES modules with `.d.ts` files. Node.js 22.12 or newer can `require()` them. Importing one loads no
+The Express helper needs only `app.use(path, handler)` from the host. It is tested with Express 5. All three are ES
+modules with `.d.ts` files. Node.js 22.12 or newer can `require()` them. Importing one loads no
 framework. A host needs the Node.js runtime: the helpers read files with `node:fs`.
 
 ## Types
