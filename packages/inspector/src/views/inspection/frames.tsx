@@ -394,7 +394,7 @@ const FrameItem = memo(
           <span className="agui-fr-sum">{summarizeFrame(frame)}</span>
           <span className="agui-fr-ver">
             {issue ? (
-              <Tag variant="err">{issue.kind}</Tag>
+              <Tag variant={findingVariant(issue)}>{issue.kind}</Tag>
             ) : frame.classification === 'data' ? (
               <span role="img" aria-label="Valid" title="Valid">
                 <Icon name="check" size={14} />

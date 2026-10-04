@@ -343,7 +343,7 @@ test('a finding shows its rule id after its label in the frame detail and on the
   const html = render(session, { openExchanges: new Map([[invalid.id, true], [runExchange, true]]), openFrames: new Set([bad.id]) });
   assert.match(html, /<code>json\.invalid<\/code>/, 'the frame detail names the rule');
   assert.match(html, /<code>sequence\.text-message-not-open<\/code>/, 'the run finding on the exchange names the rule');
-  assert.match(html, /<span class="agui-fr-ver"><span[^>]*>json<\/span>/, 'the frame row keeps its short kind tag');
+  assert.match(html, /<span class="agui-fr-ver"><span class="agui-tag agui-tag--err">json<\/span>/, 'the frame row keeps its short kind tag');
 
   const old: InspectionSession = {
     ...session,
@@ -365,6 +365,14 @@ test('compat and capability findings use the warning styling of sequence finding
     Object.keys(kinds).map((kind) => [kind, variantOf(kind)]),
     [['compat', 'warn'], ['capability', 'warn'], ['sequence', 'warn'], ['json', 'err'], ['capture', 'err']],
   );
+  // On the frame row, a frame whose first finding is a compat or capability finding has a warning tag.
+  const exchangeId = session.frames.find((frame) => frame.id === subject.id)!.exchangeId;
+  const rowTag = (kind: keyof typeof kinds) => {
+    const only = { ...session, findings: [findings.find((finding) => finding.kind === kind)!] };
+    const row = render(only, { openExchanges: new Map([[exchangeId, true]]) }).match(new RegExp(`data-frame-row="${subject.id}"[^>]*>[\\s\\S]*?<span class="agui-fr-ver"><span class="agui-tag agui-tag--(\\w+)">${kind}</span>`));
+    return row?.[1];
+  };
+  assert.deepEqual((['compat', 'capability', 'json'] as const).map(rowTag), ['warn', 'warn', 'err']);
 });
 
 test('filters show counts and shown/total on every exchange header', async () => {

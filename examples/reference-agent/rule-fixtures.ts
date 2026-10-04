@@ -61,8 +61,8 @@ const text = (messageId: string, extra: object = {}) => ({ type: 'TEXT_MESSAGE_S
 const tool = (toolCallId: string) => ({ type: 'TOOL_CALL_START', toolCallId, toolCallName: 'search_documents' });
 const subagent = (subagentRunId: string, extra: object = {}) => ({ type: 'SUBAGENT_STARTED', subagentRunId, name: 'researcher', ...extra });
 
-/** Rules whose fixtures exist so far. Tightened to every catalogue id once the last family is in. */
-export const ruleFixtures: Partial<Record<CatalogueRuleId, RuleFixture>> = {
+/** One fixture for every rule. A rule that the catalogue adds without a fixture here fails the type check. */
+export const ruleFixtures: Record<CatalogueRuleId, RuleFixture> = {
   'json.invalid': {
     scenario: stream('rule-json-invalid', [started, invalidCases.truncatedJson.data, finished]),
     via: 'client',

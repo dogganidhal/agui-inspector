@@ -1,0 +1,107 @@
+---
+title: Rule catalogue
+description: Every rule a finding can name, with its id, what it means and what to check.
+---
+
+Every finding names the rule that produced it, such as `sequence.text-message-not-open`. This page lists all 39 rules. Use it to look up an id you saw in the frame detail, in an export, or in a bug report. [Read frames and findings](./inspection.mdx) explains how to read the Inspection pane.
+
+A rule never changes the evidence. The frame text, its order and its offsets stay as received. A rule only adds a finding beside the frame, the run or the exchange.
+
+## Rule ids
+
+An id has two parts joined by a dot: a family, then a problem. The family is the kind of the finding. The problem is lowercase words joined by hyphens. The families are `json`, `schema`, `sequence`, `terminal`, `transport`, `capture`, `compat` and `capability`.
+
+Ids are a public contract. Other tools can rely on them:
+
+- An id never changes its meaning, and no rule is removed. A rule the inspector stops producing stays on this page.
+- A rule is not split or merged. A split adds new ids and withdraws the old one.
+- New rules can appear in any release. A rule id that this version does not know, for example in a recording from a newer version, is shown as it is.
+- The short description of a rule can be reworded. Its meaning stays.
+
+The id is shown after the kind label in a finding, in the frame detail and in the exchange. A session export carries it in the optional `rule` field of each finding ([recordings](./recordings.mdx)). Findings in a recording made by 0.1.0 have no id, and the inspector does not guess one.
+
+A frame can have several findings, one for each rule it breaks. A frame with a `THINKING_START` event from an agent that declares no reasoning has two.
+
+## json and schema
+
+The frame reader reports these on the frame. The protocol client also reports `json.invalid` and `schema.invalid-event` on the run when it rejects a frame.
+
+| Rule | Means | What to check |
+| --- | --- | --- |
+| `json.invalid` | The data is not valid JSON. | Read the raw text of the frame. A cut-off string, text after the JSON or an empty `data:` line is the usual cause. |
+| `schema.unknown-event-type` | The event type is not in the supported baseline. | Look for a typo, or an event from a newer protocol. Application events belong in `CUSTOM`. |
+| `schema.invalid-event` | The data is JSON but not a valid AG-UI event. | The finding names the failing field. Compare the frame with the fields of that event in the protocol. |
+| `schema.check-failed` | The inspector's own schema check failed on this frame. | The frame is kept and marked invalid. This is a bug in the inspector. Report it with a synthetic copy of the frame. |
+
+## sequence
+
+The protocol client checks the order of events and stops at the first violation of a run, so a run has at most one `sequence` finding. The inspector does not check the order itself. It reads the client's message and names the rule. The frames after the violation are still recorded and read. The finding sits on the run and keeps the client's own message.
+
+| Rule | Means | What to check |
+| --- | --- | --- |
+| `sequence.first-event` | The stream starts with an event other than `RUN_STARTED` or `RUN_ERROR`. | Send `RUN_STARTED` first. |
+| `sequence.event-after-run-finished` | An event follows `RUN_FINISHED`. | Send nothing after `RUN_FINISHED`. Start a new run with `RUN_STARTED`. |
+| `sequence.event-after-run-error` | An event follows `RUN_ERROR`. | Send nothing after `RUN_ERROR`. |
+| `sequence.run-started-while-active` | `RUN_STARTED` arrives while a run is active. | End the active run with `RUN_FINISHED` or `RUN_ERROR` first. |
+| `sequence.run-finished-while-open` | `RUN_FINISHED` arrives while a step, text message, reasoning span, reasoning message, tool call or subagent is open. | The message names what is open. Close it before `RUN_FINISHED`. |
+| `sequence.text-message-already-open` | A text message starts with an id that is already open. | End the first message with `TEXT_MESSAGE_END`, or use a new id. |
+| `sequence.text-message-not-open` | Content or an end arrives for a text message that is not open. | Send `TEXT_MESSAGE_START` before the content, and nothing after the end. |
+| `sequence.tool-call-already-open` | A tool call starts with an id that is already open. | End the first call with `TOOL_CALL_END`, or use a new id. |
+| `sequence.tool-call-not-open` | Arguments or an end arrive for a tool call that is not open. | Send `TOOL_CALL_START` before the arguments, and nothing after the end. |
+| `sequence.step-already-open` | A step starts that is already open. | Finish the step with `STEP_FINISHED` first. |
+| `sequence.step-not-open` | A step finishes that was not started. | Send `STEP_STARTED` with the same name first. |
+| `sequence.reasoning-span-already-open` | A reasoning span starts with an id that is already open. | End the span with `REASONING_END`, or use a new id. |
+| `sequence.reasoning-span-not-open` | A reasoning span ends that is not open. | Send `REASONING_START` first. |
+| `sequence.reasoning-message-already-open` | A reasoning message starts with an id that is already open. | End the message with `REASONING_MESSAGE_END`, or use a new id. |
+| `sequence.reasoning-message-not-open` | Content or an end arrives for a reasoning message that is not open. | Send `REASONING_MESSAGE_START` first. |
+| `sequence.subagent-already-active` | A subagent starts that is already active. | Finish it with `SUBAGENT_FINISHED` first. |
+| `sequence.subagent-id-reused` | A subagent starts with an id that already finished in this run. | Use a new `subagentRunId` for each invocation. |
+| `sequence.subagent-parent-unknown` | A subagent starts under a parent subagent that was never started. | Start the parent first, or leave out `parentSubagentRunId`. |
+| `sequence.subagent-not-active` | A subagent finishes or fails that is not active. | Send `SUBAGENT_STARTED` first. |
+| `sequence.owner-mismatch` | An event continues or finishes something under a different subagent than the one that opened it. | Give every event of a message, tool call or step the `subagentRunId` of the event that opened it. |
+| `sequence.unclassified` | The client rejected the stream for a reason that no other sequence rule names. | Read the message of the finding. It holds the client's words. A client release can add checks that have no rule yet. |
+
+## terminal, transport and capture
+
+| Rule | Means | What to check |
+| --- | --- | --- |
+| `terminal.missing` | The stream ended without a valid `RUN_FINISHED` or `RUN_ERROR`. | See [missing terminal events](./inspection.mdx#missing-terminal-events). A user stop gives this finding too. |
+| `transport.failed` | The request failed before a response, or the connection failed during the stream. | Read the message. See [troubleshooting](./troubleshooting.mdx) for blocked requests and unreachable servers. |
+| `capture.failed` | The inspector's recording failed. It is reported once for the exchange. | The client still got its response, but the frames of that exchange stop there. This is a bug in the inspector. |
+| `capture.response-not-captured` | The response could not be copied for recording. | The exchange has no frames. The client still got its response. |
+| `capture.rule-check-failed` | A rule check failed on this frame. | The frame is kept and read. This is a bug in the inspector. Report it with a synthetic copy of the frame. |
+
+## compat
+
+The pinned protocol client accepts these older shapes. It upgrades them and prints a console warning, and the run carries on. The inspector reports each one so that you know your server still sends it. The frame stays as received. A frame that is valid after the client's upgrade gets no `schema` finding, and a finish that the client accepts ends the missing-terminal check. If the frame has another problem, that problem gets its own finding.
+
+A later client release can stop accepting these shapes. Fix them on the server.
+
+| Rule | Means | What to check |
+| --- | --- | --- |
+| `compat.retired-event-type` | A retired `THINKING_*` event type. The client reads it as the matching `REASONING_*` event. | Send `REASONING_START`, `REASONING_MESSAGE_START`, `REASONING_MESSAGE_CONTENT`, `REASONING_MESSAGE_END` and `REASONING_END` instead of the five `THINKING_*` events. `REASONING_START` has no title. |
+| `compat.null-optional-field` | An optional field is `null`. The client reads it as absent. | Leave the field out. The finding names the fields: `rawEvent`, `result`, `outcome`, `parentMessageId`, and the optional fields of the echoed run input and of media content parts. |
+| `compat.legacy-binary-content` | A message holds a `binary` content part. The client converts it to a media part. | Send an `image`, `audio`, `video` or `document` part with a `source`. |
+| `compat.protocol-version-newer` | `RUN_STARTED` declares a protocol version newer than the one the client speaks, which is 1.0. | The client drops what it does not know from its own copy and warns. The recording keeps everything. |
+| `compat.protocol-version-unreadable` | `RUN_STARTED` declares a protocol version that is not written as a major and a minor number joined by a dot. | Write the version as in `1.0`. A value such as `1.0.1` cannot be read by the client, which warns and carries on. |
+
+A `protocolVersion` that is absent, equal to 1.0 or older gets no finding, because the client accepts it without a warning.
+
+## capability
+
+These rules compare frames with the capabilities of the selected agent. The agent declares them in the `capabilities` of its [configuration](./configuration.mdx), inline or as a URL. A rule fires only when the agent declares its flag as `false`. A flag that is omitted means "not declared", not "unsupported", and gives no finding. There is also no finding while a capabilities URL is loading or when it failed to load. The page reads the declaration once, when a stream starts.
+
+The finding sits on the frame that breaks the declaration, one for each such frame. A stream of 200 state deltas from an agent that declares `state.deltas` as `false` gets 200 findings.
+
+| Rule | Means | What to check |
+| --- | --- | --- |
+| `capability.reasoning-unsupported` | A reasoning event came from an agent that declares `reasoning.supported` as `false`. | Either declare reasoning as supported or stop sending reasoning events. A retired `THINKING_*` event counts as a reasoning event too. |
+| `capability.interrupt-unsupported` | A `RUN_FINISHED` with an interrupt outcome came from an agent that declares `humanInTheLoop.interrupts` as `false`. | Either declare interrupts as supported or end the run without an interrupt outcome. |
+| `capability.state-delta-unsupported` | A `STATE_DELTA` came from an agent that declares `state.deltas` as `false`. | Either declare deltas as supported or send `STATE_SNAPSHOT` events. |
+| `capability.state-snapshot-unsupported` | A `STATE_SNAPSHOT` came from an agent that declares `state.snapshots` as `false`. | Either declare snapshots as supported or send `STATE_DELTA` events. |
+
+Other capability flags have no rule yet. A flag only has a rule where a single event contradicts it.
+
+## Next steps
+
+To read a finding in the Inspection pane, see [Read frames and findings](./inspection.mdx). To fix a failing connection, see [troubleshooting](./troubleshooting.mdx). The rule fixtures that break each rule are in `examples/reference-agent/rule-fixtures.ts`.
