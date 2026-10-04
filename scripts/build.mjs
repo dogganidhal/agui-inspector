@@ -1,5 +1,7 @@
-// Builds the one static asset set: index.html plus external JS. Usage: npm run build [-- --outdir <dir>]
-import { copyFileSync, cpSync, existsSync, mkdirSync, rmSync } from 'node:fs';
+// Builds the one static asset set: index.html plus external JS, and, unless --outdir is given, the Node-side server
+// helpers (packages/inspector/lib). Usage: npm run build [-- --outdir <dir>]
+import { spawnSync } from 'node:child_process';
+import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { build } from 'esbuild';
 
@@ -55,9 +57,31 @@ export async function buildApp(/** @type {string} */ outdir = defaultOutdir) {
   return result;
 }
 
+/**
+ * Compiles the Express, Hono and Next.js helpers (src/server) to JavaScript and declarations in lib/, which the npm
+ * package ships. Node does not strip types from installed packages, so TypeScript cannot ship as it is. Throws when an
+ * `exports` target of the package that points into lib/ was not written.
+ */
+export function buildServer() {
+  const lib = path.join(packageDir, 'lib');
+  rmSync(lib, { recursive: true, force: true });
+  const run = spawnSync('npm', ['exec', '--', 'tsc', '-p', path.join(packageDir, 'tsconfig.server.json')], { cwd: root, stdio: 'inherit' });
+  if (run.error) throw new Error(`could not run tsc: ${run.error.message}`);
+  if (run.status !== 0) throw new Error('tsc failed to build the server helpers');
+  const { exports } = JSON.parse(readFileSync(path.join(packageDir, 'package.json'), 'utf8'));
+  const targets = Object.values(exports).flatMap((entry) => (typeof entry === 'string' ? [entry] : Object.values(entry)));
+  for (const target of targets.filter((file) => file.startsWith('./lib/'))) {
+    if (!existsSync(path.join(packageDir, target))) throw new Error(`exports target ${target} is missing from packages/inspector/lib`);
+  }
+}
+
 if (path.basename(process.argv[1] ?? '') === 'build.mjs') {
   const flag = process.argv.indexOf('--outdir');
   const outdir = flag > 0 && process.argv[flag + 1] ? path.resolve(process.argv[flag + 1] ?? '') : defaultOutdir;
   await buildApp(outdir);
   console.log(`built ${path.relative(root, outdir) || '.'}`);
+  if (flag < 0) {
+    buildServer();
+    console.log('built packages/inspector/lib');
+  }
 }

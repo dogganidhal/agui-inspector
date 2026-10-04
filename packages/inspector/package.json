@@ -18,10 +18,36 @@
   ],
   "type": "module",
   "exports": {
-    ".": "./src/static-path.js"
+    ".": "./src/static-path.js",
+    "./express": {
+      "types": "./lib/server/express.d.ts",
+      "default": "./lib/server/express.js"
+    },
+    "./hono": {
+      "types": "./lib/server/hono.d.ts",
+      "default": "./lib/server/hono.js"
+    },
+    "./next": {
+      "types": "./lib/server/next.d.ts",
+      "default": "./lib/server/next.js"
+    }
+  },
+  "typesVersions": {
+    "*": {
+      "express": [
+        "lib/server/express.d.ts"
+      ],
+      "hono": [
+        "lib/server/hono.d.ts"
+      ],
+      "next": [
+        "lib/server/next.d.ts"
+      ]
+    }
   },
   "files": [
     "dist",
+    "lib",
     "src/static-path.js",
     "LICENSE",
     "THIRD_PARTY_NOTICES.txt"

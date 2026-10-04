@@ -1,10 +1,41 @@
 # agui-inspector
 
-The static files of the AG-UI inspector. The inspector records every request and server-sent event (SSE) frame of an
-AG-UI server, checks them against the protocol and lets you drive runs from the browser.
+The static files of the AG-UI inspector, and helpers that serve them from Express, Hono and Next.js. The inspector
+records every request and server-sent event (SSE) frame of an AG-UI server, checks them against the protocol and lets
+you drive runs from the browser.
 
-This package has no CLI and no server helper. It exports one value, `staticAssetsPath`, the absolute path of the
-directory that holds the built page. Serve that directory from any static file server.
+This package has no CLI.
+
+## Express, Hono and Next.js
+
+From version 0.2.0, one call in your server serves the inspector next to your agent routes, on the same origin, so your
+own authentication applies. Node.js 22.12 or newer.
+
+```js
+import { mountInspector } from 'agui-inspector/express'; // or 'agui-inspector/hono'
+
+mountInspector(app, {
+  agents: [{ id: 'support', url: '/agents/support/stream' }],
+  enabled: process.env.NODE_ENV !== 'production',
+});
+```
+
+In Next.js, a route file at `app/agui-inspector/[[...path]]/route.ts` exports the handlers:
+
+```js
+import { inspectorRoute } from 'agui-inspector/next';
+
+export const { GET, HEAD } = inspectorRoute({ agents: [{ id: 'support', url: '/api/agents/support' }], enabled: true });
+```
+
+Nothing is mounted unless `enabled` is `true`, and an enabled helper logs a warning that names the path. The
+[docs](https://dogganidhal.github.io/agui-inspector/docs/embedding/#javascript-servers) cover the arguments,
+authentication and routes.
+
+## Static assets
+
+`staticAssetsPath` is the absolute path of the directory that holds the built page. Serve that directory from any other
+static file server.
 
 ```js
 import { staticAssetsPath } from 'agui-inspector';

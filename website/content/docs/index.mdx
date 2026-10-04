@@ -37,13 +37,13 @@ For your own agent, pick one of these:
 
 It works with any AG-UI server over HTTP and Server-Sent Events (SSE), whatever language the server is written in. All
 modes use the same static bundle. The hosted page and the static assets work with any server. The embedded helper
-exists for Python first, and helpers for other languages follow: JavaScript helpers for Express, Hono and Next.js are
-planned for [0.2.0](https://github.com/dogganidhal/agui-inspector/blob/main/ROADMAP.md#020).
+exists for Python (0.1.0) and for Express, Hono and Next.js
+([0.2.0](https://github.com/dogganidhal/agui-inspector/blob/main/ROADMAP.md#020), not released yet).
 
 | Mode | How it runs | Status |
 | --- | --- | --- |
 | Hosted | A static page that you point at your server. The public demo is one. | Available: the [demo](./demo.mdx), or build the page from a checkout |
-| Embedded | A Python helper mounts it next to your Starlette or FastAPI agent routes, on the same origin. | 0.1.0 on PyPI: [install it](./embedding.mdx#quick-start) |
+| Embedded | A helper mounts it next to your agent routes, on the same origin: Python for Starlette and FastAPI, JavaScript for Express, Hono and Next.js. | Python: 0.1.0 on PyPI, [install it](./embedding.mdx#quick-start). JavaScript: [in 0.2.0](./embedding.mdx#javascript-servers) |
 | Static assets | Any other server serves the directory that the npm package's `staticAssetsPath` points to. | 0.1.0 on npm: `npm install agui-inspector` |
 
 [Project status and privacy](./status.mdx) lists the planned modes and helpers.

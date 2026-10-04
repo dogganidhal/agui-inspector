@@ -22,11 +22,11 @@ test('staticAssetsPath names the absolute built-asset directory of the package',
   assert.ok(path.isAbsolute(printed));
 });
 
-test('the package exposes only the static path, no CLI or server helper', () => {
+test('the package keeps the static path as its main export and has no CLI', () => {
   const pkg = JSON.parse(readFileSync(path.join(root, 'packages/inspector/package.json'), 'utf8')) as {
-    exports: Record<string, string>;
+    exports: Record<string, unknown>;
     bin?: unknown;
   };
-  assert.deepEqual(pkg.exports, { '.': './src/static-path.js' });
+  assert.equal(pkg.exports['.'], './src/static-path.js');
   assert.equal(pkg.bin, undefined);
 });

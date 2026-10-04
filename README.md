@@ -62,11 +62,26 @@ sees request bodies and raw frames.
 [Embed in Starlette or FastAPI](https://dogganidhal.github.io/agui-inspector/docs/embedding/) covers authentication,
 routes and an example app.
 
+### In an Express, Hono or Next.js app
+
+The npm package has a helper for each, in the next release ([0.2.0](ROADMAP.md#020)):
+
+```ts
+import { mountInspector } from 'agui-inspector/express'; // or 'agui-inspector/hono'
+
+mountInspector(app, {
+  agents: [{ id: 'support', url: '/agents/support/stream' }],
+  enabled: process.env.NODE_ENV !== 'production',
+});
+```
+
+In Next.js, a route file exports `inspectorRoute({ agents, enabled })`.
+[Embed in your server](https://dogganidhal.github.io/agui-inspector/docs/embedding/#javascript-servers) covers the
+arguments, authentication and routes.
+
 ### With any other server
 
-Python is the first language with a helper. JavaScript helpers for Express, Hono and Next.js are planned for
-[0.2.0](ROADMAP.md#020).
-A server in any language can already use the hosted page: deploy it on any static host, or point the public demo at
+A server in any other language can use the hosted page: deploy it on any static host, or point the public demo at
 your server. Your server must allow the page's origin through CORS.
 [Host the static page](https://dogganidhal.github.io/agui-inspector/docs/hosted/) explains both.
 

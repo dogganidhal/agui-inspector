@@ -33,6 +33,9 @@ repository uses npm workspaces and Node 24 LTS (`engines.node` is `>=24`).
 | `@playwright/test` | 1.63.0 | End-to-end tests and the network-allowlist check. An explicit command installs the browsers. Package installs never do. | jsdom: no real layout or network, and the A2UI renderer does not support server rendering. |
 | `@changesets/cli` | 3.0.3 | Release versioning for the Python and npm packages: pending changesets, the version pull request, the changelog and the release tags. It only versions and tags. The release workflow publishes, and the Python version holder is private, so Changesets cannot publish it. | Commit-message tools, such as release-please. A changeset is an explicit note a reviewer sees, and one tool covers both packages. |
 | `@types/node` | 24.19.1 | Types for `node:test` and the build scripts, matching Node 24. | None. |
+| `express` | 5.2.1 | A real Express 5 application in the tests of the Express helper, which needs only `app.use(path, handler)`. | A hand-written stand-in for `app.use`: it would not show how Express strips the mount path, sets `originalUrl` or routes a `Router`. |
+| `@types/express` | 5.0.6 | Types for Express 5, so the tests check the helper's argument type against a real application and `Router`. | `any`, which would hide a type mismatch that adopters see. |
+| `hono` | 4.13.13 | A real Hono application in the tests of the Hono helper and in the browser tests. It ships its own types. | A stand-in with an `all` method: it would not show Hono's strict routing or its parameter patterns. |
 | `@types/react` | 19.3.0 | Types for React 19.3. | None. |
 | `@types/react-dom` | 19.3.0 | Types for React DOM 19.3. | None. |
 
