@@ -97,11 +97,11 @@ and no schema finding; `protocolVersion` cases give the right rule or none.
 ## Phase 6: Polish and cross-cutting
 
 - [x] T033 Add one changeset, `.changeset/protocol-rule-catalogue.md`, naming `'agui-inspector': minor` and `'agui-inspector-python': minor` (one file covers both packages, as `npx changeset` writes it), with a plain description: every finding has a stable rule id, new rules for frames that contradict declared capabilities and for the older event shapes the client accepts, the optional `rule` field in session files, and that files from this version may not open in 0.1.0. Never edit a package version by hand.
-- [ ] T034 Run `npm run check:ci` from the repository root and fix every failure it shows. While iterating, run targeted e2e with `npm run test:e2e -- <path> --workers=2` because other workers share this machine.
+- [x] T034 Run `npm run check:ci` from the repository root and fix every failure it shows. While iterating, run targeted e2e with `npm run test:e2e -- <path> --workers=2` because other workers share this machine.
 - [x] T035 Check the code against the spec. If any requirement, edge case or success criterion is not met, run `/speckit-converge` so the missing work goes into this file instead of being left out.
-- [ ] T036 Run `/ponytail:ponytail-review` on the diff and fix what it finds: no abstraction without a second use, no helper that duplicates one in `core`, no file that can be one line.
-- [ ] T037 Run the `humanizer` skill on the new docs text (`rules.mdx` and the edited pages) and on the pull request body. Keep the repository docs rules: short plain sentences, no em dashes, no bold labels.
-- [ ] T038 Walk through [quickstart.md](quickstart.md) from the top and confirm each expected result. Confirm that no finding message repeats a received value except the sequence message, and that `git diff --stat` touches no file outside the plan's structure and no `ROADMAP.md`.
+- [x] T036 Run `/ponytail:ponytail-review` on the diff and fix what it finds: no abstraction without a second use, no helper that duplicates one in `core`, no file that can be one line.
+- [x] T037 Run the `humanizer` skill on the new docs text (`rules.mdx` and the edited pages) and on the pull request body. Keep the repository docs rules: short plain sentences, no em dashes, no bold labels.
+- [x] T038 Walk through [quickstart.md](quickstart.md) from the top and confirm each expected result. Confirm that no finding message repeats a received value except the sequence message, and that `git diff --stat` touches no file outside the plan's structure and no `ROADMAP.md`.
 
 ## Dependencies and order
 
