@@ -165,4 +165,5 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
-      - run: npm publish npm-dist/*.tgz --provenance
+      # The ./ matters: npm reads npm-dist/x.tgz as a GitHub user/repo shorthand and tries to clone it.
+      - run: npm publish ./npm-dist/*.tgz --provenance

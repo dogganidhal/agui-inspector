@@ -277,7 +277,7 @@ class DistributionTest(unittest.TestCase):
         # PyPI runs nothing. npm runs one command, on the downloaded tarball, and refuses to publish without provenance.
         self.assertIsNone(re.search(r"\brun:", publish))
         self.assertRegex(publish, r"uses: pypa/gh-action-pypi-publish@[0-9a-f]{40}")
-        self.assertEqual(["npm publish npm-dist/*.tgz --provenance"], re.findall(r"\brun: (.*)", publish_npm))
+        self.assertEqual(["npm publish ./npm-dist/*.tgz --provenance"], re.findall(r"\brun: (.*)", publish_npm))
 
     def member_files(self, archive: str) -> dict[str, bytes]:
         """Every file of one distribution, by archive name."""
