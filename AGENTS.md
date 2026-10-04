@@ -6,7 +6,43 @@ Instructions for coding agents working in this repository. Humans should start w
 agui-inspector is a developer tool for AG-UI servers. It records every request and SSE frame as received, validates them
 against the protocol, drives runs like a client (interrupts, client tools, A2UI v0.9 surfaces) and sends raw requests no
 client would. One static bundle serves every mode: a hosted page, a Python helper for Starlette and FastAPI, and npm
-static assets. A public demo runs on GitHub Pages. Nothing is published to npm or PyPI yet.
+static assets. A public demo runs on GitHub Pages. The Python package is on PyPI (0.1.0). The npm package is not
+published yet.
+
+## Development workflow
+
+Spec Kit drives all development in this repository. The [constitution](.specify/memory/constitution.md) requires it:
+implementation work must trace to a reviewed specification, and a plan must pass the constitution check before any code
+is written. Do not start by editing code.
+
+The skills are named `speckit-*`. They live in `.claude/skills` and `.github/skills`. In Claude Code you run them as
+`/speckit-specify` and so on.
+
+1. Look in `specs/` for a feature that already covers the work. A bug fix, an extension or a refactor of an existing
+   feature belongs to that feature. Update its `spec.md`, `plan.md` and `tasks.md`. Start a new feature only when none
+   fits.
+2. `speckit-specify` creates `specs/NNN-name/spec.md` from a description. Write what users need and why. Leave the
+   technology and the code out of the spec.
+3. `speckit-clarify` asks short questions about gaps and writes the answers back into the spec. Settle every open
+   question before you plan.
+4. `speckit-plan` writes `plan.md` and the design files (research, data model, contracts, quickstart). Its constitution
+   check must pass. If a principle blocks the work, do not work around it. The constitution changes only through
+   `speckit-constitution`, and only with the maintainer's approval.
+5. `speckit-tasks` writes `tasks.md`: small tasks in dependency order, with the files each one touches. Tasks cover the
+   behavior, its tests and the docs that describe it.
+6. `speckit-analyze` checks the spec, plan and tasks against each other and against the constitution. It changes no
+   files. Fix every critical finding before you implement.
+7. `speckit-implement` works through `tasks.md`. Then run `npm run check:ci`. If the code and the spec still disagree,
+   run `speckit-converge` so the missing work is written down in `tasks.md` instead of being left out.
+
+Show the maintainer the spec and the plan, and wait for approval before you implement. The repository's own workflow
+(`.specify/workflows/speckit/workflow.yml`) has the same two review gates.
+
+Keep the record in the spec directory, not in chat: decisions, clarifications and scope changes go into the feature's
+files. The pull request links that directory. Update `ROADMAP.md` when release scope or status changes.
+
+Typo, wording and formatting fixes, and the version pull request that Changesets opens, change no behavior and need no
+spec. Everything else does, including small bug fixes.
 
 ## Where things are
 
@@ -65,8 +101,7 @@ These come from the [constitution](.specify/memory/constitution.md). Read it bef
   alternative that falls short (a test enforces it). Prefer the platform or an existing dependency.
 - Behavior changes need a regression test. End-to-end tests run against `examples/reference-agent`, never a model or an
   outside service.
-- Stay inside the scope in `ROADMAP.md` and the accepted spec under `specs/`. New capabilities go through Spec Kit
-  (`.claude/skills/speckit-*`) first.
+- Stay inside the scope in `ROADMAP.md` and the accepted spec under `specs/`. See the development workflow above.
 
 ## Things tests check that are easy to miss
 

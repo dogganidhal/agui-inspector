@@ -18,6 +18,9 @@ the engineering rules. Fixes and small improvements inside that scope can go str
 capability, open an issue first: features are specified under [`specs/`](specs) with [Spec Kit](https://github.com/github/spec-kit)
 before they are built, and the 1.0.0 items in the roadmap have no specification yet.
 
+Coding agents follow a stricter rule: all of their work goes through Spec Kit, as described in [AGENTS.md](AGENTS.md).
+If you work with an agent, expect it to start from a spec.
+
 ## Setup
 
 You need Node 24 or newer and npm. The Python package also needs [uv](https://docs.astral.sh/uv/).
