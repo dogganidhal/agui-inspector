@@ -7,7 +7,7 @@
 // Every request after step 2 goes through the runtime's guarded transport, so it obeys the allowlist
 // fixed in step 1. A bad hosting-config.json stops the start with a message; it never falls back to a
 // wider policy.
-import type { AgentConfig, ClientProfileSettings, JsonValue, SessionStore, ThemeConfig, TransportPolicy } from '../contracts.ts';
+import type { AgentConfig, BrandConfig, ClientProfileSettings, JsonValue, SessionStore, ThemeConfig, TransportPolicy } from '../contracts.ts';
 import { loadConfig, type ParsedConfig, type Result } from '../core/config/index.ts';
 import { defaultProfile, loadProfile, type StorageLike } from '../core/profiles/index.ts';
 import { createRuntime, guardedFetchText, resolveTarget, type Runtime } from '../core/runtime/index.ts';
@@ -48,7 +48,9 @@ export interface Started {
   readonly selectedAgentId?: string;
   /** The validated theme maps from `config.json`; the page applies them. */
   readonly theme?: ThemeConfig;
-  /** Theme overrides that were rejected. The page shows them; none of them stops the start. */
+  /** The validated brand from `config.json`; the top bar shows it. */
+  readonly brand?: BrandConfig;
+  /** Theme and brand values that were rejected. The page shows them; none of them stops the start. */
   readonly warnings: readonly string[];
   /** Why the configuration or the saved profile could not be used. */
   readonly error?: string;
@@ -101,11 +103,12 @@ export async function startPage(env: StartupEnvironment): Promise<StartResult> {
     const fixed = resolveTarget(href, { ...policy, allowVisitorTargets: false });
     if (!fixed.ok) throw new Error(fixed.error);
     return readText(href);
-  });
+  }, { origin: env.origin, baseUrl: env.baseUrl });
   let agents: readonly AgentConfig[] = [];
   let theme: ThemeConfig | undefined;
+  let brand: BrandConfig | undefined;
   let warnings: readonly string[] = [];
-  if (loaded.ok) ({ agents, theme, warnings } = loaded.value);
+  if (loaded.ok) ({ agents, theme, brand, warnings } = loaded.value);
   else if (hosting.value.config !== undefined || !NOT_FOUND.test(loaded.error)) problems.push(loaded.error);
 
   if (env.storage !== undefined) {
@@ -125,6 +128,7 @@ export async function startPage(env: StartupEnvironment): Promise<StartResult> {
     agents,
     warnings,
     ...(theme !== undefined && { theme }),
+    ...(brand !== undefined && { brand }),
     ...(first !== undefined && { selectedAgentId: first.id }),
     ...(problems.length > 0 && { error: problems.join(' ') }),
   };

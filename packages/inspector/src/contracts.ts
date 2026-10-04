@@ -113,11 +113,19 @@ export interface ThemeConfig {
   readonly dark?: ThemeMap;
 }
 
+/** The adopter's name and logos for the top bar. After validation a logo is a resolved URL: the page's own origin or `data:`. */
+export interface BrandConfig {
+  readonly name?: string;
+  readonly logo?: string;
+  readonly logoDark?: string;
+}
+
 /** `version` may be omitted in a historical file and is then read as 0. */
 export interface ConfigFile {
   readonly version?: typeof FORMAT_VERSION;
   readonly agents: readonly AgentConfig[];
   readonly theme?: ThemeConfig;
+  readonly brand?: BrandConfig;
 }
 
 /** The seven persisted and exported client-profile settings. */

@@ -9,11 +9,11 @@
 // make the inspector fetch a route it was not handed.
 import type { AgentCapabilities } from '@ag-ui/core';
 import { AgentCapabilitiesSchema } from '@ag-ui/core/schemas';
-import { CAPABILITY_GROUPS, FORMAT_VERSION, THEME_PROPERTIES, type AgentConfig, type ConfigFile, type JsonValue, type ThemeConfig, type ThemeMap } from '../../contracts.ts';
+import { CAPABILITY_GROUPS, FORMAT_VERSION, THEME_PROPERTIES, type AgentConfig, type BrandConfig, type ConfigFile, type JsonValue, type ThemeConfig, type ThemeMap } from '../../contracts.ts';
 import { parsePreset } from '../presets/index.ts';
-import { describeError, fail, isJsonObject, isRecord, ok, themeValueProblem, unexpectedKey, urlProblem, type Result } from './validation.ts';
+import { describeError, fail, isJsonObject, isRecord, logoSource, NO_PAGE, ok, themeValueProblem, unexpectedKey, urlProblem, type PageLocation, type Result } from './validation.ts';
 
-export type { Result } from './validation.ts';
+export type { PageLocation, Result } from './validation.ts';
 
 /** Reads one text resource. The caller routes it through the guarded transport. */
 export type FetchText = (url: string) => Promise<string>;
@@ -21,7 +21,7 @@ export type FetchText = (url: string) => Promise<string>;
 export type ParsedConfig = ConfigFile & {
   readonly agents: readonly AgentConfig[];
   readonly version: typeof FORMAT_VERSION;
-  /** Theme overrides that were rejected. They never stop the configuration from loading. */
+  /** Theme and brand values that were rejected. They never stop the configuration from loading. */
   readonly warnings: readonly string[];
 };
 
@@ -101,8 +101,33 @@ function parseTheme(value: unknown, warnings: string[]): ThemeConfig | undefined
   return theme.light !== undefined || theme.dark !== undefined ? theme : undefined;
 }
 
-/** Version 0 only; a file without a version is the historical form and reads as version 0. */
-export function parseConfig(text: string): Result<ParsedConfig> {
+const BRAND_FIELDS = ['name', 'logo', 'logoDark'];
+
+/** The optional `brand`. A bad field is dropped alone with a warning that names it and never repeats its value. */
+function parseBrand(value: unknown, page: PageLocation, warnings: string[]): BrandConfig | undefined {
+  if (!isRecord(value)) {
+    warnings.push('brand must be an object with optional "name", "logo" and "logoDark"; it was ignored');
+    return undefined;
+  }
+  for (const key of Object.keys(value)) {
+    if (!BRAND_FIELDS.includes(key)) warnings.push(`brand: ${shown(key)} is not a brand field (use "name", "logo" or "logoDark"); it was ignored`);
+  }
+  const brand: { name?: string; logo?: string; logoDark?: string } = {};
+  if ('name' in value) {
+    if (typeof value.name === 'string' && value.name.trim() !== '') brand.name = value.name;
+    else warnings.push('brand.name must be a nonempty string; it was ignored');
+  }
+  for (const field of ['logo', 'logoDark'] as const) {
+    if (!(field in value)) continue;
+    const logo = field === 'logoDark' && brand.logo === undefined ? fail('needs a valid brand.logo') : logoSource(value[field], page);
+    if (logo.ok) brand[field] = logo.value;
+    else warnings.push(`brand.${field} ${logo.error}; it was ignored`);
+  }
+  return Object.keys(brand).length > 0 ? brand : undefined;
+}
+
+/** Version 0 only; a file without a version is the historical form and reads as version 0. `page` is where logos must stay. */
+export function parseConfig(text: string, page: PageLocation = NO_PAGE): Result<ParsedConfig> {
   let json: unknown;
   try {
     json = JSON.parse(text);
@@ -110,7 +135,7 @@ export function parseConfig(text: string): Result<ParsedConfig> {
     return fail(`Configuration is not valid JSON: ${describeError(error)}`);
   }
   if (!isRecord(json)) return fail('Configuration must be a JSON object with an "agents" list');
-  const extra = unexpectedKey(json, ['version', 'agents', 'theme'], 'configuration', 'configuration');
+  const extra = unexpectedKey(json, ['version', 'agents', 'theme', 'brand'], 'configuration', 'configuration');
   if (extra) return fail(extra);
   if ('version' in json && json.version !== FORMAT_VERSION) {
     return fail(`Unsupported configuration version ${JSON.stringify(json.version)}; this inspector reads version ${FORMAT_VERSION}`);
@@ -126,18 +151,19 @@ export function parseConfig(text: string): Result<ParsedConfig> {
   }
   const warnings: string[] = [];
   const theme = json.theme === undefined ? undefined : parseTheme(json.theme, warnings);
-  return ok({ version: FORMAT_VERSION, agents, ...(theme !== undefined && { theme }), warnings });
+  const brand = json.brand === undefined ? undefined : parseBrand(json.brand, page, warnings);
+  return ok({ version: FORMAT_VERSION, agents, ...(theme !== undefined && { theme }), ...(brand !== undefined && { brand }), warnings });
 }
 
 /** Fetches `url` through the callback and parses it. This is the only request made. */
-export async function loadConfig(url: string, fetchText: FetchText): Promise<Result<ParsedConfig>> {
+export async function loadConfig(url: string, fetchText: FetchText, page?: PageLocation): Promise<Result<ParsedConfig>> {
   let text: string;
   try {
     text = await fetchText(url);
   } catch (error) {
     return fail(`Configuration ${url}: ${describeError(error)}`);
   }
-  const parsed = parseConfig(text);
+  const parsed = parseConfig(text, page);
   return parsed.ok ? parsed : fail(`Configuration ${url}: ${parsed.error}`);
 }
 

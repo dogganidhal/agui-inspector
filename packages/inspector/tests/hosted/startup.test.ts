@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { loadCapabilities } from '../../src/core/config/index.ts';
 import { guardedFetchText } from '../../src/core/runtime/index.ts';
+import { serializeSession } from '../../src/core/session-files/index.ts';
 import { contentSecurityPolicy, parseHostingConfig, policyFor } from '../../src/app/security.ts';
 import { startPage, type StartResult } from '../../src/app/startup.ts';
 
@@ -421,6 +422,65 @@ test('rejected overrides are warnings: the valid ones and the agents are kept, n
   assert.equal(site.policies.length, 1);
   assert.equal(site.policies[0], contentSecurityPolicy(policyFor({ mode: 'hosted', allowedOrigins: [AGENT] }, PAGE)));
   assert.doesNotMatch(site.policies[0] ?? '', /unsafe-inline|unsafe-eval|evil/);
+});
+
+// ---------------------------------------------------------------------------------------------
+// Brand (spec 003): delivered by config.json, judged against the page, never a request or a wider policy
+// ---------------------------------------------------------------------------------------------
+
+const brandFile = (brand: unknown) => JSON.stringify({ version: 0, agents: [{ id: 'support', url: `${AGENT}/run` }], brand });
+
+test('the brand in config.json is handed to the page with no extra request, in every deployment mode', async () => {
+  const brand = { name: 'Acme Console', logo: '/static/acme.svg', logoDark: `${PAGE}/static/acme-dark.svg` };
+  const resolved = { name: 'Acme Console', logo: `${PAGE}/static/acme.svg`, logoDark: `${PAGE}/static/acme-dark.svg` };
+  const hosted = page({ [`${PAGE}/hosting-config.json`]: hostedFile(), [`${PAGE}/config.json`]: brandFile(brand) });
+  const embedded = page({ [`${PAGE}/config.json`]: brandFile(brand) });
+  const bare = page({ [`${PAGE}/hosting-config.json`]: hostedFile(), [`${PAGE}/config.json`]: agentsFile({ id: 'support', url: `${AGENT}/run` }) });
+  for (const [name, site] of [['hosted', hosted], ['embedded', embedded]] as const) {
+    const result = started(await startPage(site.env));
+    assert.deepEqual(result.brand, resolved, name);
+    assert.deepEqual(result.warnings, [], name);
+    assert.equal(result.error, undefined, name);
+    assert.deepEqual(site.seen.map((request) => request.url), [`${PAGE}/hosting-config.json`, `${PAGE}/config.json`], `${name}: no request for the logo`);
+  }
+  const plain = started(await startPage(bare.env));
+  assert.equal(plain.brand, undefined);
+  assert.deepEqual(plain.warnings, []);
+  assert.deepEqual(hosted.policies, bare.policies, 'the content security policy is the same with and without a brand');
+});
+
+test('a logo on another origin is one warning: the brand loses it, nothing is requested and the policy is unchanged', async () => {
+  const site = page({ [`${PAGE}/hosting-config.json`]: hostedFile(), [`${PAGE}/config.json`]: brandFile({ name: 'Acme', logo: `${OTHER}/logo.png` }) });
+  const result = started(await startPage(site.env));
+  assert.deepEqual(result.brand, { name: 'Acme' });
+  assert.equal(result.warnings.length, 1);
+  assert.match(result.warnings[0] ?? '', /^brand\.logo /);
+  assert.ok(!result.warnings.join('').includes('other.example'));
+  assert.equal(result.error, undefined);
+  assert.equal(result.agents.length, 1);
+  assert.deepEqual(site.seen.map((request) => request.url), [`${PAGE}/hosting-config.json`, `${PAGE}/config.json`]);
+  assert.equal(site.policies[0], contentSecurityPolicy(policyFor({ mode: 'hosted', allowedOrigins: [AGENT] }, PAGE)));
+});
+
+test('a relative logo is read against the page, also when the configuration comes from another allowed origin', async () => {
+  const site = page({
+    [`${PAGE}/hosting-config.json`]: hostedFile({ config: `${AGENT}/inspector/config.json` }),
+    [`${AGENT}/inspector/config.json`]: brandFile({ logo: 'logo.svg', logoDark: `${AGENT}/inspector/logo.svg` }),
+  });
+  const result = started(await startPage(site.env));
+  assert.deepEqual(result.brand, { logo: `${PAGE}/logo.svg` });
+  assert.equal(result.warnings.length, 1, 'the logo beside the configuration file is on the other origin');
+  assert.match(result.warnings[0] ?? '', /^brand\.logoDark /);
+});
+
+test('the brand is never stored or exported', async () => {
+  const storage = { items: {} as Record<string, string> };
+  const site = page({ [`${PAGE}/config.json`]: brandFile({ name: 'Acme Console', logo: 'data:image/png;base64,AAAA' }) }, storage);
+  const result = started(await startPage(site.env));
+  assert.equal(result.brand?.name, 'Acme Console');
+  assert.deepEqual(storage.items, {});
+  const exported = serializeSession(result.store.snapshot());
+  assert.ok(!exported.includes('Acme') && !exported.includes('base64'), exported);
 });
 
 test('a theme of the wrong shape is one warning and the start is otherwise unchanged', async () => {
