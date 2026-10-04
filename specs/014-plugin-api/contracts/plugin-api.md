@@ -86,7 +86,8 @@ type Headers_ = Readonly<Record<string, string>>;
 - Providers run in registration order. A later provider replaces a header of the same name, compared without case.
 - A header the user typed in the token field replaces a provider's header of the same name.
 - A name must be an HTTP header token that the transport does not own (not `Accept`, `Content-Type`, `Content-Length`,
-  `Cookie`, `Set-Cookie`, `Host`). A value must be a string of tab, space and printable ASCII or Latin-1 characters.
+  `Cookie`, `Set-Cookie`, `Host`). The transport sets `Accept` from the encoding of the request, server-sent events or
+  the AG-UI protobuf media type, so a provider can never change the encoding of a run. A value must be a string of tab, space and printable ASCII or Latin-1 characters.
 - Throwing, rejecting, returning something that is not a plain object, or returning an invalid header stops that one request
   with a warning that names the header and never its value. For a run the message appears under the composer. For a
   preparation it is the usual "Preparation failed" message, and the run is not sent.

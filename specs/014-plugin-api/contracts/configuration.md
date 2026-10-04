@@ -63,23 +63,25 @@ export const GET = inspectorRoute({ agents: [...], enabled: true, plugins: ['/st
 The deployer puts the module on the page's own origin and lists it in the `config.json` beside the page. For a hosted
 deployment, `allowedOrigins` and `allowVisitorTargets` do not change where a plugin may load from.
 
-## The command (feature 005, when it has merged)
+## The command (feature 005, merged; approved for 0.2.0 on 2026-10-04)
 
 ```text
 agui-inspector --target <url> --plugin ./sign.js [--plugin ./other.js]
 ```
 
-- `--plugin <file>`, repeatable. Without a value it is a usage error, as for the other options.
+- `--plugin <file>`, repeatable, in any position. It belongs to the command, not to a target, so it can come before or
+  after any `--target` or `--header`. Without a value it is a usage error, as for the other options.
 - At start, each file must exist and be a file that can be read. If not, the command stops before it listens, with exit
-  code 2 and a message that names `--plugin`.
+  code 2 and a message that names `--plugin` and does not echo the value.
 - The command serves the file at `/plugins/<n>.js` (`n` from 1, in the order given) for GET and HEAD, with a JavaScript
   content type and the same content security policy as its other files. It reads the file when the request arrives, so an
   edit shows after a reload. No other path serves a local file.
+- A request for a plugin file passes the same checks as the relay: the `Host` header is the listener's own address, and an
+  `Origin` or a `Sec-Fetch-Site` from another origin or site is refused with a 403. The listener is still `127.0.0.1` only.
 - The `config.json` it serves gains `"plugins": ["/plugins/1.js", ...]` and nothing else new.
 - A header from a provider travels like any header from the page: the relay forwards it, and where the command line
   also set a header of that name, the page's value wins (feature 005).
-- If feature 005 has not merged when this feature is implemented, this part moves to the next minor and nothing else
-  changes.
+- Spec 005 carries a dated note that lists the new option.
 
 ## What nothing declares
 

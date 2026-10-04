@@ -27,10 +27,24 @@ the renderer throws.
 
 Failures are warnings in the existing warnings area, kind "Plugin". A failure on the send path also stops that one request.
 `mount_inspector` and the JavaScript helpers write `plugins` into `config.json` as given. The command of feature 005 gains
-`--plugin` once it has merged. An example plugin, a reference-agent scenario, end-to-end tests and a docs page complete it.
+`--plugin`. An example plugin, a reference-agent scenario, end-to-end tests and a docs page complete it.
 
 The content security policy, the request policy, the recorder, the session format and `hosting-config.json` are not
 touched. No dependency is added.
+
+## Changes since the draft
+
+Features 005, 008 and 013 merged before implementation. The plan took these from the merged code:
+
+- Feature 013 made the encoding of a run part of the request (`responseKind` is `sse`, `protobuf` or `response`), and the
+  transport turns it into `Accept`. `Accept` and `Content-Type` stay reserved names, so a provider cannot change the
+  encoding. The check uses the existing reserved-name rule, with its own wording for a provider (the existing message talks
+  about a token). A test covers a protobuf run.
+- Feature 008 kept `a2uiActivity(entry, options)` as the first renderer and `a2ui-surface` as its one activity type. The
+  plugin renderer still goes second. The reader gained `catalogAliases`, so the warnings of a bad `plugins` value follow
+  the theme, brand and catalog alias warnings.
+- Feature 005 is in `main`. `--plugin` is added to its parser and its start check, and its files are served by the shared
+  core through an `@internal` option (research 10).
 
 ## Technical Context
 
@@ -48,7 +62,7 @@ the repository, and none is added: the mount rules are a plain function with a f
 checked in Playwright.
 
 **Target Platform**: The one static bundle in all modes: hosted, Python embedded, JavaScript helpers, host-served static
-files, the npm assets, and the command when feature 005 has merged.
+files, the npm assets, and the command (feature 005, merged).
 
 **Project Type**: Static browser app plus two small helpers. No backend.
 
@@ -137,13 +151,14 @@ packages/inspector/src/
 │   └── index.tsx                     # renderers after the A2UI view; plugin warnings; footer count
 ├── views/conversation/index.tsx      # renderCustom seam and the CustomBlock card
 ├── views/conversation/conversation.css   # the custom card (reuses the activity card's classes where it can)
-└── server/core.ts                    # InspectorOptions.plugins, written into config.json after brand
+└── server/core.ts                    # InspectorOptions.plugins, written into config.json after brand; an @internal localFiles option for the command
 
 packages/python/src/agui_inspector/__init__.py   # plugins argument
 examples/plugin/plugin.js             # the example plugin: all three extension points
 examples/reference-agent/scenarios.ts # one scenario that emits a custom event and a custom activity
 
-packages/inspector/src/cli/           # only after feature 005 has merged: --plugin, /plugins/<n>.js (args.ts, server.ts, run.ts)
+packages/inspector/src/cli/           # --plugin (args.ts), the start check (run.ts), the Origin and Sec-Fetch-Site check for /plugins/ (server.ts)
+specs/005-cli-proxy/                  # a dated note: the option list and the "no others" sentence now include --plugin
 
 packages/inspector/tests/
 ├── config/plugins.test.ts            # the reader: no field, valid, every rejected value, duplicates, no value in a warning
@@ -237,6 +252,4 @@ raw envelopes, frames-list text and exported session, apart from the request bod
 
 ## Open questions for the maintainer
 
-1. Does the command of feature 005 get `--plugin` in 0.2.0? It adds a sixth option to a command whose spec lists five and
-   says "and no others". The need is real, since the command exists for servers that cannot change. Cutting it removes story
-   6 and FR-021 and leaves everything else as is. The plan assumes yes, after #97 merges.
+None. The maintainer approved the spec and the plan on 2026-10-04 and decided that the command gets `--plugin` in 0.2.0.

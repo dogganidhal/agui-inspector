@@ -11,10 +11,14 @@ agui-inspector [options]
 Options:
   --target <url>            An AG-UI endpoint to inspect. Repeat it for more than one.
   --header "<Name>: <value>"  A header to send to the target before it. Repeat it for more.
+  --plugin <file>           A plugin module to serve and load (feature 014). Repeat it for more.
   --port <number>           Port to listen on. Default 4747. Use 0 for any free port.
   --help                    Show this text.
   --version                 Show the version.
 ```
+
+*Note, 2026-10-04: `--plugin` was added by [feature 014](../../014-plugin-api/spec.md) FR-021. It is not part of a target:
+it can come anywhere on the line. Without it, the command behaves as this contract says.*
 
 `agui-inspector` is the `bin` of the `agui-inspector` npm package. `npx agui-inspector --target <url>` runs it. It needs
 Node.js 22.12 or newer.

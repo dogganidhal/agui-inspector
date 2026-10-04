@@ -219,18 +219,31 @@ page and `config.json`", and it would need a second mechanism for each framework
 
 ## 10. The command of feature 005
 
-**Decision**: `--plugin <file>`, repeatable. The command checks each file at start, serves it at `/plugins/<n>.js` and
-lists `/plugins/<n>.js` in the `plugins` of the `config.json` it serves.
+**Decision**: `--plugin <file>`, repeatable and global (not tied to a target). The command checks each file at start, serves
+it at `/plugins/<n>.js` and lists `/plugins/<n>.js` in the `plugins` of the `config.json` it serves. The maintainer approved it
+for 0.2.0 on 2026-10-04.
 
-**Facts** (read in the 005 worktree, PR #97, not merged): `listen()` builds one `createInspectorHandler({ agents, ... })`
-and answers the proxy and every other path through it. A plugin route fits in `serve()` next to the proxy branch.
+**Facts** (read in the merged code, PR #97): `parseCli` is pure and groups `--header` under the closest `--target`. A
+`--plugin` token is simply not part of a group. `listen()` builds one `createInspectorHandler({ agents, ... })`. `serve()`
+refuses a request whose `Host` is not its own, then sends `/proxy/<n>/...` through the `Origin` and `Sec-Fetch-Site` checks
+and the relay, and sends every other path to the shared core.
 
-**Open**: whether the file is served by the command or by the shared core (an internal option that maps a name to a local
-file, like `assetsDir`). The choice is made against the merged 005 code, when this story is implemented. The behavior in
-the spec does not change.
+**Where the file is served**: by the shared core, through one new `@internal` option, `localFiles`, that maps a name below the
+mount to an absolute file path (as `assetsDir` is an `@internal` option already). The core then keeps the one implementation
+of method handling, `HEAD`, content type, length and the content security policy header that spec 005 FR-007 asks the
+command to reuse. The file is read when a request arrives. The core's path safety applies first, and the lookup is an exact
+match on the name, so no spelling of a path reaches another file. A route in `serve()` of the command would carry a second
+copy of the policy header and the method rules.
 
-**Rejected**: A directory option such as `--plugins-dir`. It would serve every file in a directory, and the command's
-promise is to serve only what it was told.
+**The checks**: the command's `serve()` sends a path below `/plugins/` through the same `Origin` and `Sec-Fetch-Site` checks
+as the relay before it reaches the core. The core does not know about them. A plugin file can hold a signing key, and a
+page on another site could otherwise load it as a script. The `Host` check already runs first for every path.
+
+**Rejected**:
+
+- A directory option such as `--plugins-dir`. It would serve every file in a directory, and the command's promise is to serve
+  only what it was told.
+- A route in the command that reads the file itself. See above.
 
 ## 11. Proving that no header is recorded
 

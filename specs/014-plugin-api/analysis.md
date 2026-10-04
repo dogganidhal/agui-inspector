@@ -47,3 +47,16 @@ No violation. Two readings are flagged for review:
 ## Open questions for the maintainer
 
 Whether the command of feature 005 gets `--plugin` in 0.2.0 (plan, open question 1).
+
+## Follow-up, 2026-10-04, after approval
+
+The maintainer approved the spec and the plan. Features 005, 008 and 013 merged first, and the artifacts were read against
+`main` again. No critical finding. Changes made by hand:
+
+| ID | Severity | Where | Finding | Fix |
+| --- | --- | --- | --- | --- |
+| G1 | High | spec FR-012, tasks T018, T019 | Feature 013 made `Accept` depend on the encoding of the request (`sse`, `protobuf`, `response`). The spec did not say which side wins when a provider returns `Accept`. | The transport owns `Accept` and `Content-Type`. A provider that returns either is invalid and that one request is not sent, so the encoding always wins. Spec scenario 8, FR-012, an edge case, a clarification, the contract, and the transport tests (a protobuf run included) say it. A provider-specific wording replaces the token wording of `headerNameProblem`. |
+| G2 | High | spec FR-021, plan, research 10 | The command now exists, and its relay checks `Origin` and `Sec-Fetch-Site` only below `/proxy/`. A plugin file can hold a signing key. | A request for a plugin file passes the relay's checks, and the listener stays on `127.0.0.1`. FR-021, story 6 (scenario 5), research 10 and T047 to T049 say so. |
+| G3 | Medium | spec 005 | FR-002 said "and no others". | A dated note in `specs/005-cli-proxy` (FR-002, the flags assumption, the command contract) names `--plugin` and points here. |
+| G4 | Medium | tasks T003, T007, T009 | The reader gained `catalogAliases` (feature 008), so the order of warnings and the destructuring in `startPage` changed. | Tasks follow the merged code: theme, brand, catalog aliases, plugins. |
+| G5 | Low | plan | The open question is answered and story 6 is no longer blocked. | Plan, tasks (phase 9) and the checklist updated. |

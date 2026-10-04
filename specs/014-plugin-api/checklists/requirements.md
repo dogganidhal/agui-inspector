@@ -37,5 +37,5 @@
 - `/speckit-clarify` settled one hook or two, what a failing hook or provider does, which header wins, how a renderer
   draws, and which file declares plugins. Where the loader runs and how the warnings area shows a plugin failure are
   plan details.
-- Story 6 and FR-021 depend on feature 005, which has not merged. They are the first thing to cut if the maintainer
-  wants the command to keep the options 005 lists.
+- Story 6 and FR-021 add `--plugin` to the command of feature 005. The maintainer approved it on 2026-10-04, and feature
+  005 has merged. Spec 005 carries a dated note that lists the new option.

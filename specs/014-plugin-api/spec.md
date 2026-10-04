@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-04
 
-**Status**: Draft for review
+**Status**: Accepted by the maintainer on 2026-10-04. Implementation follows.
 
 **Input**: Issue [#81](https://github.com/dogganidhal/agui-inspector/issues/81), "Add a plugin API for run hooks,
 header providers and custom renderers", item 9 of 9 of the 0.2.0 roadmap. Presets declare values, setup requests and
@@ -43,6 +43,22 @@ constitution and the code, and took the recommended option.
   nothing in it: the address must be on the page's own origin and the content security policy is unchanged. Whoever
   writes `config.json` can only choose among files the page's own origin serves. The deployer already controls those
   (FR-002, FR-020).
+
+### Session 2026-10-04, after approval
+
+The maintainer accepted the spec and the plan, and answered the open question. Features 005 (the command), 008 (A2UI
+v0.8) and 013 (protobuf streams) have merged since the draft.
+
+- Q: Does the command of feature 005 get `--plugin` in 0.2.0? → A: Yes. A per-request signature is the case for a
+  server that cannot change. `--plugin` is a sixth option of the command. Spec 005 carries a dated note with the new
+  option list, pointing here (FR-021).
+- Q: Feature 013 lets a profile or a preset ask for protobuf, and the transport turns the encoding into the `Accept`
+  header. Can a provider change `Accept`? → A: No. The transport owns `Accept` and `Content-Type`. A provider that
+  returns either is invalid, whatever the encoding, and that one request is not sent. The encoding wins because the
+  recorder, the client and the frame reader decide how to read the answer from it (FR-012).
+- Q: Which requests of the command pass its `Host`, `Origin` and `Sec-Fetch-Site` checks? → A: A request for a plugin
+  file passes the same checks as the relay, and the listener stays on `127.0.0.1` only. A plugin file can hold a signing
+  key, so a page on another site must not be able to load it (FR-021).
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -114,6 +130,10 @@ recorded exchanges, the frames, the exported session and the page for the value.
    usable.
 7. **Given** a provider, **When** the page reads `config.json` or a capabilities URL, **Then** the provider is not
    called. It is called only for preparation, run and raw requests.
+8. **Given** a provider that returns `Accept`, or `Content-Type`, **When** the developer sends a message, **Then** that
+   one request is not sent and the warning names the header. **Given** a profile that asks for protobuf and a provider
+   that returns another header, **When** a run is sent, **Then** the target receives the protobuf media type in `Accept`
+   and the provider's header beside it.
 
 ---
 
@@ -220,8 +240,8 @@ cannot change. The server needs a signed header on every request, and `--header`
 passes `--plugin ./sign.js`. The command serves that file from its own address and lists it in the `config.json` that
 it serves.
 
-**Why this priority**: The need is real, but the command is not merged yet and this story adds an option to it. It
-comes last and can wait for the next minor without changing the rest.
+**Why this priority**: The need is real, and the maintainer wants it in 0.2.0. The story adds an option to the command, so
+it comes last. The other stories do not depend on it.
 
 **Independent Test**: Start the command with a target and a plugin file. Open the printed address and check that the
 plugin ran and that the target received the plugin's header.
@@ -236,6 +256,11 @@ plugin ran and that the target received the plugin's header.
    with a message that names `--plugin`, and exit code 2.
 4. **Given** the command, **When** a client requests any path other than the listed plugin files and the page's own
    files, **Then** nothing of the local file system is served.
+5. **Given** a request for a plugin file with a foreign `Host`, a foreign `Origin` or a `Sec-Fetch-Site` of `cross-site`,
+   **When** it arrives, **Then** it is refused with a 403 and no file is read. The listener is still the IPv4 loopback
+   address only.
+6. **Given** `--plugin ./a.js --target <url> --plugin ./b.js`, **When** the page loads, **Then** both plugins are active,
+   in the order given, whatever their position among the targets.
 
 ---
 
@@ -256,7 +281,8 @@ plugin ran and that the target received the plugin's header.
 - Two plugins that register a renderer for the same name or type: the first one wins and the second gets a warning.
 - Two providers that return the same header name: the later one wins, in the order the plugins are written.
 - A provider that returns a header name that the transport owns (`Content-Type`, `Accept`, `Content-Length`, `Host`,
-  `Cookie`, `Set-Cookie`) is invalid. So is a value with a line break or another control character.
+  `Cookie`, `Set-Cookie`) is invalid. `Accept` is the one that carries the encoding of a run, so a provider cannot ask
+  for a different encoding than the profile or the preset chose. So is a value with a line break or another control character.
 - A provider that returns a credential for every address sends it to every target the visitor picks. A hosted
   deployment that opted in to visitor targets (feature 002) must have its provider look at the address. The
   documentation says so. The inspector cannot know which origin a credential belongs to.
@@ -325,7 +351,9 @@ plugin ran and that the target received the plugin's header.
   returns an object of header names and values, or nothing. Providers are called in order and the later one wins when
   two return the same name. A provider is called again for every request, and the inspector caches nothing.
 - **FR-012**: A provider's header MUST be valid: a name that is an HTTP header token and that the transport does not
-  own, and a value that is a string valid in an HTTP header. A header the user typed in the token field with the same
+  own, and a value that is a string valid in an HTTP header. The transport owns `Accept`, which it sets from the encoding of
+  the request (server-sent events or the AG-UI protobuf media type), and `Content-Type`. A provider cannot change either,
+  so the encoding always wins. A header the user typed in the token field with the same
   name, compared without case, replaces the provider's. A provider that throws, rejects, returns something that is not
   an object, or returns an invalid header MUST stop that one request, with a warning. For a preparation request the run
   is not sent and the message says so, as it does for any failed preparation. A message about an invalid header MUST
@@ -363,13 +391,15 @@ plugin ran and that the target received the plugin's header.
   the JavaScript helpers, embedded through a host that serves the static files and its own `config.json`, hosted, and
   the npm static assets. Only `config.json`, or the file that `hosting-config.json` names in its place, declares
   plugins. Plugins MUST NOT read from, write to or widen `hosting-config.json` or the request policy.
-- **FR-021**: The command of feature 005, when it has merged, MUST accept `--plugin <file>`, repeatable. A file that
-  cannot be read as a file MUST stop the command before it listens, with exit code 2 and a message that names `--plugin`.
-  The command MUST serve each file, and only those, at a fixed path on its own address with a JavaScript content type
-  and the same content security policy as its other files, for GET and HEAD, reading the file when it is requested. It
-  MUST list the addresses in the `plugins` field of the `config.json` it serves, and MUST NOT give a plugin any
-  header, credential or other option. If feature 005 is not merged when this one is implemented, this requirement moves
-  to the next minor and the rest is unchanged.
+- **FR-021**: The command of feature 005 MUST accept `--plugin <file>`, repeatable, in any position (it belongs to the
+  command, not to a target). A value that is not a file that can be read MUST stop the command before it listens, with exit
+  code 2 and a message that names `--plugin` and does not echo the value. The command MUST serve each file, and only
+  those, at `/plugins/<n>.js` on its own address (`n` from 1, in the order given), with a JavaScript content type and the
+  same content security policy as its other files, for GET and HEAD, reading the file when it is requested. A request for
+  a plugin file MUST pass the same `Host`, `Origin` and `Sec-Fetch-Site` checks as the relay, and the listener MUST stay on
+  `127.0.0.1` only. The command MUST list the addresses in the `plugins` field of the `config.json` it serves, and MUST
+  NOT give a plugin any header, credential or other option. The page's header wins over a `--header` of the same name, as
+  feature 005 says. Spec 005 carries a dated note that lists the new option.
 - **FR-022**: An example plugin MUST use each extension point against the scripted reference agent: a run hook, a header
   provider, a renderer for a custom event and a renderer for an activity type. The reference agent MUST gain a scenario
   that emits both. An end-to-end test MUST load the example through `config.json` and show what each one does, and the
@@ -380,7 +410,7 @@ plugin ran and that the target received the plugin's header.
   the trust note that a plugin is the deployer's code with the page's rights and is not sandboxed. The configuration page
   MUST describe the field and carry the compatibility note: 0.2.0 adds the optional `plugins` field, and before 0.2.0 an
   unknown field was an error. The embedding page MUST describe the helper arguments, and the documentation of the command
-  MUST describe `--plugin` when FR-021 ships. The hosted page MUST point to the same rules.
+  MUST describe `--plugin`. The hosted page MUST point to the same rules.
 - **FR-024**: Tests MUST cover each rejected value in FR-002 and FR-003, the load and failure paths in FR-005, FR-006
   and FR-017, the hook, provider and renderer rules above, the helpers and every serving mode, and a no-plugin page that
   is unchanged. Tests MUST show that a provider's header never reaches a recording or an export, that no request goes to
