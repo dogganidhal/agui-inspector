@@ -84,6 +84,11 @@ mark test keep passing. The logo has no frame: the accent-colored square belongs
 **Accessibility**: The `<h1>` carries the name. Images use `alt=""`. The wrapper is `aria-hidden`, as the default mark
 is. Nothing takes focus.
 
+**Logo with no name (follow-up, 2026-10-04)**: The logo shows alone. The `<h1>` keeps the text "agui-inspector" and gets
+the class `agui-app-sr`, the same visually hidden recipe the views use (`agui-conn-sr`, `agui-settings-sr`). The class
+depends on the brand fields only, not on whether the image loaded, so a theme change or a failed image never moves
+the heading in or out of view. A wordmark logo names the product, so the visible text next to it was redundant.
+
 **Size**: The logo is as tall as the default mark's square and at most 160 px wide. The name is cut with an ellipsis at 240 px.
 Both limits shrink with the viewport (30% and 40% of it) so that the brand and the theme switch share one row on a
 phone. Neither can break the bar's row.
@@ -117,4 +122,5 @@ cannot know a brand. The favicon is a `data:` link in `index.html` and part of t
 
 The four-copy mark test (`tests/foundation/brand.test.ts`) and the theme end-to-end test read the default mark and
 the heading text. With no brand the markup is unchanged, so they pass as they are. The end-to-end heading locator
-`getByRole('heading', { name: 'agui-inspector', level: 1 })` stays valid for a page with no brand.
+`getByRole('heading', { name: 'agui-inspector', level: 1 })` stays valid for a page with no brand and for a logo with no
+name, where the heading is hidden but still in the accessibility tree.

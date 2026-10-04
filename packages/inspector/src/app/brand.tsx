@@ -1,6 +1,7 @@
 // The top bar's mark and name (spec 003). Without a brand it is the agui-inspector mark and name. A brand from
 // `config.json` replaces each part it sets: its name is the heading, its logo an unframed image. The images are
-// decoration (`alt=""`): the heading names the page. A dark logo is a second image that the stylesheet shows in the
+// decoration (`alt=""`): the heading names the page. A logo with no name shows alone: a logo usually names the
+// product, so the default heading stays for assistive technology and is hidden from the eye. A dark logo is a second image that the stylesheet shows in the
 // dark theme, so the theme switch and the system preference reach it the way they reach the tokens.
 import type { ReactElement } from 'react';
 import type { BrandConfig } from '../contracts';
@@ -33,7 +34,7 @@ export function Brand({ brand, failed, onFailed }: { brand: BrandConfig | undefi
           )}
         </span>
       )}
-      <h1>{brand?.name ?? 'agui-inspector'}</h1>
+      <h1 className={brand?.logo !== undefined && brand.name === undefined ? 'agui-app-sr' : undefined}>{brand?.name ?? 'agui-inspector'}</h1>
     </span>
   );
 }

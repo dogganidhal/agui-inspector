@@ -41,6 +41,14 @@ async function expectDefault(page: Page, name = 'agui-inspector'): Promise<void>
   await expect(visibleLogos(page)).toHaveCount(0);
 }
 
+/** The heading is in the page for assistive technology and has the text; a visually hidden one is a 1 px box. */
+async function expectHeading(page: Page, text: string, shown: boolean): Promise<void> {
+  await expect(heading(page)).toHaveCount(1);
+  await expect(heading(page)).toHaveText(text);
+  const box = await heading(page).boundingBox();
+  expect(box !== null && (box.width > 1 || box.height > 1), `the heading "${text}" is ${shown ? 'visible' : 'visually hidden'}`).toBe(shown);
+}
+
 const hostedConfig = (extra: () => object) => (o: { agent: { origin: string } }) => ({ version: 0, agents: [{ id: 'support', name: 'Support assistant', url: `${o.agent.origin}/agent` }], ...extra() });
 const embeddedConfig = (extra: () => object) => () => ({ version: 0, agents: [{ id: 'support', url: '/agent' }], ...extra() });
 
@@ -63,7 +71,7 @@ for (const mode of ['hosted', 'embedded'] as const) {
 
     const opened = requested.length;
     await page.goto(site.page.origin);
-    await expect(heading(page)).toHaveText('Acme Console');
+    await expectHeading(page, 'Acme Console', true);
     const [light, dark] = [`${site.page.origin}/static/acme.svg`, `${site.page.origin}/static/acme-dark.svg`];
     await expectLogo(page, light);
     await expect(warnings(page)).toHaveCount(0);
@@ -102,7 +110,7 @@ for (const mode of ['hosted', 'embedded'] as const) {
   });
 }
 
-test('a logo may be a relative path, an absolute path, a full URL on the page origin or a data URI, and a logo alone leaves the name', async ({ page, openSite }) => {
+test('a logo may be a relative path, an absolute path, a full URL on the page origin or a data URI, and a logo alone shows with no visible name', async ({ page, openSite }) => {
   let brand: object = {};
   const site = await openSite({ config: hostedConfig(() => ({ brand })), files: FILES });
   const DATA = `data:image/svg+xml;base64,${Buffer.from(LIGHT_LOGO).toString('base64')}`;
@@ -114,13 +122,35 @@ test('a logo may be a relative path, an absolute path, a full URL on the page or
   ] as const) {
     brand = { logo: written };
     await page.goto(site.page.origin);
-    await expect(heading(page)).toHaveText('agui-inspector');
+    await expectHeading(page, 'agui-inspector', false);
     await expectLogo(page, shown);
     await expect(warnings(page)).toHaveCount(0);
   }
   brand = { name: 'Acme Console' };
   await page.goto(site.page.origin);
   await expectDefault(page, 'Acme Console');
+  await expectHeading(page, 'Acme Console', true);
+});
+
+test('a logo with no name shows alone in both themes, and the heading stays for assistive technology', async ({ page, openSite }) => {
+  let brand: object = { logo: '/static/acme.svg', logoDark: '/static/acme-dark.svg' };
+  const site = await openSite({ config: hostedConfig(() => ({ brand })), files: FILES });
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.goto(site.page.origin);
+  await expectLogo(page, `${site.page.origin}/static/acme.svg`);
+  await expectHeading(page, 'agui-inspector', false);
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await expectLogo(page, `${site.page.origin}/static/acme-dark.svg`);
+  await expectHeading(page, 'agui-inspector', false);
+  await expect(page.getByRole('heading', { name: 'agui-inspector', level: 1 })).toHaveCount(1);
+  await expect(page.locator('.agui-app-logo-img:visible')).toHaveAttribute('alt', '');
+
+  // A logo that does not load leaves the default mark alone, and the heading stays hidden.
+  brand = { logo: '/missing.svg' };
+  await page.goto(site.page.origin);
+  await expect(warn(page)).toHaveCount(1);
+  await expect(defaultMark(page)).toHaveCount(1);
+  await expectHeading(page, 'agui-inspector', false);
 });
 
 test('npm static assets: a generic static server shows the same brand', async ({ page, dist }) => {
@@ -236,8 +266,10 @@ test('every rejected value is a visible warning, the other fields and the agent 
     await page.goto(site.page.origin);
     await expect(heading(page), label).toHaveText(name);
     await expect(warn(page), label).toHaveCount(count);
-    if (logo) await expectLogo(page, `${site.page.origin}/static/acme.svg`);
-    else await expectDefault(page, name);
+    if (logo) {
+      await expectLogo(page, `${site.page.origin}/static/acme.svg`);
+      await expectHeading(page, name, false);
+    } else await expectDefault(page, name);
     const text = (await warnings(page).textContent()) ?? '';
     for (const value of [foreignHost, 'logo.png', 'user:pw', 'alert(1)']) expect(text, `${label}: a warning never repeats a value`).not.toContain(value);
     expect(await page.getByRole('alert').count(), `${label}: a warning is not a startup failure`).toBe(0);

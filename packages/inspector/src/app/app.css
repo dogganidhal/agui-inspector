@@ -63,6 +63,16 @@ body,
   text-overflow: ellipsis;
   max-width: min(calc(var(--u) * 60), 40vw);
 }
+/* A logo with no name shows alone; the heading stays for assistive technology (spec 003, FR-004). */
+.agui-app-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
 /* An adopter's logo (spec 003): as tall as the default mark, any width up to a limit, never framed or recolored. */
 .agui-app-logo,
 .agui-app-logo > span {

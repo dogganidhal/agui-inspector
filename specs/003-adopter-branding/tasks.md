@@ -89,6 +89,18 @@ The reader and the startup hand-off. Every story needs a validated brand in the 
 - [x] T026 Run the full gate: `npm run build`, `npm run check:bundle`, `npm run test:e2e -- tests/e2e/theme tests/e2e/branding --workers=2` and then `npm run check:ci`. `check:bundle` must pass on the existing budgets, and no existing theme test may need an edit.
 - [x] T027 Close out: run `/speckit-converge` if the code and the spec disagree; run `/ponytail:ponytail-review` on the diff and fix what it finds; run the humanizer skill on the new docs text and on the pull request body; rebase on `origin/main`, push with `--force-with-lease`, update the pull request body and mark it ready.
 
+## Phase 8: Follow-up, a logo with no name shows alone (2026-10-04)
+
+A change to FR-004 after PR #88. A brand with a logo and no name shows the logo alone, with the heading "agui-inspector" visually hidden. See the clarification dated 2026-10-04 in the spec.
+
+- [x] T028 [US1] Update the spec, plan, research, data model and contract for the new rule: the dated clarification, FR-004, FR-013, SC-001, the story 1 scenario and the failed-logo edge case.
+- [x] T029 [US1] Change the unit markup test `a logo with no name shows alone` in `packages/inspector/tests/hosted/app.test.tsx` first: the heading is `<h1 class="agui-app-sr">agui-inspector</h1>` for a logo with or without a dark logo, there is one `<h1>`, and a name, with or without a logo, and no brand keep the markup they had. It fails before T030.
+- [x] T030 [US1] In `packages/inspector/src/app/brand.tsx` give the `<h1>` the class `agui-app-sr` when the brand has a `logo` and no `name`. In `packages/inspector/src/app/app.css` add `.agui-app-sr` with the same visually hidden rules as `.agui-conn-sr`. No other file changes.
+- [x] T031 [US1] Update `tests/e2e/branding/brand.spec.ts`: an `expectHeading` helper (text, and a 1 px box when hidden), a logo-only test in both themes and with a logo that does not load, and the logo-only rows of the existing tests assert the hidden heading. A name still shows the heading as visible text.
+- [x] T032 [P] [US1] Update `website/content/docs/configuration.mdx` (the sentence that said a logo with no name keeps the text) and add one sentence to `website/content/docs/embedding.mdx`.
+- [x] T033 [P] [US1] Add the patch changeset `.changeset/show-logo-without-default-name.md` for `agui-inspector` and `agui-inspector-python`.
+- [x] T034 Run `npm run check:ci`, then commit, push and open the pull request that links #73 and this spec.
+
 ## Dependencies and order
 
 - Phase 1, then Phase 2. T002 and T003 run in parallel. T004 needs T002. T005 needs T002, T003 and T004. T006 needs T005.
