@@ -11,7 +11,8 @@
 // file and its one call in index.ts when @ag-ui/client is bumped to the first release that contains
 // ag-ui-protocol/ag-ui#2939 (website/content/docs/dependencies.mdx); the compatibility test that pins the old behaviour fails
 // then. Ceilings: each chunk is copied once, and every successful answer is taken for an event stream, as the
-// recorder does (binary transports are out of scope, and no header is read).
+// recorder does (no header is read). The runtime applies this to server-sent events only: a protobuf answer is
+// binary, and its bytes are never rewritten (spec 013).
 
 const LF = 0x0a;
 const CR = 0x0d;

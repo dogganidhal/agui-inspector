@@ -16,8 +16,11 @@
 // through the protocol client (HttpAgent) whose fetch is the recorder, which in turn sends through the
 // guarded transport. The client's view of the stream (messages, state, outcomes, sequence errors) is
 // kept here; the recording of the stream is the recorder's and is never touched by what the client does.
-// The client reads a copy of the response whose line endings are all LF (line-endings.ts), because it cannot
-// frame CRLF or CR; the recorder's branch was cloned before that and keeps the bytes as sent.
+// For server-sent events the client reads a copy of the response whose line endings are all LF (line-endings.ts),
+// because it cannot frame CRLF or CR; the recorder's branch was cloned before that and keeps the bytes as sent. A
+// protobuf answer is binary, so the client reads the original response with nothing rewritten.
+// The run asks for the encoding that was chosen (`encodingFor`: the profile, then the preset, then server-sent
+// events). It is the request's `responseKind`, which the guarded transport turns into the Accept header.
 //
 // The token lives in this object and is read in exactly one place: the guarded transport call. It is
 // not given to the recorder, the store, a log or an error message. Nothing here touches browser storage.
@@ -28,6 +31,7 @@ import type {
   AgentConfig,
   AutomaticReplies,
   ClientProfileSettings,
+  Encoding,
   InterruptAnswer,
   JsonValue,
   ObservedOutcome,
@@ -44,7 +48,7 @@ import type {
 import { describeError, fail, isJsonValue, ok, type Result } from '../config/validation.ts';
 import { createFrameSink } from '../frames/index.ts';
 import { preparePreset } from '../presets/index.ts';
-import { composeRunInput } from '../profiles/index.ts';
+import { composeRunInput, encodingFor } from '../profiles/index.ts';
 import { createRecorder, type CaptureRecorder, type RecorderClock } from '../recorder/index.ts';
 import { kindOf, type CatalogueRuleId } from '../rules/catalogue.ts';
 import { sequenceRuleOf } from '../rules/sequence.ts';
@@ -177,6 +181,17 @@ const clip = (text: string) => (text.length > MAX_MESSAGE ? `${text.slice(0, MAX
 
 const PAUSED_NOTICE = `Automatic replies paused after ${AUTOMATIC_REPLY_LIMIT} in a row. Answer by hand to continue the run.`;
 
+/**
+ * What the client's binary parser (`parseProtoStream` in @ag-ui/client 1.0.1) says when it cannot read a protobuf stream:
+ * a frame it cannot decode, a stream that ends inside a frame, and a frame above its limit. The messages carry no
+ * received value. A pin test in tests/foundation/compatibility.test.ts fails first if the client words them differently.
+ */
+export const BINARY_CLIENT_ERRORS = [
+  /^Failed to decode protocol buffer message/,
+  /^The binary stream ended mid-frame/,
+  /^Protobuf message size exceeded maximum limit/,
+] as const;
+
 /** The client's own words for a rejected stream, kept short and free of the received values. */
 function clientFailure(error: unknown): { rule: CatalogueRuleId; message: string } | undefined {
   if (error instanceof AGUIError) return { rule: sequenceRuleOf(error.message), message: clip(error.message) };
@@ -185,6 +200,9 @@ function clientFailure(error: unknown): { rule: CatalogueRuleId; message: string
     const issues = (error as Error & { issues?: ReadonlyArray<{ path: PropertyKey[]; message: string }> }).issues ?? [];
     const first = issues[0];
     return { rule: 'schema.invalid-event', message: `The protocol client rejected a frame: ${first ? `${first.path.map(String).join('.') || '(root)'}: ${first.message}` : 'invalid event'}${issues.length > 1 ? ` and ${issues.length - 1} more` : ''}` };
+  }
+  if (error instanceof Error && BINARY_CLIENT_ERRORS.some((pattern) => pattern.test(error.message))) {
+    return { rule: 'binary.client-failed', message: `The protocol client could not read the binary stream: ${clip(error.message)}` };
   }
   return undefined;
 }
@@ -402,7 +420,7 @@ export function createRuntime(options: RuntimeOptions): Runtime {
       replies = NO_REPLIES;
       streak = automatic ? streak + 1 : 0;
       paused = false;
-      await execute(current, target.value, input.value, turnMessages, controller, auth, turn.automatic);
+      await execute(current, target.value, input.value, turnMessages, controller, auth, turn.automatic, encodingFor(settings.profile, prepared.value.encoding));
       sent = !controller.signal.aborted;
     } finally {
       running = false;
@@ -421,6 +439,7 @@ export function createRuntime(options: RuntimeOptions): Runtime {
     controller: AbortController,
     credentials: VolatileAuth | undefined,
     automatic: AutomaticReplies | undefined,
+    encoding: Encoding,
   ): Promise<void> {
     const recordId: RunRecordId = `run-${(runs += 1)}`;
     let outcome: ObservedOutcome = { kind: 'unknown' };
@@ -467,16 +486,17 @@ export function createRuntime(options: RuntimeOptions): Runtime {
       fetch: (url, init) =>
         capture
           .record(
-            { kind: 'conversation', method: init.method ?? 'POST', path: recordedPath(new URL(url)), body, responseKind: 'sse', runId: recordId },
+            { kind: 'conversation', method: init.method ?? 'POST', path: recordedPath(new URL(url)), body, responseKind: encoding, runId: recordId },
             () => {
               startedAt = epoch();
               linked = true;
               writeRun({ startedAt });
-              return transport.send({ url, method: init.method ?? 'POST', body, responseKind: 'sse' }, credentials, init.signal ?? controller.signal);
+              return transport.send({ url, method: init.method ?? 'POST', body, responseKind: encoding }, credentials, init.signal ?? controller.signal);
             },
           )
-          // The recorder cloned the response first; only the client's branch has its line endings made LF.
-          .then(canonicalizeLineEndings),
+          // The recorder cloned the response first. Only a server-sent-events branch has its line endings made LF: the
+          // bytes of a protobuf frame are not text, and the client reads them as they came.
+          .then((response) => (encoding === 'sse' ? canonicalizeLineEndings(response) : response)),
     });
     client.body = body;
 
@@ -647,13 +667,16 @@ export function createRuntime(options: RuntimeOptions): Runtime {
       const target = sendable();
       if (!target.ok) return problem(target.error);
       error = undefined;
+      // The typed body goes out unchanged. Only the encoding comes from the settings, because a server that speaks
+      // protobuf has to be asked for it.
+      const encoding = encodingFor(options.settings().profile, agent?.preset?.encoding);
       const controller = new AbortController();
       hold(controller);
       emit();
       try {
         const response = await recorderFor(controller).record(
-          { kind: 'raw', method: 'POST', path: recordedPath(target.value), body: text, responseKind: 'sse' },
-          () => transport.send({ url: target.value.href, method: 'POST', body: text, responseKind: 'sse' }, auth, controller.signal),
+          { kind: 'raw', method: 'POST', path: recordedPath(target.value), body: text, responseKind: encoding },
+          () => transport.send({ url: target.value.href, method: 'POST', body: text, responseKind: encoding }, auth, controller.signal),
         );
         void response.body?.cancel().catch(() => undefined);
       } catch (failure) {

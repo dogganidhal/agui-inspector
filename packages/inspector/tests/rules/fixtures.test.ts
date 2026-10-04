@@ -13,7 +13,8 @@ import { createRecorder, type RecorderSink } from '../../src/core/recorder/index
 import { RULES, type CatalogueRuleId } from '../../src/core/rules/catalogue.ts';
 import { createSessionStore } from '../../src/core/store/index.ts';
 import { NO_FILTER, exchangeRows, indexSession, listExchanges } from '../../src/views/inspection/model.ts';
-import { AGENT, eventStream, rig } from '../runtime/support.ts';
+import { defaultProfile } from '../../src/core/profiles/index.ts';
+import { AGENT, eventStream, protobufBytes, rig } from '../runtime/support.ts';
 
 const decoder = new TextDecoder();
 const encoder = new TextEncoder();
@@ -49,8 +50,10 @@ async function viaReader(fixture: Extract<RuleFixture, { scenario: unknown }>): 
 
 /** The runtime, with the real protocol client, over a network that answers with the scenario's bytes. */
 async function viaClient(fixture: Extract<RuleFixture, { scenario: unknown }>): Promise<InspectionSession> {
+  // A protobuf scenario is asked for and answered as protobuf, so the runtime reads it with the client's binary parser.
+  const protobuf = fixture.scenario.request.responseKind === 'protobuf';
   const text = decoder.decode(scenarioBytes(fixture.scenario));
-  const { runtime, settle } = rig([(call) => (call.path === '/run' ? eventStream(text) : undefined)]);
+  const { runtime, settle } = rig([(call) => (call.path === '/run' ? (protobuf ? protobufBytes(scenarioBytes(fixture.scenario)) : eventStream(text)) : undefined)], protobuf ? { settings: { profile: { ...defaultProfile(), encoding: 'protobuf' } } } : {});
   runtime.selectAgent(support);
   await runtime.send('play the fixture');
   return settle();
@@ -193,6 +196,11 @@ test('frames are exactly what was received, whatever the agent declares: the sam
     const plain = await framesOf(fixture.scenario, undefined);
     const judged = await framesOf(fixture.scenario, EVERYTHING_FALSE);
     assert.deepEqual(judged.frames, plain.frames, `${rule}: a declaration changes no frame`);
+    if (fixture.scenario.request.responseKind === 'protobuf') {
+      const kept = Buffer.concat(plain.frames.map((frame) => Buffer.from(frame.bytes ?? '', 'base64')));
+      assert.deepEqual(new Uint8Array(kept), scenarioBytes(fixture.scenario), `${rule}: the frames hold the received bytes`);
+      continue;
+    }
     assert.equal(plain.frames.map((frame) => frame.envelope).join(''), decoder.decode(scenarioBytes(fixture.scenario)), `${rule}: the envelopes are the received bytes`);
     for (const frame of plain.frames) if (frame.data !== undefined && frame.jsonVerdict === 'valid') assert.deepEqual(frame.parsed, JSON.parse(frame.data), `${rule}: ${frame.id}`);
   }

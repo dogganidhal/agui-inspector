@@ -44,7 +44,7 @@ Configuration and capabilities files, preparation requests, runs and raw submiss
 | URLs with credentials | `https://user:password@host/` is refused, and the error does not repeat what you typed. Use the token field. |
 | Redirects | Never followed. A redirect shows the error "The target answered with a redirect", and no second request is sent. Enter the final URL as the target. |
 | Browser blocks | CORS (cross-origin resource sharing), private-network access, mixed content and an unreachable server all reach the page as one failed fetch. The error lists those causes and names the origin. The page has no proxy or bypass of its own: fix the target's headers or the allowlist, or use the [CLI](./cli.mdx), which relays through a proxy on your machine. |
-| Request headers | The transport sets `Content-Type` and `Accept` and sends no referrer. The only other header is the token. |
+| Request headers | The transport sets `Content-Type` and `Accept` and sends no referrer. `Accept` is `text/event-stream`, or the protobuf media type when you [choose protobuf](./protobuf.mdx#choose-the-encoding). The only other header is the token. |
 
 A refused or failed request is still an exchange in the session, with its error.
 
@@ -66,7 +66,7 @@ A message, a continuation and a surface action each become one ordinary run, in 
 1. The inspector resolves the preset: variables, the built-in `threadId`, `runId` and `uuid`, templates and forwarded properties. An unknown variable stops the run with a message.
 2. It builds the run input from the profile, the preset and the conversation, then checks it against the protocol's input schema. An input that fails is shown and not sent.
 3. It sends the [preparation requests](./presets.mdx#preparation-requests) in the order the preset lists them, each as its own recorded exchange.
-4. It sends the run request through the protocol client, whose `fetch` is the recorder.
+4. It sends the run request through the protocol client, whose `fetch` is the recorder. The request asks for the encoding that the profile or the preset names: server-sent events, or [protobuf](./protobuf.mdx).
 
 A failure stops every later step. If a preparation fails, by status or by connection, the run request is not sent. The preparation exchanges stay, the error names the failed request, and your message stays in the box to send again. Preparations run before every run of a thread, continuations included.
 
@@ -161,13 +161,13 @@ An action from a rendered [A2UI surface](./a2ui.mdx) becomes a new run. Its `for
 
 ## Raw submissions
 
-The raw request editor (Inspection, then Raw request) sends valid JSON to the current target exactly as typed, as its own exchange. Anything else is not sent, and the error says why. No preset, profile, preparation, conversation update or schema check applies beyond the editor's own check. The exchange keeps the server's answer, including an error. A streaming answer is recorded until it ends or you press Stop.
+The raw request editor (Inspection, then Raw request) sends valid JSON to the current target exactly as typed, as its own exchange. Anything else is not sent, and the error says why. No preset, profile, preparation, conversation update or schema check applies beyond the editor's own check. The exchange keeps the server's answer, including an error. A streaming answer is recorded until it ends or you press Stop. The editor asks for the encoding you chose in the client profile or the agent's preset, because a server that speaks [protobuf](./protobuf.mdx) has to be asked for it. It uses no other setting from either.
 
 ## Limits
 
 - One run at a time. Starting another while one streams is refused with a message.
 - Preparation responses are recorded but never used in a later request.
-- HTTP and SSE (Server-Sent Events) only. A dropped stream is not reconnected or resumed.
+- HTTP, with SSE (Server-Sent Events) or [protobuf](./protobuf.mdx). A dropped stream is not reconnected or resumed.
 - The inspector answers only what the client profile tells it to, at most 10 times in a row. It never runs a tool, never answers a surface action and never retries a request automatically.
 
 For the runtime calls behind each control, and how a page connects them to the views, see [Architecture and UI internals](./internals.mdx#runtime-api).

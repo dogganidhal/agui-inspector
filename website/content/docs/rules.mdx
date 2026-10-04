@@ -3,13 +3,13 @@ title: Rule catalogue
 description: Every rule a finding can name, with its id, what it means and what to check.
 ---
 
-Every finding names the rule that produced it, such as `sequence.text-message-not-open`. This page lists all 39 rules. Use it to look up an id you saw in the frame detail, in an export, or in a bug report. [Read frames and findings](./inspection.mdx) explains how to read the Inspection pane.
+Every finding names the rule that produced it, such as `sequence.text-message-not-open`. This page lists all 42 rules. Use it to look up an id you saw in the frame detail, in an export, or in a bug report. [Read frames and findings](./inspection.mdx) explains how to read the Inspection pane.
 
 A rule never changes the evidence. The frame text, its order and its offsets stay as received. A rule only adds a finding beside the frame, the run or the exchange.
 
 ## Rule ids
 
-An id has two parts joined by a dot: a family, then a problem. The family is the kind of the finding. The problem is lowercase words joined by hyphens. The families are `json`, `schema`, `sequence`, `terminal`, `transport`, `capture`, `compat` and `capability`.
+An id has two parts joined by a dot: a family, then a problem. The family is the kind of the finding. The problem is lowercase words joined by hyphens. The families are `json`, `schema`, `sequence`, `terminal`, `transport`, `capture`, `compat`, `capability` and `binary`.
 
 Ids are a public contract. Other tools can rely on them:
 
@@ -101,6 +101,18 @@ The finding sits on the frame that breaks the declaration, one for each such fra
 | `capability.state-snapshot-unsupported` | A `STATE_SNAPSHOT` came from an agent that declares `state.snapshots` as `false`. | Either declare snapshots as supported or send `STATE_DELTA` events. |
 
 Other capability flags have no rule yet. A flag only has a rule where a single event contradicts it.
+
+## binary
+
+These rules cover a run that was asked for as [protobuf](./protobuf.mdx). A server-sent-events stream never gets them. Every byte stays in the recording whatever the rule says.
+
+| Rule | Means | What to check |
+| --- | --- | --- |
+| `binary.undecodable-frame` | The bytes of a frame are not a protobuf event, or the message is empty. The frame is kept, with its bytes, and the frames after it are still read. | Compare the bytes in the frame detail with what the server meant to send. A server that writes events with `encode` from `@ag-ui/proto` and a four-byte length produces frames that decode. |
+| `binary.unreadable-stream` | The stream states a frame larger than 10 MB, which no client reads. From that length prefix to the end of the stream, nothing is split into frames, and the rest is kept as one `partial` frame. | An answer in server-sent events to a protobuf request looks like this. Choose server-sent events, or make the server honor the `Accept` header. A frame this large is also refused by the protocol client. |
+| `binary.client-failed` | The protocol client could not read the stream: a frame it cannot decode, a stream that ends inside a frame, or a frame above its limit. It is reported on the run, in the client's words. | Look at the frames of the exchange for the one with a `binary` finding, or for a stream that ends in the middle of a frame. Check the `Content-Type` of the answer too: it must be `application/vnd.ag-ui.event+proto` and nothing more. |
+
+An event from a later protocol that this build does not know gets `schema.unknown-event-type`, and an event that decodes but fails the event schema gets `schema.invalid-event`. See [Protobuf streams](./protobuf.mdx#findings).
 
 ## Next steps
 

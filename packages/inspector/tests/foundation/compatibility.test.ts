@@ -13,7 +13,13 @@ import {
 } from '@ag-ui/a2ui-middleware';
 import { EventType, PROTOCOL_VERSION, type ResumeEntry, type RunAgentInput, type Tool } from '@ag-ui/core';
 import { EventSchemas, ResumeEntrySchema, RunAgentInputSchema } from '@ag-ui/core/schemas';
-import { HttpAgent, buildResumeArray, type AgentSubscriber, type RunAgentResult } from '@ag-ui/client';
+import { HttpAgent, buildResumeArray, runHttpRequest, transformHttpEventStream, type AgentSubscriber, type RunAgentResult } from '@ag-ui/client';
+import { AGUI_MEDIA_TYPE } from '@ag-ui/proto';
+import { baselineFrames, concat, futureEventFrame, garbageFrame, zeroLengthFrame } from '../../../../examples/reference-agent/protobuf-fixtures.ts';
+import { frameProtobuf } from '../../../../examples/reference-agent/protobuf.ts';
+import type { RawFrame } from '../../src/contracts.ts';
+import { createProtobufFrameReader, MAX_FRAME_BYTES } from '../../src/core/frames/index.ts';
+import { BINARY_CLIENT_ERRORS } from '../../src/core/runtime/index.ts';
 
 const BASELINE_EVENT_TYPES = [
   'RUN_STARTED', 'RUN_FINISHED', 'RUN_ERROR',
@@ -147,6 +153,91 @@ test('the pinned client cuts events on two LF only: CRLF and CR streams fail in 
     assert.equal(seen.finished === true, name === 'LF', `${name}: the client ${name === 'LF' ? 'reads' : 'does not read'} the stream`);
     assert.equal(seen.failed === undefined, name === 'LF', `${name}: ${name === 'LF' ? 'no' : 'a'} parse failure`);
   }
+});
+
+// ---- protobuf: what the inspector copies from the pinned client and proto (spec 013) --------------------------
+
+/** What the client's own parsers make of a response: its events, and the error that ended the stream, if one did. */
+function clientRead(response: Response): Promise<{ events: Array<{ type: string }>; error?: Error }> {
+  // The client logs a failed run on the console, which only adds noise to a test that expects the failure.
+  const log = console.error;
+  console.error = () => undefined;
+  return new Promise<{ events: Array<{ type: string }>; error?: Error }>((resolve) => {
+    const events: Array<{ type: string }> = [];
+    transformHttpEventStream(runHttpRequest(() => Promise.resolve(response))).subscribe({
+      next: (event) => void events.push(event as { type: string }),
+      error: (error: Error) => resolve({ events, error }),
+      complete: () => resolve({ events }),
+    });
+  }).finally(() => {
+    console.error = log;
+  });
+}
+
+const PROTOBUF_TYPE = 'application/vnd.ag-ui.event+proto';
+const protobufResponse = (bytes: Uint8Array, contentType = PROTOBUF_TYPE) =>
+  new Response(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer, { headers: { 'content-type': contentType } });
+
+test('the pinned client picks its parser by strict equality with the protobuf media type: a content type with a parameter is read as server-sent events', async () => {
+  assert.equal(AGUI_MEDIA_TYPE, PROTOBUF_TYPE);
+  const bytes = concat(baselineFrames);
+  const exact = await clientRead(protobufResponse(bytes));
+  assert.equal(exact.error, undefined);
+  assert.equal(exact.events.length, baselineFrames.length, 'read as protobuf');
+
+  // The docs warn about this: the bytes are fine and the run fails, because the client reads them as text.
+  const withParameter = await clientRead(protobufResponse(bytes, `${PROTOBUF_TYPE}; charset=utf-8`));
+  assert.deepEqual(withParameter.events, [], 'read as server-sent events, which has no event in these bytes');
+});
+
+test('the frame limit the inspector copies is the client\'s: a frame of exactly 10 MB, prefix included, is read and one byte more fails the stream', async () => {
+  const limit = 10 * 1024 * 1024;
+  assert.equal(MAX_FRAME_BYTES, limit);
+  const frameWith = (size: number) => frameProtobuf({ type: 'TEXT_MESSAGE_CONTENT', messageId: 'm', delta: 'x'.repeat(size) });
+  let size = limit - 200;
+  let frame = frameWith(size);
+  for (let guard = 0; frame.length !== limit && guard < 8; guard += 1) {
+    size += limit - frame.length;
+    frame = frameWith(size);
+  }
+  assert.equal(frame.length, limit);
+  const accepted = await clientRead(protobufResponse(frame));
+  assert.equal(accepted.error, undefined);
+  assert.deepEqual(accepted.events.map((event) => event.type), ['TEXT_MESSAGE_CONTENT']);
+
+  const refused = await clientRead(protobufResponse(frameWith(size + 1)));
+  assert.match(refused.error?.message ?? '', /^Protobuf message size exceeded maximum limit of 10 MB/);
+});
+
+test('the three errors of the client\'s binary parser that the runtime turns into a finding are the ones it raises for damaged streams', async () => {
+  const undecodable = await clientRead(protobufResponse(concat([garbageFrame])));
+  assert.match(undecodable.error?.message ?? '', /^Failed to decode protocol buffer message: /);
+  const emptyMessage = await clientRead(protobufResponse(zeroLengthFrame));
+  assert.match(emptyMessage.error?.message ?? '', /^Failed to decode protocol buffer message: /);
+  const cut = await clientRead(protobufResponse(concat(baselineFrames).slice(0, 40)));
+  assert.match(cut.error?.message ?? '', /^The binary stream ended mid-frame: \d+ trailing bytes could not be read as a complete message\./);
+  const text = await clientRead(protobufResponse(new TextEncoder().encode('data: {"type":"RUN_STARTED"}\n\n')));
+  assert.match(text.error?.message ?? '', /^Protobuf message size exceeded maximum limit of 10 MB/, 'an answer in the wrong encoding fails the same way the inspector flags it');
+  for (const error of [undecodable.error, cut.error, text.error]) assert.ok(BINARY_CLIENT_ERRORS.some((pattern) => pattern.test(error?.message ?? '')), error?.message);
+});
+
+test('an event from a later protocol is dropped by the client with a warning, while the inspector keeps its frame', async () => {
+  const warnings: string[] = [];
+  const warn = console.warn;
+  console.warn = (message?: unknown) => void warnings.push(String(message));
+  try {
+    const stream = concat([frameProtobuf({ type: 'RUN_STARTED', threadId: 't', runId: 'r' }), futureEventFrame, frameProtobuf({ type: 'RUN_FINISHED', threadId: 't', runId: 'r', outcome: { type: 'success' } })]);
+    const { events, error } = await clientRead(protobufResponse(stream));
+    assert.equal(error, undefined);
+    assert.deepEqual(events.map((event) => event.type), ['RUN_STARTED', 'RUN_FINISHED'], 'the client drops it');
+    assert.ok(warnings.some((message) => /Dropped an event this build does not know/.test(message)), 'with a warning');
+  } finally {
+    console.warn = warn;
+  }
+  const frames: RawFrame[] = [];
+  const reader = createProtobufFrameReader({ appendFrame: (frame) => void frames.push(frame), addFinding: () => undefined }, 'exchange-1');
+  reader.push(concat([frameProtobuf({ type: 'RUN_STARTED', threadId: 't', runId: 'r' }), futureEventFrame]), 10);
+  assert.deepEqual(frames.map((frame) => frame.schemaVerdict), ['valid', 'unknown-type'], 'the inspector keeps it');
 });
 
 test('protocolVersion and parentRunId reach the request through the documented requestInit override', async () => {

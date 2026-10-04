@@ -7,10 +7,10 @@ import { test } from 'node:test';
 import { ruleFixtures } from '../../../../examples/reference-agent/rule-fixtures.ts';
 import { RULE_ID_PATTERN, RULES, checkRuleId } from '../../src/core/rules/catalogue.ts';
 
-const KINDS = ['json', 'schema', 'sequence', 'terminal', 'transport', 'capture', 'compat', 'capability'];
+const KINDS = ['json', 'schema', 'sequence', 'terminal', 'transport', 'capture', 'compat', 'capability', 'binary'];
 
-test('the catalogue has 39 rules, each with a well-formed unique id and a short description', () => {
-  assert.equal(RULES.length, 39);
+test('the catalogue has 42 rules, each with a well-formed unique id and a short description', () => {
+  assert.equal(RULES.length, 42);
   const ids = RULES.map((rule) => rule.id);
   assert.equal(new Set(ids).size, ids.length, 'ids are unique');
   for (const rule of RULES) {
@@ -54,7 +54,7 @@ test('the rules page lists every rule of the catalogue once, and no other id', (
   const missing = catalogueIds.filter((id) => !listed.includes(id));
   const twice = listed.filter((id, at) => listed.indexOf(id) !== at);
   assert.deepEqual({ unknown, missing, twice }, { unknown: [], missing: [], twice: [] }, 'an id on the page and not in the catalogue, the other way round, or listed twice');
-  for (const family of ['json and schema', 'sequence', 'terminal, transport and capture', 'compat', 'capability']) assert.ok(page.includes(`## ${family}`), family);
+  for (const family of ['json and schema', 'sequence', 'terminal, transport and capture', 'compat', 'capability', 'binary']) assert.ok(page.includes(`## ${family}`), family);
   assert.match(page, /never changes its meaning/);
 });
 

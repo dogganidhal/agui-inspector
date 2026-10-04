@@ -3,6 +3,7 @@
 // of its props. Frame rows are plain elements built from the F06 primitives; only the expanded
 // exchange builds rows, and a frame's raw text is built only when its row is opened.
 import { memo, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
+import { hexDump } from '../../core/frames/bytes.ts';
 import type { DerivedEntry, EvidenceTarget, Exchange, ExchangeId, Finding as FindingRecord, FrameId, InspectionSession, RawFrame } from '../../contracts.ts';
 import { Button, CodeBlock, FamilyDot, Finding, FilterChip, Icon, Label, SearchField, Tag, type TagVariant } from '../theme/index.ts';
 import './inspection.css';
@@ -20,6 +21,7 @@ import {
   indexSession,
   isFiltering,
   listExchanges,
+  receivedSize,
   summarizeFrame,
   typeLabel,
   type ExchangeEntry,
@@ -27,6 +29,9 @@ import {
   type FrameFilter,
   type SessionIndex,
 } from './model.ts';
+
+/** The most of a binary frame that its detail shows as hexadecimal text. Copy always gives all of it. */
+export const HEX_LIMIT = 4096;
 
 export interface FramesPanelProps {
   readonly session: InspectionSession;
@@ -196,6 +201,7 @@ const ExchangeCard = memo(function ExchangeCard({ entry, shown, filtering, filte
           <span className="agui-fr-method">{exchange.method}</span>
           <span className="agui-fr-path">{exchange.path}</span>
           <Tag variant={exchange.kind === 'conversation' ? 'neutral' : 'line'}>{kindTag}</Tag>
+          {exchange.encoding === 'protobuf' && <Tag variant="line">protobuf</Tag>}
           {isLive(exchange) && (
             <Tag variant="accent" pulse>
               live
@@ -385,13 +391,23 @@ const FrameItem = memo(
     const classes = ['agui-fr-row', issue && 'agui-fr-row--bad', fresh && 'agui-fresh'].filter(Boolean).join(' ');
     return (
       <div className="agui-fr-item">
-        <button type="button" className={classes} data-frame-row={frame.id} aria-expanded={open} aria-current={current || undefined} onClick={() => onToggle(frame.id)}>
+        <button
+          type="button"
+          className={classes}
+          data-frame-row={frame.id}
+          {...(frame.bytes !== undefined && { 'data-frame-binary': '' })}
+          aria-expanded={open}
+          aria-current={current || undefined}
+          onClick={() => onToggle(frame.id)}
+        >
           <span className="agui-fr-off">{formatOffset(frame.offsetMs)}</span>
           <span className="agui-fr-ty">
             <FamilyDot family={def?.family ?? 'neutral'} hollow={def?.hollow ?? true} />
             {typeLabel(frame)}
           </span>
-          <span className="agui-fr-sum">{summarizeFrame(frame)}</span>
+          <span className="agui-fr-sum">
+            {frame.bytes !== undefined && <Tag variant="line">binary</Tag>} {summarizeFrame(frame)}
+          </span>
           <span className="agui-fr-ver">
             {issue ? (
               <Tag variant={findingVariant(issue)}>{issue.kind}</Tag>
@@ -412,6 +428,7 @@ const FrameItem = memo(
 );
 
 function FrameDetail({ frame, findings, onCopy }: { frame: RawFrame; findings: readonly FindingRecord[]; onCopy(text: string, what: string): void }): ReactElement {
+  if (frame.bytes !== undefined) return <BinaryDetail frame={frame} bytes={frame.bytes} findings={findings} onCopy={onCopy} />;
   const received = frame.data ?? frame.envelope;
   const formatted = frame.jsonVerdict === 'valid' ? JSON.stringify(frame.parsed, null, 2) : undefined;
   return (
@@ -423,7 +440,7 @@ function FrameDetail({ frame, findings, onCopy }: { frame: RawFrame; findings: r
       ))}
       <div className="agui-fr-bar">
         <Label>
-          {frame.classification === 'data' ? 'Raw' : 'Envelope'} · {formatBytes(byteLength(received))} as received
+          {frame.classification === 'data' ? 'Raw' : 'Envelope'} · {formatBytes(receivedSize(frame))} as received
         </Label>
         {formatted !== undefined && <Tag variant="line">formatted</Tag>}
         <span className="agui-fr-spacer" />
@@ -433,6 +450,48 @@ function FrameDetail({ frame, findings, onCopy }: { frame: RawFrame; findings: r
         </Button>
       </div>
       <CodeBlock text={formatted ?? received} format={formatted === undefined ? 'raw' : 'json'} aria-label="Frame content" />
+    </div>
+  );
+}
+
+/** A binary frame: the bytes as received (hexadecimal, the start of them) and the event they decode to. */
+function BinaryDetail({ frame, bytes, findings, onCopy }: { frame: RawFrame; bytes: string; findings: readonly FindingRecord[]; onCopy(text: string, what: string): void }): ReactElement {
+  const dump = hexDump(bytes, HEX_LIMIT);
+  const decoded = frame.parsed !== undefined ? JSON.stringify(frame.parsed, null, 2) : undefined;
+  const hidden = dump.total - dump.shown;
+  return (
+    <div className="agui-fr-detail" data-frame-detail={frame.id}>
+      {findings.map((finding) => (
+        <Finding key={finding.id} variant={findingVariant(finding)} kind={findingLabel(finding)} {...(finding.rule !== undefined && { rule: finding.rule })}>
+          {finding.message} Capture continued.
+        </Finding>
+      ))}
+      <div className="agui-fr-bar">
+        <Label>
+          {frame.classification === 'data' ? 'Bytes' : 'Unfinished bytes'} · {formatBytes(dump.total)} as received
+          {hidden > 0 ? ` · the first ${dump.shown} shown, ${hidden} not shown` : ''}
+        </Label>
+        <span className="agui-fr-spacer" />
+        <Button variant="ghost" small onClick={() => onCopy(hexDump(bytes, Number.POSITIVE_INFINITY).text, 'frame bytes')} aria-label="Copy all the bytes of the frame as hexadecimal text">
+          <Icon name="copy" size={14} />
+          Copy bytes
+        </Button>
+      </div>
+      <CodeBlock text={dump.text} format="raw" aria-label="Frame bytes as hexadecimal text" />
+      {decoded !== undefined && (
+        <>
+          <div className="agui-fr-bar">
+            <Label>Decoded</Label>
+            <Tag variant="line">formatted</Tag>
+            <span className="agui-fr-spacer" />
+            <Button variant="ghost" small onClick={() => onCopy(decoded, 'decoded event')} aria-label="Copy the decoded event as JSON">
+              <Icon name="copy" size={14} />
+              Copy event
+            </Button>
+          </div>
+          <CodeBlock text={decoded} format="json" aria-label="Decoded event" />
+        </>
+      )}
     </div>
   );
 }

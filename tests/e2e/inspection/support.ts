@@ -7,8 +7,9 @@ import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import { build } from 'esbuild';
 import { test as base, expect, type Page } from '@playwright/test';
+import { protobufScenarios } from '../../../examples/reference-agent/protobuf-fixtures.ts';
 import { protocolScenarios } from '../../../examples/reference-agent/protocol-fixtures.ts';
-import { scenarioBytes } from '../../../examples/reference-agent/recorder-fixtures.ts';
+import { scenarioBytes, type RecorderScenario } from '../../../examples/reference-agent/recorder-fixtures.ts';
 import { bundleOptions } from '../../../scripts/build.mjs';
 
 export const root = path.resolve(import.meta.dirname, '..', '..', '..');
@@ -63,6 +64,13 @@ function agent(pageOrigin: string, received: Received[], extra?: (path: string, 
       const broken = pathname === '/prepare/broken';
       response.writeHead(broken ? 500 : 200, { 'content-type': 'application/json' });
       return void response.end(broken ? '{"error":"warm-up failed"}' : '{"ok":true}');
+    }
+    // Protobuf scenarios live under /scenario/protobuf/, so their names cannot clash with the server-sent-events ones.
+    const binary = pathname.startsWith('/scenario/protobuf/') ? (protobufScenarios as Record<string, RecorderScenario>)[pathname.slice('/scenario/protobuf/'.length)] : undefined;
+    if (binary) {
+      response.writeHead(200, { 'content-type': binary.announcedContentType, 'cache-control': 'no-store' });
+      response.end(Buffer.from(scenarioBytes(binary)));
+      return;
     }
     const scenario = pathname.startsWith('/scenario/') ? (protocolScenarios as Record<string, (typeof protocolScenarios)[keyof typeof protocolScenarios]>)[pathname.slice('/scenario/'.length)] : undefined;
     if (scenario) {
@@ -193,6 +201,13 @@ export const prepare = (page: Page, method: string, path: string) =>
 export const run = (page: Page, scenario: string) =>
   page.evaluate((name) => (window as unknown as { __host: { run(path: string): Promise<string> } }).__host.run(`/scenario/${name}`), scenario);
 
+/** Records a scripted protobuf exchange (a scenario of protobuf-fixtures.ts, asked for as protobuf) and returns its exchange id. */
+export const runProtobuf = (page: Page, scenario: string) =>
+  page.evaluate(
+    (name) => (window as unknown as { __host: { run(path: string, body?: object, encoding?: string): Promise<string> } }).__host.run(`/scenario/protobuf/${name}`, undefined, 'protobuf'),
+    scenario,
+  );
+
 /** Every URL the page requested must be the page's own origin or the agent's, and nothing else. */
 export function expectAllowlisted(urls: readonly string[], site: Site): void {
   const allowed = [site.pageOrigin, site.agentOrigin];
@@ -207,14 +222,19 @@ interface SnapshotFrame {
   exchangeId: string;
   index: number;
   data?: string;
+  bytes?: string;
   envelope: string;
   parsed?: unknown;
   eventType?: string;
   classification: string;
   jsonVerdict: string;
+  schemaVerdict: string;
+  summary: string;
+  offsetMs: number;
 }
 export interface Snapshot {
-  exchanges: Array<{ id: string; kind: string; frameIds: string[]; requestBody?: string; status?: number; responseBody?: string }>;
+  exchanges: Array<{ id: string; kind: string; frameIds: string[]; requestBody?: string; status?: number; responseBody?: string; encoding?: string; transport?: string }>;
+  findings: Array<{ id: string; kind: string; rule?: string; message: string; subject: { type: string; id: string } }>;
   frames: SnapshotFrame[];
   runs: unknown[];
   [key: string]: unknown;

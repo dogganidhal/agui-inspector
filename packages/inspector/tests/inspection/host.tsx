@@ -6,7 +6,7 @@
 // a recording that is opened only ever displays.
 import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react';
 import { createRoot } from 'react-dom/client';
-import type { ExchangeKind, InspectionSession, ResponseKind, Run, SessionStore } from '../../src/contracts.ts';
+import type { Encoding, ExchangeKind, InspectionSession, ResponseKind, Run, SessionStore } from '../../src/contracts.ts';
 import { createFrameSink } from '../../src/core/frames/index.ts';
 import { createRecorder } from '../../src/core/recorder/index.ts';
 import { parseSession, restoreSession, serializeSession, SESSION_FILE_NAME } from '../../src/core/session-files/index.ts';
@@ -14,8 +14,8 @@ import { createSessionStore } from '../../src/core/store/index.ts';
 import { InspectionView } from '../../src/views/inspection/index.tsx';
 
 export interface HostApi {
-  /** Records one conversation exchange against the scripted target and reads it like a client. */
-  run(path: string, body?: object): Promise<string>;
+  /** Records one conversation exchange against the scripted target and reads it like a client. `protobuf` records it as a protobuf run. */
+  run(path: string, body?: object, encoding?: Encoding): Promise<string>;
   /** Records one preparation exchange, the way a preset's preparation request is recorded, and returns its id. */
   prepare(method: string, path: string, body?: string): Promise<string>;
   /** Plays the ten benchmark exchanges one after another. */
@@ -66,13 +66,13 @@ function createLive(initialTarget: string) {
     return ended();
   }
 
-  async function run(path: string, input: object = {}): Promise<string> {
+  async function run(path: string, input: object = {}, encoding: Encoding = 'sse'): Promise<string> {
     runs += 1;
     const threadId = `thread-${runs}`;
     const runId = `run-${runs}`;
     const full = { threadId, runId, state: {}, messages: [{ id: `u${runs}`, role: 'user', content: 'hello' }], tools: [], context: [], forwardedProps: {}, ...input };
     const record = `record-${runs}`;
-    const response = await post('conversation', path, JSON.stringify(full), 'sse', record);
+    const response = await post('conversation', path, JSON.stringify(full), encoding, record);
     await response.arrayBuffer();
     const id = await ended();
     const exchange = store.snapshot().exchanges.find((candidate) => candidate.id === id)!;

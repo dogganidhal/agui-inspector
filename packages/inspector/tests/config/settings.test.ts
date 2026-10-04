@@ -13,6 +13,7 @@ import {
   PROFILE_STORAGE_KEY,
   composeRunInput,
   defaultProfile,
+  encodingFor,
   exportProfile,
   importProfile,
   loadProfile,
@@ -532,6 +533,61 @@ test('every setting is validated: types, unique tool names, message mode and for
   const missing: Record<string, unknown> = { ...defaultProfile() };
   delete missing.tools;
   assert.match(failure(importProfile(JSON.stringify({ version: 0, profile: missing }))), /tools/);
+});
+
+// ---------------------------------------------------------------------------------------------
+// The encoding (spec 013: FR-001 to FR-003)
+// ---------------------------------------------------------------------------------------------
+
+test('the encoding is an optional profile setting: written only when set, restored by import, and a 0.1.0 file without it still loads', () => {
+  assert.equal('encoding' in defaultProfile(), false, 'the default profile leaves it to the preset');
+  const plain = exportProfile(profile());
+  assert.equal(JSON.parse(plain).profile.encoding, undefined);
+  assert.equal(value(importProfile(plain)).encoding, undefined, 'a profile without the field means the preset default, then server-sent events');
+
+  for (const encoding of ['sse', 'protobuf'] as const) {
+    const settings = profile({ encoding });
+    const envelope = JSON.parse(exportProfile(settings)) as { profile: Record<string, unknown> };
+    assert.equal(envelope.profile.encoding, encoding);
+    assert.deepEqual(value(importProfile(exportProfile(settings))), settings);
+  }
+  assert.deepEqual(Object.keys(JSON.parse(exportProfile(profile({ encoding: 'protobuf' }))).profile).sort(), ['context', 'encoding', 'forwardedProps', 'injectA2uiTool', 'protocolVersion', 'renderA2ui', 'tools']);
+});
+
+test('an encoding other than sse or protobuf names the field and the accepted values', () => {
+  const wrap = (encoding: unknown) => JSON.stringify({ version: 0, profile: { ...defaultProfile(), encoding } });
+  for (const bad of ['SSE', 'binary', '', 1, null, true, ['sse']]) {
+    assert.match(failure(importProfile(wrap(bad))), /profile\.encoding must be "sse" or "protobuf"/, JSON.stringify(bad));
+  }
+});
+
+test('the encoding is saved in the browser with the profile and restored', () => {
+  const store = new Map<string, string>();
+  const storage = { getItem: (key: string) => store.get(key) ?? null, setItem: (key: string, text: string) => void store.set(key, text) };
+  const settings = profile({ encoding: 'protobuf' });
+  value(saveProfile(storage, settings));
+  assert.deepEqual(value(loadProfile(storage)), settings);
+});
+
+test('the effective encoding is the profile\'s, then the preset\'s, then server-sent events', () => {
+  assert.equal(encodingFor(profile(), undefined), 'sse');
+  assert.equal(encodingFor(profile(), 'protobuf'), 'protobuf');
+  assert.equal(encodingFor(profile({ encoding: 'sse' }), 'protobuf'), 'sse', 'the profile wins over the preset, as the message mode does');
+  assert.equal(encodingFor(profile({ encoding: 'protobuf' }), 'sse'), 'protobuf');
+  assert.equal(encodingFor(profile({ encoding: 'protobuf' }), undefined), 'protobuf');
+});
+
+test('a preset may set the default encoding for its agent, and anything else is an error that names the field', () => {
+  assert.equal(preset({ encoding: 'protobuf' }).encoding, 'protobuf');
+  assert.equal(preset({}).encoding, undefined);
+  assert.equal(value(preparePreset(preset({ encoding: 'protobuf' }), {}, ids, fixedUuid)).encoding, 'protobuf');
+  assert.equal(value(preparePreset(preset({}), {}, ids, fixedUuid)).encoding, undefined, 'no preset value, nothing claimed');
+  for (const bad of ['SSE', 'binary', 1, null, ['sse']]) {
+    assert.match(failure(parsePreset({ encoding: bad }, 'agent "support": preset')), /agent "support": preset\.encoding must be "sse" or "protobuf"/, JSON.stringify(bad));
+  }
+  const loaded = value(parseConfig(config({ id: 'a', url: 'https://agent.example/run', preset: { encoding: 'protobuf' } })));
+  assert.equal(loaded.agents[0]?.preset?.encoding, 'protobuf');
+  assert.match(failure(parseConfig(config({ id: 'a', url: 'https://agent.example/run', preset: { encoding: 'nope' } }))), /agent "a".*encoding/);
 });
 
 test('browser persistence stores the same credential-free envelope and restores it', () => {

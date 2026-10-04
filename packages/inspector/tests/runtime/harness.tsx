@@ -4,7 +4,7 @@
 // read exactly what was recorded.
 //
 // Query string: mode=embedded|hosted, allow=<origins, comma separated> (the startup allowlist),
-// agent=<support|plain|failing>, agentBase=<origin the agents live on>, target=<endpoint typed by the user>.
+// agent=<support|plain|protobuf|failing>, agentBase=<origin the agents live on>, target=<endpoint typed by the user>.
 import { useSyncExternalStore, type ReactElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { AgentConfig, A2uiAction, ClientProfileSettings, ConversationViewProps, InspectionSession, TransportPolicy } from '../../src/contracts';
@@ -42,6 +42,8 @@ const agents: Record<string, AgentConfig> = {
     },
   },
   plain: { id: 'plain', name: 'Plain agent', url: `${base}/agent` },
+  // An agent whose preset says that its server speaks protobuf (spec 013).
+  protobuf: { id: 'protobuf', name: 'Protobuf agent', url: `${base}/agent`, preset: { encoding: 'protobuf', quickMessages: ['interrupt', 'tools'] } },
 };
 
 let settings: RuntimeSettings = { profile: defaultProfile(), variables: {} };

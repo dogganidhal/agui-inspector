@@ -125,8 +125,16 @@ export function createSessionStore(options: SessionStoreOptions = {}): SessionSt
       if (!Number.isFinite(frame.offsetMs) || frame.offsetMs < 0 || frame.offsetMs < slot.lastOffsetMs) {
         throw new Error(`appendFrame: offset ${frame.offsetMs} of ${frame.id} is not monotonic`);
       }
-      if ((frame.classification === 'data') !== (frame.data !== undefined)) {
-        throw new Error(`appendFrame: ${frame.id} is ${frame.classification} but ${frame.data === undefined ? 'has no' : 'has'} data text`);
+      // A data frame holds its received content as text (server-sent events) or as bytes (a binary frame), never both.
+      // A partial frame has no data text and may hold bytes. A control frame has neither.
+      if (frame.classification === 'data') {
+        if ((frame.data !== undefined) === (frame.bytes !== undefined)) {
+          throw new Error(`appendFrame: ${frame.id} is data but has ${frame.data === undefined ? 'no data text or bytes' : 'both data text and bytes'}`);
+        }
+      } else if (frame.data !== undefined) {
+        throw new Error(`appendFrame: ${frame.id} is ${frame.classification} but has data text`);
+      } else if (frame.bytes !== undefined && frame.classification !== 'partial') {
+        throw new Error(`appendFrame: ${frame.id} is ${frame.classification} but has bytes`);
       }
       frames.push(frame);
       frameIds.add(frame.id);

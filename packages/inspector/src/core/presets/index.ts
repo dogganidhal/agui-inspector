@@ -11,7 +11,7 @@
 // variable as written, a JSON variable serialized. A name with no value is an error that says where
 // it was used, never an empty string. Only values are templated, never keys, and nothing is evaluated.
 import type { Message } from '@ag-ui/core';
-import type { JsonObject, JsonValue, MessageMode, PreparationRequest, Preset, PresetVariable } from '../../contracts.ts';
+import type { Encoding, JsonObject, JsonValue, MessageMode, PreparationRequest, Preset, PresetVariable } from '../../contracts.ts';
 import { fail, isJsonObject, isJsonValue, isRecord, ok, unexpectedKey, urlProblem, type Result } from '../config/validation.ts';
 
 export const BUILT_IN_VARIABLES = ['threadId', 'runId', 'uuid'] as const;
@@ -63,7 +63,7 @@ function parsePreparation(value: unknown, index: number, where: string): Result<
 /** Checks a preset's shape. `where` names the owner in messages, for example `agent "support": preset`. */
 export function parsePreset(value: unknown, where: string): Result<Preset> {
   if (!isRecord(value)) return fail(`${where} must be an object`);
-  const extra = unexpectedKey(value, ['variables', 'forwardedProps', 'messages', 'prepare', 'quickMessages'], where, 'a preset');
+  const extra = unexpectedKey(value, ['variables', 'forwardedProps', 'messages', 'encoding', 'prepare', 'quickMessages'], where, 'a preset');
   if (extra) return fail(extra);
   let preset: Preset = {};
 
@@ -86,6 +86,10 @@ export function parsePreset(value: unknown, where: string): Result<Preset> {
   if (value.messages !== undefined) {
     if (value.messages !== 'full' && value.messages !== 'turn') return fail(`${where}.messages must be "full" or "turn"`);
     preset = { ...preset, messages: value.messages };
+  }
+  if (value.encoding !== undefined) {
+    if (value.encoding !== 'sse' && value.encoding !== 'protobuf') return fail(`${where}.encoding must be "sse" or "protobuf"`);
+    preset = { ...preset, encoding: value.encoding };
   }
   if (value.prepare !== undefined) {
     if (!Array.isArray(value.prepare)) return fail(`${where}.prepare must be a list of requests`);
@@ -130,6 +134,8 @@ export interface PreparedPreset {
   readonly preparations: readonly PreparationRequest[];
   readonly forwardedProps: JsonObject;
   readonly messageMode: MessageMode;
+  /** The preset's default encoding. Absent when the preset sets none. */
+  readonly encoding?: Encoding;
 }
 
 const copy = (value: JsonValue): JsonValue => (typeof value === 'object' && value !== null ? structuredClone(value) : value);
@@ -213,7 +219,7 @@ export function preparePreset(
   const forwardedProps = expand(preset?.forwardedProps ?? {}, variables, 'forwardedProps', errors) as JsonObject;
 
   if (errors.length > 0) return fail(errors.join('; '));
-  return ok({ variables, preparations, forwardedProps, messageMode: preset?.messages ?? 'full' });
+  return ok({ variables, preparations, forwardedProps, messageMode: preset?.messages ?? 'full', ...(preset?.encoding !== undefined && { encoding: preset.encoding }) });
 }
 
 // ---------------------------------------------------------------------------------------------

@@ -7,8 +7,11 @@
 // that fails any check changes nothing, and neither step makes a request.
 //
 // The format is pre-stable (website/content/docs/recordings.mdx). Nothing here redacts or rewrites received bytes:
-// frame text goes to the file exactly as the store holds it.
+// frame text goes to the file exactly as the store holds it, and a binary frame's bytes go as the base64 text the
+// reader wrote (spec 013). Import decodes those bytes again with the upstream decoder and refuses a frame whose
+// decoded event is not the one the file states.
 import { InterruptSchema, RunAgentInputSchema } from '@ag-ui/core/schemas';
+import { decode } from '@ag-ui/proto';
 import {
   FORMAT_VERSION,
   type DerivedEntry,
@@ -21,6 +24,7 @@ import {
   type SessionEnvelope,
   type SessionStore,
 } from '../../contracts.ts';
+import { fromBase64 } from '../frames/bytes.ts';
 import { checkEvent, type EventCheck } from '../frames/index.ts';
 import { checkRuleId } from '../rules/catalogue.ts';
 import { createSessionStore, type SessionStoreOptions } from '../store/index.ts';
@@ -46,6 +50,7 @@ const exchangeOut = (e: Exchange): Exchange => ({
   ...(e.elapsedMs !== undefined && { elapsedMs: e.elapsedMs }),
   transport: e.transport,
   ...(e.transportError !== undefined && { transportError: e.transportError }),
+  ...(e.encoding !== undefined && { encoding: e.encoding }),
   frameIds: e.frameIds,
 });
 
@@ -69,6 +74,7 @@ const frameOut = (f: RawFrame): RawFrame => ({
   classification: f.classification,
   envelope: f.envelope,
   ...(f.data !== undefined && { data: f.data }),
+  ...(f.bytes !== undefined && { bytes: f.bytes }),
   offsetMs: f.offsetMs,
   ...(f.eventType !== undefined && { eventType: f.eventType }),
   summary: f.summary,
@@ -128,7 +134,8 @@ const TRANSPORT_STATES = ['created', 'sending', 'streaming', 'reading', 'complet
 const CLASSIFICATIONS = ['data', 'control', 'partial'];
 const JSON_VERDICTS = ['valid', 'invalid', 'not-applicable'];
 const SCHEMA_VERDICTS = ['valid', 'invalid', 'unknown-type', 'not-applicable'];
-const FINDING_KINDS = ['json', 'schema', 'sequence', 'terminal', 'transport', 'capture', 'projection', 'compat', 'capability'];
+const FINDING_KINDS = ['json', 'schema', 'sequence', 'terminal', 'transport', 'capture', 'projection', 'compat', 'capability', 'binary'];
+const ENCODINGS = ['sse', 'protobuf'];
 const SUBJECT_TYPES = ['frame', 'run', 'exchange'];
 const DERIVATIONS = ['client-state', 'chunk-expansion', 'duration', 'projection'];
 const ATTRIBUTIONS = ['identified', 'ambiguous'];
@@ -196,7 +203,7 @@ function checkExchange(value: unknown, position: number): Exchange {
     value,
     at,
     ['id', 'kind', 'method', 'path', 'startedAt', 'transport', 'frameIds'],
-    ['runId', 'requestBody', 'requestBodyJson', 'status', 'responseBody', 'elapsedMs', 'transportError'],
+    ['runId', 'requestBody', 'requestBodyJson', 'status', 'responseBody', 'elapsedMs', 'transportError', 'encoding'],
   );
   text(e.id, at, 'id');
   oneOf(e.kind, EXCHANGE_KINDS, at, 'kind');
@@ -220,6 +227,7 @@ function checkExchange(value: unknown, position: number): Exchange {
   if (e.elapsedMs !== undefined) time(e.elapsedMs, at, 'elapsedMs');
   oneOf(e.transport, TRANSPORT_STATES, at, 'transport');
   optionalText(e, at, 'transportError', { empty: true });
+  if (e.encoding !== undefined) oneOf(e.encoding, ENCODINGS, at, 'encoding');
   stringList(e.frameIds, at, 'frameIds');
   return e as unknown as Exchange;
 }
@@ -230,7 +238,7 @@ function checkFrame(value: unknown, position: number): RawFrame {
     value,
     at,
     ['id', 'exchangeId', 'index', 'classification', 'envelope', 'offsetMs', 'summary', 'jsonVerdict', 'schemaVerdict', 'provenance'],
-    ['data', 'eventType', 'parsed'],
+    ['data', 'eventType', 'parsed', 'bytes'],
   );
   text(f.id, at, 'id');
   text(f.exchangeId, at, 'exchangeId');
@@ -243,6 +251,7 @@ function checkFrame(value: unknown, position: number): RawFrame {
   oneOf(f.jsonVerdict, JSON_VERDICTS, at, 'jsonVerdict');
   oneOf(f.schemaVerdict, SCHEMA_VERDICTS, at, 'schemaVerdict');
   if (f.provenance !== 'raw') fail(`${at}: provenance must be "raw"`);
+  if (f.bytes !== undefined) return checkBinaryFrame(f, at);
 
   if (f.classification === 'data') {
     const data = text(f.data, at, 'data', { empty: true });
@@ -274,6 +283,58 @@ function checkFrame(value: unknown, position: number): RawFrame {
     if (f.data !== undefined) fail(`${at}: data must be absent unless classification is "data"`);
     if (f.parsed !== undefined) fail(`${at}: parsed must be absent unless classification is "data"`);
     if (f.jsonVerdict !== 'not-applicable' || f.schemaVerdict !== 'not-applicable') fail(`${at}: verdicts must be "not-applicable" for ${String(f.classification)} evidence`);
+  }
+  return f as unknown as RawFrame;
+}
+
+/**
+ * A binary frame: its bytes are canonical base64, a `data` frame is one whole frame, and decoding the payload with the
+ * upstream decoder gives exactly what the file says it gives. The other fields of the frame are fixed by the reader:
+ * no envelope text, no data text, and no JSON verdict, because nothing was JSON.
+ */
+function checkBinaryFrame(f: Record_, at: string): RawFrame {
+  const bytes = fromBase64(text(f.bytes, at, 'bytes', { empty: true }));
+  if (bytes === undefined) return fail(`${at}: bytes is not canonical base64`);
+  if (f.classification === 'control') fail(`${at}: bytes must be absent on control evidence`);
+  if (f.envelope !== '') fail(`${at}: envelope must be "" for a frame that holds bytes`);
+  if (f.data !== undefined) fail(`${at}: data must be absent for a frame that holds bytes`);
+  if (f.jsonVerdict !== 'not-applicable') fail(`${at}: jsonVerdict must be "not-applicable" for a frame that holds bytes`);
+
+  if (f.classification !== 'data') {
+    if (f.parsed !== undefined) fail(`${at}: parsed must be absent unless classification is "data"`);
+    if (f.schemaVerdict !== 'not-applicable') fail(`${at}: verdicts must be "not-applicable" for ${String(f.classification)} evidence`);
+    return f as unknown as RawFrame;
+  }
+
+  if (bytes.length < 4 || new DataView(bytes.buffer, bytes.byteOffset, 4).getUint32(0, false) !== bytes.length - 4) {
+    fail(`${at}: bytes is not one whole frame: a four-byte length must be followed by exactly that many bytes`);
+  }
+  let decoded: unknown;
+  let failure: 'unknown' | 'undecodable' | undefined;
+  try {
+    decoded = JSON.parse(JSON.stringify(decode(bytes.subarray(4))));
+  } catch (error) {
+    failure = error instanceof Error && error.name === 'AGUIUnknownEventTypeError' ? 'unknown' : 'undecodable';
+  }
+
+  if (failure === undefined) {
+    if (f.parsed === undefined || !sameJson(decoded, f.parsed)) fail(`${at}: parsed does not match the event the bytes decode to`);
+    if (f.eventType !== (decoded as { type?: unknown }).type) fail(`${at}: eventType does not match the decoded event`);
+    if (f.schemaVerdict === 'valid') {
+      const { verdict, problems } = checkParsed(decoded);
+      if (verdict !== 'valid') {
+        fail(`${at}: schemaVerdict "valid" contradicts the data (${problems.join('; ')}). The inspector files a frame the schema rejects as "invalid". Re-export the recording from the inspector that captured it, or correct the verdict if the file was edited.`);
+      }
+    } else if (f.schemaVerdict !== 'invalid' && f.schemaVerdict !== 'unknown-type') {
+      fail(`${at}: schemaVerdict must be "valid" or "invalid" for bytes that decode to an event`);
+    }
+  } else {
+    if (f.parsed !== undefined) fail(`${at}: parsed is present but the bytes do not decode`);
+    if (f.eventType !== undefined) fail(`${at}: eventType is present but the bytes do not decode`);
+    const expected = failure === 'unknown' ? 'unknown-type' : 'not-applicable';
+    if (f.schemaVerdict !== expected) {
+      fail(`${at}: schemaVerdict must be "${expected}" for ${failure === 'unknown' ? 'an event from a later protocol' : 'bytes that are not a protobuf event'}`);
+    }
   }
   return f as unknown as RawFrame;
 }
@@ -379,7 +440,13 @@ function checkSession(value: unknown): InspectionSession {
   // Every frame belongs to the exchange it names, in arrival order, with offsets that never go back.
   const arrived = new Map<string, { count: number; lastOffsetMs: number }>();
   frames.forEach((frame, position) => {
-    if (!exchangeById.has(frame.exchangeId)) fail(`frames[${position}]: exchange "${frame.exchangeId}" is not in the file`);
+    const owner = exchangeById.get(frame.exchangeId);
+    if (!owner) fail(`frames[${position}]: exchange "${frame.exchangeId}" is not in the file`);
+    // Bytes belong to an exchange that was read as protobuf, and every frame of such an exchange has them.
+    const binary = frame.bytes !== undefined;
+    const protobuf = owner?.encoding === 'protobuf';
+    if (binary && !protobuf) fail(`frames[${position}]: bytes belong only to an exchange read as protobuf, and exchange "${frame.exchangeId}" is not`);
+    if (!binary && protobuf) fail(`frames[${position}]: every frame of the protobuf exchange "${frame.exchangeId}" must hold bytes`);
     const seen = arrived.get(frame.exchangeId) ?? { count: 0, lastOffsetMs: 0 };
     if (frame.index !== seen.count) fail(`frames[${position}]: index ${frame.index}, expected ${seen.count}`);
     if (frame.offsetMs < seen.lastOffsetMs) fail(`frames[${position}]: offsetMs ${frame.offsetMs} is earlier than the previous frame's ${seen.lastOffsetMs}; offsets must not go backwards`);

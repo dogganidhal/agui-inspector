@@ -228,6 +228,21 @@ test('data text is present exactly on data frames', () => {
   assert.equal(store.snapshot().frames[0]!.classification, 'control');
 });
 
+test('a binary frame has bytes instead of data text, and only data and partial frames may hold bytes', () => {
+  const { store } = setup();
+  store.appendExchange(exchange('exchange-1', { encoding: 'protobuf' }));
+  const { data: _data, ...textless } = frame('exchange-1', 0);
+  const binary = (index: number, extra: Partial<RawFrame> = {}): RawFrame => ({ ...textless, id: `exchange-1:frame-${index}`, index, envelope: '', bytes: 'AAAAAA==', jsonVerdict: 'not-applicable', ...extra });
+
+  assert.throws(() => store.appendFrame(frame('exchange-1', 0, { bytes: 'AAAAAA==' })), /data but has both data text and bytes/);
+  assert.throws(() => store.appendFrame(binary(0, { classification: 'control' })), /control but has bytes/);
+  store.appendFrame(binary(0));
+  store.appendFrame(binary(1, { classification: 'partial', schemaVerdict: 'not-applicable' }));
+  assert.deepEqual(store.snapshot().frames.map((entry) => [entry.classification, entry.bytes]), [['data', 'AAAAAA=='], ['partial', 'AAAAAA==']]);
+  assert.throws(() => store.appendFrame(binary(2, { classification: 'partial', data: '{}' })), /partial but has data text/);
+  assert.equal(store.snapshot().frames.length, 2, 'refused frames changed nothing');
+});
+
 test('exchange ids are unique and frames are appended, never declared', () => {
   const { store } = setup();
   store.appendExchange(exchange());

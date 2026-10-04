@@ -55,6 +55,12 @@ export type CapabilitiesSource = AgentCapabilities | string;
 
 export type MessageMode = 'full' | 'turn';
 
+/**
+ * What a run asks the server to send, and how the answer is read: server-sent events, or the AG-UI protobuf
+ * encoding (length-prefixed binary frames).
+ */
+export type Encoding = 'sse' | 'protobuf';
+
 export interface PresetVariable {
   /** Strings may contain `{{name}}` templates; a whole-string JSON variable is inserted as JSON. */
   readonly default: JsonValue;
@@ -74,6 +80,8 @@ export interface Preset {
   readonly forwardedProps?: JsonObject;
   /** Defaults to `full`. */
   readonly messages?: MessageMode;
+  /** The encoding this agent's server speaks. Defaults to `sse`; a client profile that sets one wins. */
+  readonly encoding?: Encoding;
   readonly prepare?: readonly PreparationRequest[];
   readonly quickMessages?: readonly string[];
 }
@@ -134,9 +142,9 @@ export interface ConfigFile {
 }
 
 /**
- * The persisted and exported client-profile settings: seven that shape the run input, and three optional
- * ones that say how the inspector answers a run's interrupts and client tool calls. The last three never
- * reach the run input.
+ * The persisted and exported client-profile settings: eight that shape the run input or how it is asked for, and
+ * three optional ones that say how the inspector answers a run's interrupts and client tool calls. The last three
+ * never reach the run input.
  */
 export interface ClientProfileSettings {
   readonly protocolVersion: string;
@@ -146,6 +154,8 @@ export interface ClientProfileSettings {
   readonly injectA2uiTool: boolean;
   /** Overrides the preset's mode when set. */
   readonly messageMode?: MessageMode;
+  /** Overrides the preset's encoding when set; absent means the preset's, then `sse`. */
+  readonly encoding?: Encoding;
   /** Overrides same-named preset properties. */
   readonly forwardedProps: JsonObject;
   /** Answers every interrupt of a run itself. Absent: by hand. */
@@ -203,8 +213,11 @@ export interface TransportPolicy {
   readonly allowVisitorTargets?: boolean;
 }
 
-/** The caller says what body to expect; nothing inspects Content-Type or any header. */
-export type ResponseKind = 'sse' | 'response';
+/**
+ * The caller says what body to expect; nothing inspects Content-Type or any header. The guarded transport turns
+ * the kind into the Accept header, and the recorder reads a stream in the encoding the kind names.
+ */
+export type ResponseKind = 'sse' | 'protobuf' | 'response';
 
 export interface TransportRequest {
   readonly url: string;
@@ -281,6 +294,8 @@ export interface Exchange {
   readonly elapsedMs?: number;
   readonly transport: TransportState;
   readonly transportError?: string;
+  /** Written only when the exchange was read as protobuf. Absent means server-sent events (or no stream). */
+  readonly encoding?: Encoding;
   /** Frames in arrival order. */
   readonly frameIds: readonly FrameId[];
 }
@@ -297,10 +312,16 @@ export interface RawFrame {
   /** Zero-based arrival index within the exchange. */
   readonly index: number;
   readonly classification: FrameClassification;
-  /** Original envelope text including delimiters. */
+  /** Original envelope text including delimiters. Empty for a binary frame, which keeps `bytes` instead. */
   readonly envelope: string;
-  /** Extracted SSE data text; absent for control-only or partial evidence. */
+  /** Extracted SSE data text; absent for control-only or partial evidence and for a binary frame. */
   readonly data?: string;
+  /**
+   * A binary frame's bytes exactly as received, length prefix included, as canonical base64. Present on every
+   * frame of an exchange read as protobuf: a whole frame (`data`), or the unfinished or unreadable rest of the
+   * stream (`partial`).
+   */
+  readonly bytes?: string;
   /** Monotonic milliseconds from request dispatch to completion of this envelope. */
   readonly offsetMs: number;
   /** Event type when identifiable; a string because unknown types are retained. */
@@ -312,7 +333,7 @@ export interface RawFrame {
   readonly provenance: 'raw';
 }
 
-export type FindingKind = 'json' | 'schema' | 'sequence' | 'terminal' | 'transport' | 'capture' | 'projection' | 'compat' | 'capability';
+export type FindingKind = 'json' | 'schema' | 'sequence' | 'terminal' | 'transport' | 'capture' | 'projection' | 'compat' | 'capability' | 'binary';
 
 /** `<family>.<problem>`, for example `sequence.text-message-not-open`. The catalogue is core/rules/catalogue.ts. */
 export type RuleId = string;

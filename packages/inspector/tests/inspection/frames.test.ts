@@ -6,8 +6,12 @@ import { test } from 'node:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { EventType } from '@ag-ui/core';
+import { futureEventFrame, garbageFrame } from '../../../../examples/reference-agent/protobuf-fixtures.ts';
+import { frameProtobuf } from '../../../../examples/reference-agent/protobuf.ts';
 import { recorderScenarios, type RecorderScenario } from '../../../../examples/reference-agent/recorder-fixtures.ts';
 import type { InspectionSession, RawFrame } from '../../src/contracts.ts';
+import { createProtobufFrameReader } from '../../src/core/frames/index.ts';
+import { createSessionStore } from '../../src/core/store/index.ts';
 import {
   FAMILIES,
   NO_FILTER,
@@ -18,6 +22,7 @@ import {
   indexSession,
   isFiltering,
   listExchanges,
+  receivedSize,
   summarizeFrame,
   typeLabel,
   type FrameFilter,
@@ -492,4 +497,91 @@ test('hidden preparation does not leave the newest listed exchange collapsed, an
   const only = render((await capture(prepared('/ok'))).snapshot(), { filter: hidePreparation });
   assert.match(only, /Only preparation requests so far, and they are hidden\. Turn on the Preparation chip/);
   assert.doesNotMatch(only, /No exchanges yet/);
+});
+
+// ---- binary frames (spec 013, FR-014) --------------------------------------------------------------
+
+/** Frames of a protobuf exchange through the real reader: whole frames, one per entry. */
+function binaryFrames(...frames: Uint8Array[]): RawFrame[] {
+  const out: RawFrame[] = [];
+  const reader = createProtobufFrameReader({ appendFrame: (frame) => void out.push(frame), addFinding: () => undefined }, 'exchange-1');
+  frames.forEach((bytes, at) => reader.push(bytes, (at + 1) * 10));
+  reader.end();
+  return out;
+}
+
+test('a binary frame has the label and summary of the same event over server-sent events, for all 31 types', () => {
+  for (const type of TYPES) {
+    const [frame] = binaryFrames(frameProtobuf(eventFixtures[type as keyof typeof eventFixtures]));
+    assert.equal(frame!.schemaVerdict, 'valid', `${type} decodes to a valid event`);
+    assert.equal(summarizeFrame(frame!), expectedSummaries[type], `${type} summary`);
+    assert.equal(typeLabel(frame!), type);
+  }
+});
+
+test('a binary frame with no event is labelled undecodable or unknown event, and keeps the reader\'s summary', () => {
+  const [garbage, future] = binaryFrames(garbageFrame, futureEventFrame);
+  assert.equal(typeLabel(garbage!), 'undecodable');
+  assert.equal(summarizeFrame(garbage!), garbage!.summary);
+  assert.match(garbage!.summary, /Not a decodable protobuf event · 7 bytes/);
+  assert.equal(typeLabel(future!), 'unknown event');
+  assert.match(summarizeFrame(future!), /Event from a later protocol/);
+  const partial = binaryFrames(frameProtobuf(eventFixtures.RUN_STARTED).slice(0, 6)).find((frame) => frame.classification === 'partial')!;
+  assert.equal(typeLabel(partial), 'partial');
+  assert.equal(summarizeFrame(partial), partial.summary);
+});
+
+test('the received size of a frame is its bytes, for text and binary frames', () => {
+  const bytes = frameProtobuf(eventFixtures.TEXT_MESSAGE_CONTENT);
+  assert.equal(receivedSize(binaryFrames(bytes)[0]!), bytes.length);
+  assert.equal(receivedSize({ ...binaryFrames(bytes)[0]!, bytes: undefined, envelope: 'data: é\n\n' } as RawFrame), 'data: é\n\n'.length + 1, 'text counts encoded characters');
+});
+
+test('the filter finds a binary frame by event type and by decoded content, and not by its bytes', () => {
+  const frames = binaryFrames(frameProtobuf(eventFixtures.TEXT_MESSAGE_CONTENT), frameProtobuf(eventFixtures.STEP_STARTED), garbageFrame);
+  const matching = (patch: Partial<FrameFilter>) => frames.filter((frame) => frameMatches(frame, 0, filter(patch)));
+  assert.equal(matching({ query: 'text_message_content' }).length, 1);
+  assert.equal(matching({ query: 'WÖRLD' }).length, 1, 'content of the decoded event, case-insensitively');
+  assert.equal(matching({ query: 'plan' }).length, 1);
+  assert.equal(matching({ query: 'ffffff' }).length, 0, 'the hexadecimal text is not searched');
+  assert.equal(matching({ families: new Set(['text']) }).length, 1);
+  assert.equal(matching({}).length, frames.length);
+});
+
+function protobufSession(...frames: Uint8Array[]): InspectionSession {
+  const store = createSessionStore({ schedule: (callback) => callback() });
+  store.appendExchange({ id: 'exchange-1', kind: 'conversation', method: 'POST', path: '/agent', status: 200, startedAt: 1_700_000_000_000, transport: 'streaming', encoding: 'protobuf', frameIds: [] });
+  const reader = createProtobufFrameReader(store, 'exchange-1');
+  frames.forEach((bytes, at) => reader.push(bytes, (at + 1) * 10));
+  reader.end();
+  store.updateExchange('exchange-1', { transport: 'completed', elapsedMs: 100 });
+  return store.snapshot();
+}
+
+test('the markup marks a protobuf exchange and its binary frames, and shows the bytes and the decoded event in the detail', () => {
+  const large = frameProtobuf({ ...eventFixtures.TEXT_MESSAGE_CONTENT, delta: 'x'.repeat(5000) });
+  const session = protobufSession(frameProtobuf(eventFixtures.RUN_STARTED), large, garbageFrame);
+  const html = render(session);
+  assert.match(html, />protobuf</, 'the exchange says it was read as protobuf');
+  assert.equal((html.match(/data-frame-binary/g) ?? []).length, 3, 'every row of the exchange is binary');
+  assert.match(html, /agui-tag[^>]*>binary</);
+
+  const open = render(session, { openFrames: new Set(session.frames.map((frame) => frame.id)) });
+  assert.match(open, /Bytes · \d+ B as received/);
+  assert.match(open, /aria-label="Frame bytes as hexadecimal text"/);
+  assert.match(open, /aria-label="Frame bytes as hexadecimal text">00 00 00 18 /, 'the hexadecimal text starts with the four length bytes (24 for RUN_STARTED)');
+  assert.match(open, /the first 4096 shown, \d+ not shown/, 'a large frame says how much is not shown');
+  assert.match(open, /aria-label="Decoded event"/);
+  assert.match(open, /Copy bytes/);
+  assert.match(open, /Copy event/);
+  assert.match(open, /Not a decodable protobuf event/);
+  assert.match(open, /<code>binary\.undecodable-frame<\/code>/, 'a binary finding names its rule, like any other');
+  assert.equal((open.match(/aria-label="Decoded event"/g) ?? []).length, 2, 'the undecodable frame has no decoded block');
+  assert.equal(copyFramesJson(indexSession(session).newestFirst[0]!).includes('"bytes"'), true, 'copy frames as JSON carries the bytes');
+});
+
+test('a server-sent-events exchange shows no protobuf mark', async () => {
+  const html = render(await richSession());
+  assert.doesNotMatch(html, />protobuf</);
+  assert.doesNotMatch(html, /data-frame-binary/);
 });

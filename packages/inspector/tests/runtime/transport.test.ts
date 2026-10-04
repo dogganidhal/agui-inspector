@@ -139,6 +139,18 @@ test('the transport sets the content type and accept header itself from the requ
   assert.equal(seen[2]?.init.body, undefined);
 });
 
+test('a protobuf request asks for the protobuf media type and for nothing else, with the same body and headers otherwise', async () => {
+  const { seen, fetch } = scripted();
+  const transport = createGuardedTransport(hosted, { fetch });
+  await transport.send(post('https://agent.example/run', { responseKind: 'protobuf' }), { headerName: 'x-api-key', token: TOKEN });
+  const [request] = seen;
+  assert.equal(request?.headers.accept, 'application/vnd.ag-ui.event+proto');
+  assert.equal(request?.headers['content-type'], 'application/json');
+  assert.equal(request?.headers['x-api-key'], TOKEN, 'the token still goes out through the transport');
+  assert.equal(request?.init.body, '{"a":1}');
+  assert.equal(request?.init.credentials, 'omit');
+});
+
 test('the body goes out as the exact text it was given', async () => {
   const { seen, fetch } = scripted();
   const transport = createGuardedTransport(hosted, { fetch });

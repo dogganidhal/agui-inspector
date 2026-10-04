@@ -207,3 +207,25 @@ test('the new controls hold no credential field and call nothing while rendering
   assert.equal(calls.length, before);
   assert.doesNotMatch(markup, /type="password"|aria-label="[^"]*(token|secret|password)/i);
 });
+
+// ---- the encoding (spec 013, FR-002) -----------------------------------------------------------------
+
+const encodingGroup = (markup: string) => /<div class="agui-seg" role="group" aria-label="Encoding">(.*?)<\/div>/s.exec(markup)?.[1] ?? '';
+const encodingStates = (group: string) => [...group.matchAll(/aria-pressed="(true|false)"[^>]*>([^<]*)</g)].map((match) => [match[2], match[1]]);
+
+test('the client profile has an Encoding control with the preset default, server-sent events and protobuf', () => {
+  const group = encodingGroup(render());
+  assert.deepEqual(encodingStates(group), [['Preset default', 'true'], ['Server-sent events', 'false'], ['Protobuf', 'false']]);
+  assert.match(render(), /Encoding/);
+});
+
+test('the Encoding control marks the profile\'s choice, and the hint names the selected agent\'s preset default', () => {
+  const chosen = (encoding: 'sse' | 'protobuf') => encodingStates(encodingGroup(render({ profile: { ...defaultProfile(), encoding } })));
+  assert.deepEqual(chosen('protobuf'), [['Preset default', 'false'], ['Server-sent events', 'false'], ['Protobuf', 'true']]);
+  assert.deepEqual(chosen('sse'), [['Preset default', 'false'], ['Server-sent events', 'true'], ['Protobuf', 'false']]);
+
+  assert.match(render(), /Preset default: server-sent events/, 'an agent whose preset sets nothing');
+  const protobufAgent: AgentConfig = { id: 'proto', url: '/proto', preset: { encoding: 'protobuf' } };
+  assert.match(render({ agents: [protobufAgent], selectedAgentId: 'proto' }), /Preset default: protobuf/);
+  assert.match(render({ selectedAgentId: undefined }), /Preset default: server-sent events/, 'a typed endpoint has no preset');
+});

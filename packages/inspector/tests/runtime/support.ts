@@ -2,6 +2,8 @@
 // that answers from routes and remembers every request it saw) and a ready-made runtime over a real
 // store, frame reader and recorder, so tests read the same exchanges, frames and request bodies a
 // person would inspect.
+import { concat } from '../../../../examples/reference-agent/protobuf-fixtures.ts';
+import { frameProtobuf, PROTOBUF_MEDIA_TYPE } from '../../../../examples/reference-agent/protobuf.ts';
 import type { InspectionSession, JsonValue, RunRecordId, TransportPolicy } from '../../src/contracts.ts';
 import { defaultProfile } from '../../src/core/profiles/index.ts';
 import { createRuntime, type Runtime, type RuntimeOptions, type RuntimeSettings } from '../../src/core/runtime/index.ts';
@@ -48,6 +50,25 @@ export function eventStream(text: string, options: { hold?: boolean; signal?: Ab
     { status: 200, headers: { 'content-type': 'text/event-stream' } },
   );
 }
+
+/** A protobuf response over these bytes, cut into pieces of `chunk` bytes, with the media type the client reads. */
+export function protobufBytes(bytes: Uint8Array, options: { chunk?: number; hold?: boolean; signal?: AbortSignal } = {}): Response {
+  const size = options.chunk ?? 13;
+  return new Response(
+    new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (let at = 0; at < bytes.length; at += size) controller.enqueue(bytes.slice(at, at + size));
+        if (!options.hold) return controller.close();
+        options.signal?.addEventListener('abort', () => controller.error(new DOMException('The operation was aborted.', 'AbortError')));
+      },
+    }),
+    { status: 200, headers: { 'content-type': PROTOBUF_MEDIA_TYPE } },
+  );
+}
+
+/** A protobuf response: the events as length-prefixed frames. */
+export const protobufStream = (events: ReadonlyArray<object>, options: { chunk?: number; hold?: boolean; signal?: AbortSignal } = {}): Response =>
+  protobufBytes(concat(events.map((event) => frameProtobuf(event))), options);
 
 /**
  * A native event-stream Response the test feeds by hand. Its source never looks at the abort signal, like a

@@ -8,6 +8,7 @@
 import type { AgentCapabilities } from '@ag-ui/core';
 import type { CatalogueRuleId } from '../../packages/inspector/src/core/rules/catalogue.ts';
 import type { FindingSubject } from '../../packages/inspector/src/contracts.ts';
+import { protobufScenarios } from './protobuf-fixtures.ts';
 import { eventFixtures, invalidCases, missingTerminalScenarios } from './protocol-fixtures.ts';
 import { fragment, type RecorderScenario } from './recorder-fixtures.ts';
 
@@ -164,6 +165,12 @@ export const ruleFixtures: Record<CatalogueRuleId, RuleFixture> = {
     lands: ['frame'],
     declared: { state: { snapshots: false } },
   },
+
+  // Protobuf (spec 013). The reader turns bytes that no decoder reads into a binary finding, and the protocol client
+  // reports the same stream on the run.
+  'binary.undecodable-frame': { scenario: protobufScenarios.undecodablePayload, via: 'reader', lands: ['frame'] },
+  'binary.unreadable-stream': { scenario: protobufScenarios.oversizedLength, via: 'reader', lands: ['frame'] },
+  'binary.client-failed': { scenario: protobufScenarios.undecodablePayload, via: 'client', lands: ['run'] },
 };
 
 /**

@@ -267,7 +267,7 @@ test.describe('profile switches', () => {
     expect(await contents('three')).toEqual(['three']);
     await page.getByRole('button', { name: 'Full transcript' }).click();
     expect((await contents('four')).length).toBe(7);
-    await page.getByRole('button', { name: 'Preset default' }).click();
+    await page.getByRole('group', { name: 'Message mode' }).getByRole('button', { name: 'Preset default' }).click();
     expect((await contents('five')).length).toBe(9);
   });
 
@@ -438,7 +438,7 @@ test('an exported profile imports back and governs the next run; it holds no cre
   await toggle(page, 'Inject render_a2ui tool').click();
   await page.getByRole('button', { name: 'Remove tool get_weather' }).click();
   await page.getByRole('button', { name: 'Remove context locale' }).click();
-  await page.getByRole('button', { name: 'Preset default' }).click();
+  await page.getByRole('group', { name: 'Message mode' }).getByRole('button', { name: 'Preset default' }).click();
   await forwardedField(page).fill('{}');
   expect((await send(page, site, 'changed')).protocolVersion).toBe('9.9');
 
@@ -598,4 +598,29 @@ test('settings are operable from the keyboard', async ({ page, site }) => {
   await expect(page.getByRole('button', { name: 'Current turn' })).toHaveAttribute('aria-pressed', 'true');
   const input = await send(page, site, 'keyboard');
   expect(input.tools.map((tool) => tool.name)).toEqual(['render_a2ui']);
+});
+
+// ---------------------------------------------------------------------------------------------
+// Spec 013: the encoding is a profile setting, saved, restored and exported with the profile
+// ---------------------------------------------------------------------------------------------
+
+test('encoding: the choice is saved with the profile, survives a reload, is exported, and Preset default removes it', async ({ page, site }) => {
+  await open(page, site);
+  const group = page.getByRole('group', { name: 'Encoding' });
+  await expect(group.getByRole('button', { name: 'Preset default' })).toHaveAttribute('aria-pressed', 'true');
+
+  await group.getByRole('button', { name: 'Protobuf' }).click();
+  await expect(group.getByRole('button', { name: 'Protobuf' })).toHaveAttribute('aria-pressed', 'true');
+  expect(JSON.parse(await page.evaluate(() => localStorage.getItem('agui-inspector.profile') ?? 'null'))).toMatchObject({ version: 0, profile: { encoding: 'protobuf' } });
+
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'Support assistant', exact: true })).toBeVisible();
+  await expect(group.getByRole('button', { name: 'Protobuf' })).toHaveAttribute('aria-pressed', 'true');
+  expect((JSON.parse(await exportProfile(page)) as { profile: { encoding?: string } }).profile.encoding).toBe('protobuf');
+
+  await group.getByRole('button', { name: 'Server-sent events' }).click();
+  expect(JSON.parse(await page.evaluate(() => localStorage.getItem('agui-inspector.profile') ?? 'null')).profile.encoding).toBe('sse');
+  await group.getByRole('button', { name: 'Preset default' }).click();
+  expect(JSON.parse(await page.evaluate(() => localStorage.getItem('agui-inspector.profile') ?? 'null')).profile.encoding).toBeUndefined();
+  expect((JSON.parse(await exportProfile(page)) as { profile: Record<string, unknown> }).profile).not.toHaveProperty('encoding');
 });

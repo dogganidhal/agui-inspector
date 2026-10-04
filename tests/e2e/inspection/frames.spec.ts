@@ -1,6 +1,8 @@
 // L04 T034 (FR-010, FR-012, FR-017; US1.2 to US1.4): frames in a real browser. Every check compares
 // what the page shows or copies with the recording behind it.
-import { expect, open, run, snapshot, test, expectAllowlisted } from './support.ts';
+import { baselineFrames, concat, protobufScenarios } from '../../../examples/reference-agent/protobuf-fixtures.ts';
+import { scenarioBytes } from '../../../examples/reference-agent/recorder-fixtures.ts';
+import { expect, open, run, runProtobuf, snapshot, test, expectAllowlisted } from './support.ts';
 
 test.beforeEach(async ({ page, site }) => {
   await open(page, site);
@@ -251,4 +253,140 @@ test('the page asks for nothing outside its own origin and the scripted agent', 
   await run(page, 'baselineRun');
   expectAllowlisted(network, site);
   expect(network.some((url) => /fonts\.|googleapis|gstatic/.test(url))).toBe(false);
+});
+
+// ---- protobuf exchanges (spec 013, US1) -------------------------------------------------------------
+
+const fromBase64 = (text: string) => new Uint8Array(Buffer.from(text, 'base64'));
+
+test('a protobuf run lists one frame for each message the server sent, in order, with the bytes it wrote (SC-001)', async ({ page }) => {
+  const id = await runProtobuf(page, 'baselineRun');
+  const session = await snapshot(page);
+  const exchange = session.exchanges.find((candidate) => candidate.id === id)!;
+  const frames = session.frames.filter((frame) => frame.exchangeId === id);
+
+  expect(exchange.encoding).toBe('protobuf');
+  expect(frames).toHaveLength(baselineFrames.length);
+  expect(frames.map((frame) => frame.index)).toEqual(baselineFrames.map((_, at) => at));
+  expect(frames.every((frame) => frame.classification === 'data' && frame.bytes !== undefined && frame.data === undefined)).toBe(true);
+  expect(Buffer.from(concat(frames.map((frame) => fromBase64(frame.bytes!))))).toEqual(Buffer.from(scenarioBytes(protobufScenarios.baselineRun)));
+  expect(frames.map((frame) => frame.offsetMs)).toEqual([...frames.map((frame) => frame.offsetMs)].sort((a, b) => a - b));
+  expect(session.findings.filter((finding) => finding.subject.id === id)).toEqual([]);
+
+  await expect(page.locator(`[data-exchange-header="${id}"]`)).toContainText('protobuf');
+  const rows = page.locator(`[data-exchange="${id}"] [data-frame-row]`);
+  await expect(rows).toHaveCount(baselineFrames.length);
+  const first = rows.first();
+  await expect(first).toContainText('RUN_STARTED');
+  await expect(first).toContainText('r-proto');
+  await expect(first).toContainText(/\+\d+\.\d{3}/);
+  await expect(first.locator('.agui-tag', { hasText: 'binary' })).toBeVisible();
+  await expect(rows.filter({ hasText: 'TEXT_MESSAGE_CONTENT' }).first()).toContainText('héllo wörld');
+});
+
+test('expanding a binary frame shows the decoded event and the bytes, and both copy buttons give what is shown', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  const id = await runProtobuf(page, 'baselineRun');
+  const frame = (await snapshot(page)).frames.find((candidate) => candidate.exchangeId === id && candidate.eventType === 'TEXT_MESSAGE_CONTENT')!;
+  await page.locator(`[data-frame-row="${frame.id}"]`).click();
+  const detail = page.locator(`[data-frame-detail="${frame.id}"]`);
+
+  const bytes = fromBase64(frame.bytes!);
+  const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, '0'));
+  await expect(detail).toContainText(`Bytes · ${bytes.length} B as received`);
+  const dump = detail.getByRole('region', { name: 'Frame bytes as hexadecimal text' });
+  await expect(dump).toContainText(hex.slice(0, 4).join(' '), { useInnerText: true });
+  expect(hex.slice(0, 3)).toEqual(['00', '00', '00']);
+  await expect(detail.getByRole('region', { name: 'Decoded event' })).toContainText('"messageId": "m1"');
+
+  await detail.getByRole('button', { name: 'Copy all the bytes of the frame as hexadecimal text' }).click();
+  const copiedBytes = await page.evaluate(() => navigator.clipboard.readText());
+  expect(copiedBytes.split(/\s+/)).toEqual(hex);
+  await detail.getByRole('button', { name: 'Copy the decoded event as JSON' }).click();
+  expect(JSON.parse(await page.evaluate(() => navigator.clipboard.readText()))).toEqual(frame.parsed);
+});
+
+test('a binary frame over 4,096 bytes shows the first 4,096 and says how many are not shown, and Copy gives all of them', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  const id = await runProtobuf(page, 'largeFrame');
+  const frame = (await snapshot(page)).frames.find((candidate) => candidate.exchangeId === id && candidate.eventType === 'TEXT_MESSAGE_CONTENT')!;
+  const total = fromBase64(frame.bytes!).length;
+  expect(total).toBeGreaterThan(4096);
+  await page.locator(`[data-frame-row="${frame.id}"]`).click();
+  const detail = page.locator(`[data-frame-detail="${frame.id}"]`);
+
+  await expect(detail).toContainText(`the first 4096 shown, ${total - 4096} not shown`);
+  const shown = (await detail.getByRole('region', { name: 'Frame bytes as hexadecimal text' }).innerText()).trim().split(/\s+/);
+  expect(shown).toHaveLength(4096);
+  await detail.getByRole('button', { name: 'Copy all the bytes of the frame as hexadecimal text' }).click();
+  expect((await page.evaluate(() => navigator.clipboard.readText())).split(/\s+/)).toHaveLength(total);
+});
+
+test('the filter finds a binary frame by event type and by decoded content', async ({ page }) => {
+  const id = await runProtobuf(page, 'baselineRun');
+  const search = page.getByRole('searchbox', { name: 'Filter frames by type or content' });
+  await search.fill('reasoning_encrypted_value');
+  await expect(page.locator(`[data-exchange="${id}"] [data-frame-row]`)).toHaveCount(1);
+  await search.fill('synthetic-researcher');
+  await expect(page.locator(`[data-exchange="${id}"] [data-frame-row]`)).toHaveCount(1);
+  await expect(page.locator(`[data-exchange="${id}"] [data-frame-row]`)).toContainText('SUBAGENT_STARTED');
+});
+
+test('a protobuf run asks for nothing outside the page and the scripted agent', async ({ page, site, network }) => {
+  await runProtobuf(page, 'baselineRun');
+  expectAllowlisted(network, site);
+});
+
+// ---- damaged protobuf streams (spec 013, US4; SC-006) ----------------------------------------------------------
+
+const DAMAGED = [
+  ['undecodablePayload', 'binary', /not a valid protobuf event/],
+  ['zeroLength', 'binary', /not a valid protobuf event/],
+  ['unknownEvent', 'schema', /not in the supported baseline/],
+  ['invalidEvent', 'schema', /Does not match the AG-UI event schema/],
+  ['truncatedFrame', undefined, undefined],
+  ['truncatedLength', undefined, undefined],
+  ['oversizedLength', 'binary', /larger than 10 MB/],
+  ['answeredInSse', 'binary', /another encoding/],
+] as const;
+
+for (const [name, kind, message] of DAMAGED) {
+  test(`protobuf ${name}: every byte the server sent is in the recording with its finding, and capture goes on`, async ({ page, site, network }) => {
+    const id = await runProtobuf(page, name);
+    const session = await snapshot(page);
+    const exchange = session.exchanges.find((candidate) => candidate.id === id)!;
+    const frames = session.frames.filter((frame) => frame.exchangeId === id);
+
+    expect(exchange.transport).toBe('completed');
+    expect(exchange.encoding).toBe('protobuf');
+    expect(Buffer.from(concat(frames.map((frame) => fromBase64(frame.bytes!)))), 'every byte, in order').toEqual(Buffer.from(scenarioBytes(protobufScenarios[name])));
+    expect(frames.map((frame) => frame.index)).toEqual(frames.map((_, at) => at));
+
+    const own = session.findings.filter((finding) => finding.subject.type === 'frame' && frames.some((frame) => frame.id === finding.subject.id));
+    if (kind === undefined) {
+      expect(own, 'a stream cut inside a frame keeps the bytes as a partial frame and says nothing more').toEqual([]);
+      expect(frames.at(-1)?.classification).toBe('partial');
+    } else {
+      expect(own.map((finding) => finding.kind)).toContain(kind);
+      expect(own.map((finding) => finding.message).join('\n')).toMatch(message);
+      const flagged = frames.find((frame) => own.some((finding) => finding.subject.id === frame.id))!;
+      const row = page.locator(`[data-frame-row="${flagged.id}"]`);
+      await expect(row.locator('.agui-tag--err')).toBeVisible();
+      await row.click();
+      await expect(page.locator(`[data-frame-detail="${flagged.id}"]`)).toContainText(message);
+      for (const finding of own.filter((candidate) => candidate.subject.id === flagged.id)) await expect(page.locator(`[data-frame-detail="${flagged.id}"]`)).toContainText(finding.rule!);
+      await expect(page.locator(`[data-frame-detail="${flagged.id}"]`)).toContainText('Capture continued.');
+    }
+    // The frames before the damage and after it are still listed.
+    await expect(page.locator(`[data-exchange="${id}"] [data-frame-row]`)).toHaveCount(frames.length);
+    expectAllowlisted(network, site);
+  });
+}
+
+test('after damaged protobuf the next run is still recorded: capture does not stop', async ({ page }) => {
+  await runProtobuf(page, 'undecodablePayload');
+  const next = await runProtobuf(page, 'baselineRun');
+  const session = await snapshot(page);
+  expect(session.frames.filter((frame) => frame.exchangeId === next)).toHaveLength(baselineFrames.length);
+  expect(session.findings.filter((finding) => finding.subject.id.startsWith(next))).toEqual([]);
 });
