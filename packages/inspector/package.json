@@ -1,6 +1,6 @@
 {
   "name": "agui-inspector",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Static assets of the AG-UI inspector, a developer tool that records, validates and drives AG-UI servers.",
   "license": "MIT",
   "repository": {
