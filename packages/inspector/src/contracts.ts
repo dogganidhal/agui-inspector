@@ -475,6 +475,8 @@ export interface SessionStore {
   addFinding(finding: Finding): void;
   upsertRun(run: Run): void;
   appendDerived(entry: DerivedEntry): void;
+  /** Removes every exchange, frame, finding, run and derived entry. Subscribers are told once, like an append. The caller makes sure nothing is still being recorded. */
+  clear(): void;
   snapshot(): InspectionSession;
   /** Called at most once per scheduled frame, however many appends occurred. */
   subscribe(listener: () => void): Unsubscribe;
@@ -546,6 +548,12 @@ export interface InspectionViewProps {
   /** The view shows the sensitive-data warning before calling this. */
   onExportSession(): void;
   onImportSession(text: string): void;
+  /** Empties the capture (specs/017). Absent: no Clear session control. */
+  onClearSession?(): void;
+  /** Why Clear session is unavailable right now. Absent: available. */
+  readonly clearBlocked?: string;
+  /** What a clear would lose, read when Clear session is pressed. Undefined clears at once; counts ask first. */
+  pendingExport?(): { readonly exchanges: number; readonly frames: number } | undefined;
 }
 
 export interface A2uiViewProps {

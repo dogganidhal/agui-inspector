@@ -10,6 +10,7 @@ import { scenarioSend } from '../../../../examples/reference-agent/recorder-fixt
 import type { DerivedEntry, Exchange, Finding, RawFrame, Run, SessionStore } from '../../src/contracts.ts';
 import { createFrameSink } from '../../src/core/frames/index.ts';
 import { createRecorder } from '../../src/core/recorder/index.ts';
+import { parseSession, serializeSession } from '../../src/core/session-files/index.ts';
 import { createSessionStore } from '../../src/core/store/index.ts';
 
 const exchange = (id = 'exchange-1', extra: Partial<Exchange> = {}): Exchange => ({
@@ -458,4 +459,80 @@ test('no module under src/core imports React, a renderer or any view code', () =
     // Header isolation: nothing in core reads a header, a request object or the network.
     assert.ok(!/\.headers\b|\bHeaders\b|\bRequest\b|\bfetch\(|XMLHttpRequest|WebSocket|sendBeacon/.test(source.replace(/\/\/.*$/gm, '')), `${file} touches headers or the network`);
   }
+});
+
+// ---- clear (specs/017) ----------------------------------------------------------------------------------------
+
+/** One record of each kind, all linked: an exchange with two frames, a run, a finding on each subject and a derived entry. */
+function populate(store: SessionStore, id = 'exchange-1') {
+  store.appendExchange(exchange(id));
+  store.appendFrame(frame(id, 0));
+  store.appendFrame(frame(id, 1));
+  store.upsertRun(run('run-1', { exchangeId: id }));
+  store.addFinding(finding(`${id}:f-frame`, { type: 'frame', id: `${id}:frame-0` }));
+  store.addFinding(finding(`${id}:f-run`, { type: 'run', id: 'run-1' }, 'sequence'));
+  store.appendDerived(derived(`${id}:d1`, { sources: [`${id}:frame-1`] }));
+}
+
+test('clear empties every record and keeps the session id', () => {
+  const { store } = setup({ id: 'session-7' });
+  populate(store);
+  const before = store.snapshot();
+  assert.equal(before.frames.length, 2);
+
+  store.clear();
+  const after = store.snapshot();
+  assert.notEqual(after, before, 'a new snapshot object');
+  assert.deepEqual(after, { id: 'session-7', exchanges: [], runs: [], frames: [], findings: [], derived: [] });
+  assert.equal(before.frames.length, 2, 'an earlier snapshot is left as it was');
+});
+
+test('clear notifies subscribers once, through the scheduler like an append', () => {
+  const { store, scheduler } = setup();
+  populate(store);
+  let calls = 0;
+  store.subscribe(() => (calls += 1));
+  store.clear();
+  assert.equal(calls, 0, 'not synchronous');
+  assert.equal(scheduler.pending(), 1);
+  scheduler.frame();
+  assert.equal(calls, 1);
+});
+
+test('after clear the store checks appends exactly as a new store does', () => {
+  const { store } = setup();
+  populate(store);
+  store.clear();
+
+  // Old ids are free again, and frame indices start over for an exchange added anew.
+  store.appendExchange(exchange());
+  assert.throws(() => store.appendFrame(frame('exchange-1', 2)), /expected 0/);
+  store.appendFrame(frame('exchange-1', 0));
+  // Nothing may point at a cleared record.
+  assert.throws(() => store.addFinding(finding('f', { type: 'run', id: 'run-1' })), /unknown run/);
+  assert.throws(() => store.addFinding(finding('f', { type: 'frame', id: 'exchange-1:frame-1' })), /unknown frame/);
+  assert.throws(() => store.appendDerived(derived('d', { sources: ['exchange-1:frame-1'] })), /unknown frame/);
+  assert.throws(() => store.upsertRun(run('run-2', { exchangeId: 'exchange-9' })), /unknown exchange/);
+});
+
+test('a session exported after a clear holds only what came after it, and imports', async () => {
+  const store = createSessionStore({ schedule: () => {} });
+  const recorder = createRecorder(createFrameSink(store));
+  const scenario = protocolScenarios.baselineRun;
+  // Resolves once the recorder has read the whole response, as the page's Clear session requires.
+  const record = () =>
+    new Promise<void>((resolve) => {
+      void recorder.record({ ...scenario.request, body: '{}' }, scenarioSend(scenario), { onEnd: resolve }).then((response) => response.text());
+    });
+  await record();
+  const cleared = store.snapshot().exchanges.map((e) => e.id);
+  store.clear();
+  await record();
+
+  const parsed = parseSession(serializeSession(store.snapshot()));
+  assert.ok(parsed.ok, parsed.ok ? '' : parsed.error);
+  const ids = parsed.session.exchanges.map((e) => e.id);
+  assert.equal(ids.length, 1);
+  assert.ok(!cleared.includes(ids[0]!), 'the recorder keeps counting, so no cleared id comes back');
+  assert.ok(parsed.session.frames.every((f) => f.exchangeId === ids[0]));
 });
