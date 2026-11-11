@@ -12,7 +12,7 @@ npx playwright install chromium
 
 ```sh
 npm run test:unit -- packages/inspector/tests/setup packages/inspector/tests/hosted
-npm run test:e2e -- tests/e2e/launch
+npm run test:e2e -- tests/e2e/hosted/launch.spec.ts
 npm run check:ci
 ```
 

@@ -69,6 +69,7 @@ merged, so only the conformance suite waits, for the Python reference agent.
 | Python reference agent | The scripted, model-free scenarios of the TypeScript reference agent, in Python | | [#82](https://github.com/dogganidhal/agui-inspector/issues/82) |
 | Replay | `agui-inspector replay <session file>` serves a recorded session as an AG-UI endpoint, for client tests | #75 | [#84](https://github.com/dogganidhal/agui-inspector/issues/84) |
 | Rule docs and examples | A page per rule, and examples for the major AG-UI server frameworks | #77 | [#85](https://github.com/dogganidhal/agui-inspector/issues/85) |
+| Saved setup and launch links | The agent, endpoint and variables survive a reload, and a link in the page's fragment fills in the page so the developer only presses send | | [spec 016](specs/016-remembered-setup-and-launch-links/spec.md) |
 
 ## Decisions
 

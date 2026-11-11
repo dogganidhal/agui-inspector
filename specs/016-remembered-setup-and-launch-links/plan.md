@@ -4,7 +4,7 @@
 
 **Input**: `specs/016-remembered-setup-and-launch-links/spec.md` and the maintainer's request.
 
-**Status**: Planning only. Implementation starts after the maintainer approves the spec and this plan.
+**Status**: Approved by the maintainer on 2026-11-11.
 
 ## Summary
 
@@ -33,6 +33,16 @@ endpoint or edits a variable. The composer takes the link message as its startin
 warnings join the existing warnings area.
 
 No request is added, the content security policy and the request policy are unchanged, and no dependency is added.
+
+## Changes during implementation
+
+- FR-010 says a warning never repeats a value. FR-011 says a refused link endpoint gets the reason a typed one gets, and
+  that reason names the endpoint's origin. The spec now states this one exception. A user name or password is refused
+  before the origin is named, so a credential in an endpoint never reaches a warning.
+- `tests/e2e/theme/config.spec.ts` applied the same typed endpoint before and after a reload. The page now remembers it,
+  so the second round's Use endpoint button stayed disabled. The test applies a different endpoint in each round.
+- The end-to-end spec sits in `tests/e2e/hosted/launch.spec.ts`, next to the other hosted and embedded specs and their
+  scripted agents, instead of a new `tests/e2e/launch` folder.
 
 ## Technical Context
 
@@ -115,7 +125,7 @@ packages/inspector/tests/
 ├── hosted/startup.test.ts   # extended
 └── hosted/app.test.tsx      # extended
 
-tests/e2e/launch/launch.spec.ts   # new, against examples/reference-agent
+tests/e2e/hosted/launch.spec.ts   # new, against the scripted agents of tests/e2e/hosted
 
 website/content/docs/
 ├── launch-links.mdx     # new: remembered setup and the link format

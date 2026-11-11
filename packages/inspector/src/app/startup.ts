@@ -3,13 +3,15 @@
 //   1. read hosting-config.json from the page's own origin (the only request made under the static policy)
 //   2. turn it into the transport policy and add the content security policy
 //   3. only then create the runtime, read the agent configuration and the saved profile
+//   4. merge the launch link, the saved setup and the configuration into the selection (spec 016)
 //
 // Every request after step 2 goes through the runtime's guarded transport, so it obeys the allowlist
 // fixed in step 1. A bad hosting-config.json stops the start with a message; it never falls back to a
 // wider policy.
 import type { AgentConfig, BrandConfig, CatalogAliases, ClientProfileSettings, JsonValue, SessionStore, ThemeConfig, TransportPolicy } from '../contracts.ts';
 import { loadConfig, type ParsedConfig, type Result } from '../core/config/index.ts';
-import { defaultProfile, loadProfile, type StorageLike } from '../core/profiles/index.ts';
+import { defaultProfile, loadProfile, saveProfile, type StorageLike } from '../core/profiles/index.ts';
+import { loadSetup, parseLaunchLink, resolveSetup, saveSetup } from '../core/setup/index.ts';
 import { createPluginHost, type PluginHost } from '../core/plugins/index.ts';
 import { createRuntime, guardedFetchText, resolveTarget, type Runtime } from '../core/runtime/index.ts';
 import { createSessionStore } from '../core/store/index.ts';
@@ -37,6 +39,22 @@ export interface StartupEnvironment {
    * own origin. Tests pass a stub.
    */
   readonly importModule?: (address: string) => Promise<unknown>;
+  /**
+   * The page's URL fragment when it was opened from a launch link (spec 016), with or without its `#`. Input from
+   * outside the page: it fills in the selection, variables, context, forwarded properties and the composer, and never
+   * sends anything, changes the policy or loads code.
+   */
+  readonly launch?: string;
+}
+
+/** What a launch link did, for the page to show. */
+export interface Launch {
+  /** The composer's starting text. Never stored. */
+  readonly message?: string;
+  /** The link keys that took effect, for the notice. */
+  readonly keys: readonly string[];
+  /** One per refused key or value; never a value. */
+  readonly warnings: readonly string[];
 }
 
 /** What the runtime reads when it builds a run. The page updates it as the user edits. */
@@ -51,8 +69,10 @@ export interface Started {
   readonly runtime: Runtime;
   readonly settings: Settings;
   readonly agents: readonly AgentConfig[];
-  /** The agent selected at the start, which is the first configured one. */
+  /** The agent selected at the start: the link's, the saved one, else the first configured one. */
   readonly selectedAgentId?: string;
+  /** Present when the page was opened with a fragment. */
+  readonly launch?: Launch;
   /** The validated theme maps from `config.json`; the page applies them. */
   readonly theme?: ThemeConfig;
   /** The validated brand from `config.json`; the top bar shows it. */
@@ -137,12 +157,39 @@ export async function startPage(env: StartupEnvironment): Promise<StartResult> {
     else if (saved.value !== undefined) settings.profile = saved.value;
   }
 
+  // The link first, then what was saved, then the configuration's defaults. Nothing here makes a request.
+  const link = env.launch === undefined ? undefined : parseLaunchLink(env.launch);
+  const savedSetup = env.storage === undefined ? undefined : loadSetup(env.storage);
+  const resolved = resolveSetup({
+    agents,
+    policy,
+    profile: settings.profile,
+    ...(savedSetup?.ok === true && savedSetup.value !== undefined && { saved: savedSetup.value }),
+    ...(link !== undefined && { link: link.values }),
+  });
+  if (savedSetup?.ok === false) warnings = [...warnings, savedSetup.error];
+  warnings = [...warnings, ...resolved.warnings];
+  settings.variables = resolved.variables;
+  // What a link applies is saved as if the developer had chosen it by hand; the message is not.
+  if (resolved.profile !== settings.profile) {
+    settings.profile = resolved.profile;
+    if (env.storage !== undefined) {
+      const saved = saveProfile(env.storage, settings.profile);
+      if (!saved.ok) problems.push(saved.error);
+    }
+  }
+  if (env.storage !== undefined && resolved.selection !== undefined && resolved.keys.some((key) => key !== 'message')) {
+    saveSetup(env.storage, 'agent' in resolved.selection && Object.keys(resolved.variables).length > 0 ? { ...resolved.selection, variables: resolved.variables } : resolved.selection);
+  }
+
   // Plugins load last and before the page renders, so no run can be sent before a hook that guards it exists. The page
   // passes a plain dynamic import: it is a request for a script, limited by `script-src 'self'`, and never evaluates a string.
   await plugins.load(pluginAddresses, env.importModule ?? ((address) => import(address)), { origin: env.origin, baseUrl: env.baseUrl });
 
-  const first = agents[0];
-  if (first !== undefined) runtime.selectAgent(first);
+  const selection = resolved.selection;
+  const selected = selection !== undefined && 'agent' in selection ? agents.find((agent) => agent.id === selection.agent) : undefined;
+  if (selected !== undefined) runtime.selectAgent(selected);
+  else if (selection !== undefined && 'endpoint' in selection) runtime.setTarget(selection.endpoint);
   return {
     ok: true,
     policy,
@@ -155,7 +202,8 @@ export async function startPage(env: StartupEnvironment): Promise<StartResult> {
     ...(theme !== undefined && { theme }),
     ...(brand !== undefined && { brand }),
     ...(catalogAliases !== undefined && { catalogAliases }),
-    ...(first !== undefined && { selectedAgentId: first.id }),
+    ...(selected !== undefined && { selectedAgentId: selected.id }),
+    ...(link !== undefined && { launch: { ...(link.values.message !== undefined && { message: link.values.message }), keys: resolved.keys, warnings: [...link.warnings, ...resolved.linkWarnings] } }),
     ...(problems.length > 0 && { error: problems.join(' ') }),
   };
 }

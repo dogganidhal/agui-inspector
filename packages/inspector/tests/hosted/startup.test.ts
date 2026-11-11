@@ -825,3 +825,140 @@ test('what a plugin registers while the page loads is what the runtime asks: a p
   assert.ok(!serializeSession(result.store.snapshot()).includes(secret));
   assert.ok(!JSON.stringify(result.runtime.getState()).includes(secret));
 });
+
+// ---------------------------------------------------------------------------------------------
+// Spec 016: the remembered setup and launch links
+// ---------------------------------------------------------------------------------------------
+
+const SETUP_KEY = 'agui-inspector.setup';
+const PROFILE_KEY = 'agui-inspector.profile';
+const SECRET_016 = 'SYNTHETIC-016-credential';
+const supportAgents = agentsFile(
+  { id: 'first', url: `${AGENT}/first` },
+  { id: 'support', url: `${AGENT}/support`, preset: { variables: { userId: { default: 'dev' }, seed: { default: { plan: 'free' }, type: 'json' } } } },
+);
+const hostedSite = () => ({ [`${PAGE}/hosting-config.json`]: hostedFile(), [`${PAGE}/config.json`]: supportAgents });
+const setupOf = (items: Record<string, string>) => (items[SETUP_KEY] === undefined ? undefined : JSON.parse(items[SETUP_KEY]));
+const linkOf = (params: Record<string, string>) => `#${new URLSearchParams(params)}`;
+
+test('a saved agent and its variables are selected at the start', async () => {
+  const storage = { items: { [SETUP_KEY]: JSON.stringify({ version: 0, setup: { agent: 'support', variables: { userId: '42' } } }) } };
+  const result = started(await startPage(page(hostedSite(), storage).env));
+  assert.equal(result.selectedAgentId, 'support');
+  assert.deepEqual(result.settings.variables, { userId: '42' });
+  assert.equal(result.runtime.getState().connection.targetUrl, `${AGENT}/support`);
+  assert.deepEqual(result.warnings, []);
+  assert.equal(result.launch, undefined);
+});
+
+test('a saved endpoint is the target at the start, with no agent selected', async () => {
+  const storage = { items: { [SETUP_KEY]: JSON.stringify({ version: 0, setup: { endpoint: `${AGENT}/typed` } }) } };
+  const result = started(await startPage(page(hostedSite(), storage).env));
+  assert.equal(result.selectedAgentId, undefined);
+  assert.equal(result.runtime.getState().connection.targetUrl, `${AGENT}/typed`);
+  assert.equal(result.runtime.getState().connection.agentId, undefined);
+  assert.equal(result.runtime.getState().error, undefined);
+});
+
+test('a saved setup that no longer fits is a warning and never stops the start', async () => {
+  for (const text of ['not json', JSON.stringify({ version: 0, setup: { agent: 'removed' } }), JSON.stringify({ version: 0, setup: { endpoint: `${OTHER}/run` } })]) {
+    const result = started(await startPage(page(hostedSite(), { items: { [SETUP_KEY]: text } }).env));
+    assert.equal(result.selectedAgentId, 'first', text);
+    assert.equal(result.warnings.length, 1, text);
+    assert.equal(result.error, undefined);
+  }
+});
+
+test('a launch link selects, fills and saves, and the message is returned but never stored', async () => {
+  const storage = { items: {} as Record<string, string> };
+  const fragment = linkOf({
+    agent: 'support',
+    'var.userId': '42',
+    context: JSON.stringify([{ description: 'locale', value: 'fr-FR' }]),
+    forwardedProps: JSON.stringify({ tenant: 'acme' }),
+    message: 'Book a table for two',
+  });
+  const result = started(await startPage({ ...page(hostedSite(), storage).env, launch: fragment }));
+  assert.equal(result.selectedAgentId, 'support');
+  assert.deepEqual(result.settings.variables, { userId: '42' });
+  assert.deepEqual(result.settings.profile.context, [{ description: 'locale', value: 'fr-FR' }]);
+  assert.deepEqual(result.settings.profile.forwardedProps, { tenant: 'acme' });
+  assert.deepEqual(result.launch, { message: 'Book a table for two', keys: ['agent', 'var.userId', 'context', 'forwardedProps', 'message'], warnings: [] });
+
+  assert.deepEqual(setupOf(storage.items), { version: 0, setup: { agent: 'support', variables: { userId: '42' } } });
+  assert.deepEqual(JSON.parse(storage.items[PROFILE_KEY] ?? '{}').profile.forwardedProps, { tenant: 'acme' });
+  assert.ok(!JSON.stringify(storage.items).includes('Book a table'));
+});
+
+test('a link that sets only the message saves nothing and keeps the saved setup', async () => {
+  const saved = JSON.stringify({ version: 0, setup: { agent: 'support', variables: { userId: '42' } } });
+  const storage = { items: { [SETUP_KEY]: saved } };
+  const result = started(await startPage({ ...page(hostedSite(), storage).env, launch: '#message=hi' }));
+  assert.equal(result.selectedAgentId, 'support');
+  assert.deepEqual(result.settings.variables, { userId: '42' });
+  assert.deepEqual(storage.items, { [SETUP_KEY]: saved });
+  assert.deepEqual(result.launch, { message: 'hi', keys: ['message'], warnings: [] });
+});
+
+test('a link makes the same requests as no link, and the policy text is unchanged', async () => {
+  const plain = page(hostedSite(), { items: {} });
+  started(await startPage(plain.env));
+  const linked = page(hostedSite(), { items: {} });
+  started(await startPage({ ...linked.env, launch: linkOf({ agent: 'support', endpoint: `${OTHER}/run`, message: 'hi' }) }));
+  const other = page(hostedSite(), { items: {} });
+  started(await startPage({ ...other.env, launch: linkOf({ endpoint: `${OTHER}/run`, message: 'hi' }) }));
+  assert.deepEqual(linked.log, plain.log);
+  assert.deepEqual(other.log, plain.log);
+  assert.deepEqual(linked.policies, plain.policies);
+});
+
+test('a bad or hostile link is a set of Link warnings and never stops the start', async () => {
+  const storage = { items: {} as Record<string, string> };
+  const result = started(
+    await startPage({ ...page(hostedSite(), storage).env, launch: `#agent=nobody&token=${SECRET_016}&header.x-key=${SECRET_016}&context=%5B&message=hi` }),
+  );
+  assert.equal(result.selectedAgentId, 'first');
+  assert.equal(result.launch?.message, 'hi');
+  assert.deepEqual(result.launch?.keys, ['message']);
+  assert.equal(result.launch?.warnings.length, 4);
+  assert.ok(!JSON.stringify(result.launch).includes(SECRET_016));
+  assert.ok(!JSON.stringify(storage.items).includes(SECRET_016));
+  assert.deepEqual(storage.items, {});
+});
+
+test('a link endpoint outside the policy keeps the first agent and says why', async () => {
+  const result = started(await startPage({ ...page(hostedSite(), { items: {} }).env, launch: linkOf({ endpoint: `${OTHER}/run` }) }));
+  assert.equal(result.selectedAgentId, 'first');
+  assert.equal(result.runtime.getState().connection.targetUrl, `${AGENT}/first`);
+  assert.match(result.launch?.warnings[0] ?? '', /^endpoint: https:\/\/other\.example is not an allowed destination/);
+});
+
+test('without storage a link still applies for this page', async () => {
+  const result = started(await startPage({ ...page(hostedSite()).env, launch: linkOf({ agent: 'support', 'var.userId': '7', message: 'hi' }) }));
+  assert.equal(result.selectedAgentId, 'support');
+  assert.deepEqual(result.settings.variables, { userId: '7' });
+});
+
+test('the run sent after a link carries its values', async () => {
+  const seen: Array<{ url: string; body: string }> = [];
+  const site = hostedSite();
+  const base = page(site, { items: {} });
+  const fetch = (async (input: string | URL | Request, init: RequestInit = {}) => {
+    const url = String(input);
+    if (url.startsWith(`${AGENT}/`)) {
+      seen.push({ url, body: String(init.body) });
+      return new Response('data: {"type":"RUN_STARTED","threadId":"t","runId":"r"}\n\ndata: {"type":"RUN_FINISHED","threadId":"t","runId":"r"}\n\n', { headers: { 'content-type': 'text/event-stream' } });
+    }
+    return base.env.fetch(input, init);
+  }) as typeof globalThis.fetch;
+  const result = started(
+    await startPage({ ...base.env, fetch, launch: linkOf({ agent: 'support', context: JSON.stringify([{ description: 'locale', value: 'fr-FR' }]), forwardedProps: JSON.stringify({ tenant: 'acme' }) }) }),
+  );
+  assert.equal(seen.length, 0);
+  await result.runtime.send('hi');
+  assert.equal(seen.length, 1);
+  const input = JSON.parse(seen[0]?.body ?? '{}');
+  assert.equal(seen[0]?.url, `${AGENT}/support`);
+  assert.deepEqual(input.context, [{ description: 'locale', value: 'fr-FR' }]);
+  assert.equal(input.forwardedProps.tenant, 'acme');
+});

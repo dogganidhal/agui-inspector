@@ -4,7 +4,7 @@
 
 **Created**: 2026-11-11
 
-**Status**: Draft, waiting for the maintainer's review.
+**Status**: Accepted by the maintainer on 2026-11-11. Implementation follows.
 
 **Input**: The maintainer's request. Two things, in one feature because they share the start of the page and need one
 precedence rule:
@@ -45,6 +45,10 @@ option. The maintainer confirms or changes these answers when reviewing the spec
 - Q: Which profile settings can a link set? → A: Context and forwarded properties, as the request names. Tools, message
   mode, encoding and the automation settings stay in Settings and in an imported profile file. A key for them is an
   unknown key (FR-010).
+
+### Session 2026-11-11, approval
+
+- The maintainer approved the spec and the plan as written, including the six answers above.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -211,7 +215,8 @@ Launch link
   values are taken as written. JSON values MUST pass the same checks Settings and profile import apply.
 - **FR-010**: Each bad key or value MUST be refused on its own with one warning in the place configuration warnings use,
   marked as coming from the link. Startup MUST continue and every other valid key MUST apply. A warning MUST name the key
-  and MUST NOT repeat the value. Unknown keys, repeated keys, and `agent` together with `endpoint` are bad keys.
+  and MUST NOT repeat the value. The one exception is FR-011: a refused endpoint gets the reason a typed one gets, which
+  names its origin. Unknown keys, repeated keys, and `agent` together with `endpoint` are bad keys.
 - **FR-011**: An `endpoint` from a link MUST be checked by the same rule as an endpoint typed in the endpoint field, and
   MUST be refused with the same reason. A link MUST NOT widen what the page may reach, change the request policy, name
   the configuration file, or load a plugin or any other code.
