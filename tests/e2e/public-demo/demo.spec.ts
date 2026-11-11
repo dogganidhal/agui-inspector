@@ -74,7 +74,13 @@ async function listen(server: Server, port = 0): Promise<number> {
   await new Promise<void>((resolve) => server.listen(port, '127.0.0.1', resolve));
   return (server.address() as AddressInfo).port;
 }
-const close = (server: Server) => new Promise((resolve) => server.close(resolve));
+// close() alone waits for a connection the browser still keeps open, which can outlast the test's teardown time;
+// dropping the connections lets the teardown finish at once.
+const close = (server: Server) =>
+  new Promise((resolve) => {
+    server.close(resolve);
+    server.closeAllConnections();
+  });
 
 async function openSite(demo: Demo, cleanups: Array<() => Promise<unknown>>): Promise<Site> {
   const files = new Set(['index.html', 'app.js', 'app.css', 'bootstrap.js', 'demo.css', 'hosting-config.json', 'examples.json']);
