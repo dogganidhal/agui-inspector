@@ -31,7 +31,8 @@
 
 ## Notes
 
-- Three markers remain on purpose: FR-015 (MCP or not), FR-016 (release), FR-017 (live session). They are the
-  maintainer's go or no-go and are listed in research.md, section 7. `speckit-clarify` records the answers.
-- The spec names the command line, session files and MCP because the feature is about developer tooling surfaces that
-  already exist (features 005, 016 and session export). It names no library, language or code structure.
+- One marker remains on purpose: the release of milestone 1 and of the MCP server (Clarifications). `speckit-clarify`
+  records the answer.
+- Revised 2026-11-11 for the new goal (tests and agents) and the audit's order. Checked again against every item.
+- The spec names the command, the MCP server, session files and the npm package because they are the product surfaces
+  this feature is about. It names no library or code structure.

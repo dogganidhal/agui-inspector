@@ -1,209 +1,304 @@
-# Feature Specification: Agent access to the inspector
+# Feature Specification: Headless sessions for tests and agents
 
 **Feature Branch**: `worktree/inspector-mcp-for-agents-326ea2`
 
 **Created**: 2026-11-11
 
-**Status**: Draft. Waiting for the maintainer's go or no-go. No plan until then.
+**Status**: Draft, revised 2026-11-11 after the maintainer set the goal and accepted the audit's order. Waiting for the
+maintainer's approval of this spec. No plan until then.
 
-**Input**: The maintainer asked whether agui-inspector needs an MCP server so that coding agents can act on the
-inspector for the developer. Candidate uses: build a launch link (feature 016) and open it, run a scenario against a
-target and get back the recorded frames and rule findings without a browser, read the session the developer just
-recorded, and send a raw request. The question to answer first: what would an agent do with an MCP server that it cannot
-already do with the command of feature 005, the launch link of feature 016, session file export and plain HTTP?
-
-[research.md](research.md) answers that question tool by tool. Its conclusion: three of the four uses already work, or
-will work once feature 016 lands, with a shell and a documented format. Only one is missing: a run without a browser that
-returns the frames and the rule findings. A coding agent has a shell, so a command does that job as well as an MCP tool,
-and it adds no dependency. This spec therefore describes a command and a docs page. An MCP server is out of scope, and
-research.md records when to look at it again.
+**Input**: The maintainer asked whether agui-inspector needs an MCP server so that coding agents can act on the inspector
+for the developer. The first draft of this spec answered no. The maintainer then set a wider goal: use the inspector for
+end-to-end and integration tests of AG-UI agents, "Playwright for AG-UI agents". A test or a coding agent loads the
+inspector, drives a session, and makes assertions on the outcome: A2UI surfaces, activities, several messages in one
+run, interrupts, tool calls, state. It must work for projects that use the embedded inspector too, such as a Python
+server with `mount_inspector` that the developer runs locally and then asks their coding agent to drive. An independent
+audit of that design ([research.md](research.md), section 3) recommended a smaller first step and a different order:
+the headless engine and a test API first, the one-shot command on top, the conformance suite (#83) on that engine, and
+the MCP server last. The maintainer accepted that order.
 
 ## Clarifications
 
-None yet. The three open questions are marked below and listed in research.md, section 7.
+### Session 2026-11-11
+
+- Q: Is an MCP server worth building? → A: Yes, for coding agents that drive a session step by step: answer an
+  interrupt, return a tool result, fire an A2UI action, read what changed. It comes last, as a thin layer over the same
+  engine, once the engine's API has been used by the test API and the conformance suite (FR-030 to FR-037).
+- Q: What is the goal? → A: End-to-end and integration tests of AG-UI agents, with assertions on outcomes. Coding agents
+  that drive and inspect sessions for the developer are the second audience.
+- Q: In what order? → A: The audit's order. Milestone 1: the headless session and the test API, with the one-shot
+  command on top. Milestone 2: the conformance suite (#83) on the engine, as its own feature. Milestone 3: the MCP
+  server.
+- Q: Must it work with the embedded inspector? → A: Yes. The developer points the session at the agent endpoint of
+  their running server, embedded or not (FR-005). Reading the embedded page's agents and presets from its
+  configuration is deferred until cookie authentication and plugins have an answer (see Assumptions).
+- Q: Can an agent read or drive the session open in the developer's browser? → A: Not in this feature. It needs a
+  channel from the page to a local process and an amendment to principle IV. A session file and a launch link
+  (feature 016) are the hand-off in both directions (User Story 5).
+- Q: Which release? → A: [NEEDS CLARIFICATION: Milestone 1 in 0.3.0, before #83? Recommended: yes. The MCP server
+  (milestone 3) in 0.3.0 too, or the release after?]
 
 ## User Scenarios & Testing *(mandatory)*
 
-The actors are a developer who builds or integrates an AG-UI server, and the coding agent that works in the developer's
-repository and terminal for them. The agent runs commands, reads files and edits code. It has no browser of its own that
-the developer watches.
+The actors are a developer who builds an AG-UI agent, the tests they run in CI, and the coding agent that works in their
+repository and terminal. The coding agent runs commands and reads files. It has no browser the developer watches.
 
-### User Story 1 - The agent runs an input against a target and reads the result (Priority: P1)
+### User Story 1 - A test drives a session and asserts on the outcome (Priority: P1)
 
-The developer asks their agent to fix an AG-UI server. The agent changes the code, then wants to know whether the server
-now answers correctly. It runs one command with the target, any headers, and the run input (or a single user message).
-The command sends the run like the page would, records every exchange and frame exactly as received, applies the same
-protocol checks as the page, and writes the result as a session file. The agent reads the frames and the rule findings,
-fixes what is wrong and runs it again. The developer can open the same file in the page to see what the agent saw.
+A developer writes an integration test for their AG-UI agent. The test opens a headless session against the agent's
+endpoint, sends a message, waits until the session is idle, and checks what came back: the messages, the tool calls,
+the interrupts, the activities, the state, the A2UI surfaces and the protocol findings. It answers an interrupt or
+returns a tool result, waits again, and checks the next run. When the test fails, the session file it saved opens in
+the page, so the developer sees every frame.
 
-**Why this priority**: This is the one use that has no answer today. Plain HTTP returns the bytes but not the findings,
-and the findings (sequence rules, schema checks, capability checks) are what the inspector adds. It is also the engine
-that the conformance suite (issue #83) needs: that suite plays canned inputs against a target and reports rule findings.
+**Why this priority**: This is the product. It is deterministic, runs in CI without a model, and serves the conformance
+suite (#83). The command and the MCP server are thin layers over it.
 
-**Independent Test**: Start the reference agent, run the command against one of its scenarios with a known protocol
-error, and check that the output is a valid session file that holds every frame in order and the expected finding, and
-that the exit code says findings were found.
+**Independent Test**: Against the reference agent's interactive scenarios over real HTTP, a test sends a message, finds
+the interrupt, resolves it, waits, and finds the expected messages, state and findings.
 
 **Acceptance Scenarios**:
 
-1. **Given** a running target and a run input, **When** the agent runs the command, **Then** it writes one session file,
-   in the same version-0 format as Export session, that holds the exchange, the run, every frame as received and every
-   finding, and it ends with the exit code for "ran, no findings" or "ran, with findings".
-2. **Given** a target that sends a malformed or fragmented stream, a non-JSON frame or no terminal event, **When** the
-   command runs, **Then** the file keeps those frames byte for byte in arrival order with their findings, and nothing is
-   repaired, dropped or reordered.
-3. **Given** a header passed for the target, **When** the command runs, **Then** the target receives it, and its value
-   appears nowhere in the output file, standard output, standard error or the exit message.
-4. **Given** a run that pauses on an interrupt or a client tool call, **When** the agent passes a client profile with
-   automatic replies (feature 004), **Then** the command answers as the page would, records the follow-up runs, and
-   stops at the same automatic-reply limit.
-5. **Given** a run input that does not pass the protocol schema, **When** the agent passes it, **Then** the command sends
-   it unchanged and records a finding for it, as the raw request editor does.
-6. **Given** a target that never ends the stream, **When** the time limit passes, **Then** the command stops capture,
-   keeps what it received, marks the exchange as stopped, writes the file and exits with the code for "stopped".
-7. **Given** the file the command wrote, **When** the developer imports it in the page, **Then** the page shows the same
-   exchanges, frames and findings.
+1. **Given** a running agent, **When** a test opens a session and sends a message, **Then** waiting until idle returns
+   once the run and every follow-up run have ended, and the test can read the messages, tool calls, interrupts,
+   activities and state as the page's conversation view would show them.
+2. **Given** a run that pauses on an interrupt, **When** the test resolves or cancels it, **Then** the next run is sent
+   as the page would send it and is recorded in the same session.
+3. **Given** a run that pauses on a client tool call, **When** the test returns a result, **Then** the next run carries
+   it as the page would.
+4. **Given** a run that sends A2UI v0.9 messages, **When** the test reads the surfaces, **Then** it gets each surface's
+   components and data model as the page holds them, and it can fire an action on a component, which is sent as the
+   page would send it.
+5. **Given** any run, **When** the test reads the findings, **Then** they match the page's findings for the same run,
+   by rule id.
+6. **Given** a malformed or fragmented stream, a non-JSON frame or a missing terminal event, **When** the test reads the
+   frames, **Then** they are exactly as received, in arrival order, and nothing is repaired, dropped or reordered.
+7. **Given** a run input that fails the protocol schema, **When** the test sends it as a raw input, **Then** it is sent
+   unchanged and recorded with a finding.
+8. **Given** a run that never ends, **When** the time limit passes, **Then** waiting returns, capture stops, what was
+   received is kept, and the exchange is marked stopped.
+9. **Given** a session, **When** the test saves it, **Then** the file is the version-0 session file that Export session
+   writes, and the page imports it with the same exchanges, frames and findings.
 
 ---
 
-### User Story 2 - The agent reads a session the developer recorded (Priority: P2)
+### User Story 2 - One command runs an input and reports findings (Priority: P1)
 
-The developer reproduced a bug in the page and wants the agent to look at it. They press Export session, save the file in
-the repository or another folder, and give the agent the path. The agent reads the file without help from the inspector,
-using the published description of the format.
+A coding agent fixing a server, or a CI step, runs one command with the target, any headers, and a run input or a
+message. The command runs it through the same headless session, writes the session file and exits with a code that says
+whether findings were found.
 
-**Why this priority**: It already works. The export holds every exchange, frame and finding, and the format is documented
-in the recordings page. What is missing is a page written for agents that says where to look in the file. No code
-changes.
+**Why this priority**: The quickest use for an agent with a shell and for CI scripts that are not written in
+JavaScript, such as a Python project's pipeline. It costs little once User Story 1 exists.
 
-**Independent Test**: Follow the docs page with the reference agent: record a run in the page, export it, and check that
-every field the page tells an agent to read exists in the file.
+**Independent Test**: Run the command against a reference agent scenario with a known protocol error, and check the
+session file and the exit code.
 
 **Acceptance Scenarios**:
 
-1. **Given** an exported session, **When** an agent follows the docs page, **Then** it can find the runs, each run's
-   frames in order, each frame's raw text and event type, and each finding with its rule id.
-2. **Given** the docs page, **When** a developer reads it, **Then** it states that the file can contain sensitive data
-   from the target and that giving it to an agent sends that data to the agent's model provider.
+1. **Given** a running target and a run input, **When** the command runs, **Then** it writes one session file and exits
+   with the code for "no findings" or "findings".
+2. **Given** a client profile with automatic replies (feature 004), **When** the command runs a scenario that pauses,
+   **Then** it answers as the page would and stops at the same automatic-reply limit.
+3. **Given** an unreachable target, a non-2xx answer or the time limit, **When** the command runs, **Then** it writes
+   what it recorded and exits with the code for "could not complete the run".
 
 ---
 
-### User Story 3 - The agent opens the page prefilled for the developer (Priority: P3)
+### User Story 3 - A coding agent drives a session step by step (Priority: P2)
 
-After a fix, the agent wants the developer to try the server themselves. It builds a launch link (feature 016) with the
-endpoint, preset, variables and first message, and opens it in the developer's browser with the system's usual open
-command. The developer presses send.
+The developer runs their agent locally and asks their coding agent to explore it: send a message, look at the frames
+and findings, answer the interrupt, press the button on the A2UI surface, check the state, and then write a test from
+what it saw. The coding agent does this through MCP tools that keep the session open between calls.
 
-**Why this priority**: Feature 016 delivers the link. This feature only documents how an agent builds and opens it. It
-depends on 016 and adds no behavior.
+**Why this priority**: The maintainer's second audience. It comes last because it adds no capability the engine lacks;
+it only exposes the engine as tools.
 
-**Independent Test**: With feature 016 merged, follow the docs page to build a link for the reference agent, open it,
-and check that the page shows the prefilled values.
+**Independent Test**: An MCP client, scripted without a model, calls the tools in order against the reference agent's
+interactive scenario and gets the same messages, frames and findings as User Story 1.
 
 **Acceptance Scenarios**:
 
-1. **Given** feature 016 has merged, **When** the agent follows the docs page, **Then** it builds a link in the format
-   that feature 016 defines, and the docs page links to 016's description rather than repeating it.
-2. **Given** a target that needs a token, **When** the agent builds a link, **Then** the docs page tells it that a link
-   never carries a credential and that the developer types the token in the page or passes it to the command of
-   feature 005.
+1. **Given** the MCP server started with a target and headers, **When** a client opens a session and sends a message,
+   **Then** the tool result says when the session is idle and summarizes the new messages, interrupts, tool calls,
+   surfaces and findings.
+2. **Given** a session with many frames, **When** the client reads frames, **Then** results are paged and each page has
+   a size limit.
+3. **Given** a header passed to the server, **When** any tool returns, **Then** the header value is absent from every
+   result and every message the server writes.
+4. **Given** any tool result that holds data from the target, **When** the client receives it, **Then** that data is
+   marked as untrusted target content, separate from the tool's own text.
+5. **Given** a session, **When** the client asks to save it, **Then** the server writes a session file the page can
+   import.
+
+---
+
+### User Story 4 - It works with an embedded Python project (Priority: P2)
+
+A developer has a Python server that exposes an AG-UI agent and mounts the embedded inspector. They start it locally.
+Their test, the command or their coding agent points a headless session at the agent's endpoint on that server and
+gets everything in User Stories 1 to 3.
+
+**Why this priority**: The maintainer requires it. It needs no change to the Python package; the docs show it.
+
+**Independent Test**: Start the FastAPI example in `examples/fastapi`, point the command at its agent endpoint, and get a
+session file with frames and findings.
+
+**Acceptance Scenarios**:
+
+1. **Given** a locally running embedded Python server without authentication, **When** a headless session targets its
+   agent endpoint, **Then** runs behave as against any other target.
+2. **Given** a server that needs a token or a cookie, **When** the developer passes it as a header from an environment
+   variable, **Then** the target receives it and it appears nowhere in outputs.
+3. **Given** the docs page, **When** a Python developer reads it, **Then** it states that the command and the MCP server
+   need Node on the developer's machine, and that the Python package itself is unchanged.
+
+---
+
+### User Story 5 - The agent hands the session to the developer (Priority: P3)
+
+After driving a session, the coding agent saves the session file and tells the developer its path; the developer
+imports it in the page, embedded or not. Or the agent builds a launch link (feature 016) to the developer's page and
+opens it, so the developer can try the same message themselves. The other way round, the developer exports a session
+from the page and gives the agent the path; the agent opens it in a headless session to read it.
+
+**Why this priority**: Session files and feature 016 already exist; this story is mostly docs plus loading a file into
+a headless session.
+
+**Independent Test**: Save a headless session, import it in the page; export from the page, load it headless; check
+both ways that frames and findings are equal.
+
+**Acceptance Scenarios**:
+
+1. **Given** a session file from the page, **When** a headless session loads it, **Then** it can be read like a live one,
+   and it cannot send a run.
+2. **Given** feature 016 has merged, **When** the agent follows the docs page, **Then** it builds a link in 016's format,
+   and the docs page links to 016 rather than repeating it.
 
 ---
 
 ### Edge Cases
 
-- The target cannot be reached, refuses the connection, or answers with a non-2xx status: the command records the
-  exchange as the page would, writes the file, and exits with the code for "could not complete the run". The message
-  names the target number, never a header.
-- The target URL holds credentials, a query or a fragment: refused with the same rules and messages as the command of
+- The target URL holds credentials, a query or a fragment: refused, with the rules and messages of the command of
   feature 005.
-- The output file exists: it is replaced only when the agent asks for that; otherwise the command refuses and writes
-  nothing.
-- Standard output is the file when no output path is given. Every message goes to standard error, so the output stays
-  valid JSON.
-- The agent stops the command (interrupt signal): capture stops, the file is written with what was received, and the
-  exchange is marked stopped.
-- The target answers in the protobuf encoding (feature 013), chosen in the profile: binary frames are kept as the export
-  keeps them.
-- A preset that needs preparation requests: out of scope for the first version (see Assumptions).
+- A header value would appear in an error from the network layer: the message names the target, never the value.
+- The agent under test is backed by a model and answers differently each time: the test API offers assertions on
+  structure (an interrupt exists, a surface has a button with this label, a rule fired) as well as exact equality.
+- Two sessions run at the same time in one process or one MCP server: each keeps its own thread, headers and frames.
+- A preset that needs preparation requests, or a plugin with a hook or a header provider: not run headless in this
+  feature. A test that needs a preparation step makes that request itself and passes the result in the run input.
+- A2UI v0.8 surfaces: frames and findings are available; the surface model is not (see Assumptions).
+- The output file exists: replaced only when asked; otherwise the command refuses and writes nothing.
 
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
 
-- **FR-001**: The command-line tool MUST offer a way to run one conversation run against one target without a browser,
-  given the target, optional headers for it, and either a run input or a single user message.
-- **FR-002**: It MUST record every exchange and frame with the same rules as the page: raw content, arrival order and
-  timing kept, including non-JSON, invalid and binary frames. Nothing is dropped, repaired or reordered.
-- **FR-003**: It MUST apply the same protocol checks as the page and record the same findings with the same rule ids,
-  so that a run in the page and the same run from the command give the same findings.
-- **FR-004**: It MUST write the result as one session file in the format that Export session writes, so the page can
-  import it and the same docs describe it.
-- **FR-005**: A run input that fails the protocol schema MUST be sent unchanged and recorded with a finding, never
-  rejected or corrected.
-- **FR-006**: It MUST accept a client profile file and, with it, answer interrupts and client tool calls automatically
-  as the page does under feature 004, including its limit on automatic replies.
-- **FR-007**: Header values MUST stay in memory. They MUST NOT appear in the output file, on standard output or standard
-  error, in an exit message or in any other file. The recorder MUST NOT read headers. Tests MUST search all outputs for
-  a synthetic header value.
-- **FR-008**: Target URLs and headers MUST follow the rules of feature 005: an absolute http or https URL without
-  credentials, query or fragment, and headers that belong to the target before them.
-- **FR-009**: The command MUST open no listening socket and MUST connect only to the target it was given. It MUST send
-  no telemetry and no other request.
-- **FR-010**: The command MUST end a run that does not finish within a time limit the agent can change, keep what it
-  received, and mark the exchange as stopped.
-- **FR-011**: The exit code MUST tell apart: ran with no findings, ran with findings, could not complete the run
-  (unreachable, non-2xx, stopped), and wrong arguments. A docs table MUST list the codes.
-- **FR-012**: Messages MUST go to standard error, so that a file written to standard output stays valid JSON.
-- **FR-013**: The docs site MUST have a page for coding agents that covers: running the command and reading its output,
-  reading an exported session, building and opening a launch link of feature 016 (by linking to its description), how to
-  pass a token without it entering the agent's context, and the warning that a session file can hold sensitive data that
-  an agent will send to its model provider.
-- **FR-014**: The new code MUST stay out of the page bundle, as the command of feature 005 does.
-- **FR-015**: Scope of an MCP server: [NEEDS CLARIFICATION: Is an MCP server in scope at all? Recommended: no. The
-  command plus the docs page give a coding agent every use in research.md without a new dependency. Alternative: add
-  `agui-inspector mcp` over stdio with one tool that wraps FR-001, built on the same code, with a pinned MCP SDK.]
-- **FR-016**: Release: [NEEDS CLARIFICATION: Which release carries this? Recommended: 0.3.0, before the conformance
-  suite (#83), which reuses the headless run. Alternative: after 0.3.0.]
-- **FR-017**: Reading the session that is open in the developer's page, without an export, is [NEEDS CLARIFICATION:
-  out of scope? Recommended: yes, out of scope. A session lives in the browser only (constitution principle IV:
-  "Captured sessions MUST NOT be stored server-side"). Sending it from the page to a local process needs a constitution
-  amendment and a new channel from the page, and one click on Export session already gives the agent the same data.]
+Headless session (milestone 1)
+
+- **FR-001**: The npm package MUST offer a headless session that runs outside a browser and uses the same recording,
+  frame reading, protocol checks, client behavior and session format as the page.
+- **FR-002**: A session MUST be able to: send a message; send a run input unchanged, valid or not; resolve or cancel an
+  interrupt; return a client tool result; fire an action on an A2UI v0.9 component; stop the current capture.
+- **FR-003**: A session MUST be able to report: exchanges and frames as received; findings with rule ids; the
+  conversation as the page projects it (messages, tool calls, interrupts, activities, subagent runs); the state and its
+  history; A2UI v0.9 surfaces with components and data model; what is pending (interrupts, tool calls).
+- **FR-004**: A session MUST offer a wait that returns when no run is active and nothing is pending except what needs
+  the caller, or when a time limit passes. A time limit MUST always apply, with a default the caller can change.
+- **FR-005**: A session MUST target an agent endpoint by URL with the rules of feature 005 (absolute http or https, no
+  credentials, query or fragment). Headers belong to that target and stay in memory.
+- **FR-006**: A session MUST accept a client profile, including automatic replies and their limit (feature 004) and the
+  encoding (feature 013).
+- **FR-007**: A session MUST save to and load from a version-0 session file. A loaded session MUST be read-only.
+- **FR-008**: Frames MUST keep raw bytes, arrival order and timing, including non-JSON, invalid and binary frames.
+  Nothing is dropped, repaired or reordered. The recorder MUST NOT read headers.
+- **FR-009**: For the same run, the headless session and the page MUST record the same frames and the same findings by
+  rule id. A test MUST check this for every reference agent scenario.
+- **FR-010**: A session MUST allow its clock and identifiers to be fixed, so a test against a scripted agent produces the
+  same session file each time.
+
+Test API (milestone 1)
+
+- **FR-011**: The npm package MUST offer the headless session as a library entry for JavaScript and TypeScript tests,
+  usable from the Node test runner and the common test frameworks without adapters.
+- **FR-012**: The library MUST offer assertions on structure: a message with this role and text pattern exists, an
+  interrupt or a tool call with this name is pending, a surface has a component of this type with this property, a rule
+  id fired or did not fire, the state matches a partial value. A failed assertion MUST say what it expected and what it
+  found, and MUST be able to save the session file next to the failure.
+
+One-shot command (milestone 1)
+
+- **FR-020**: The command MUST offer a way to run one message or run input against one target through a headless
+  session, with optional headers, client profile, time limit and output path, and write one session file.
+- **FR-021**: The exit code MUST tell apart: no findings, findings, could not complete the run, wrong arguments. A docs
+  table MUST list them.
+- **FR-022**: The session file MUST go to standard output when no output path is given, and every message MUST go to
+  standard error.
+- **FR-023**: The command MUST open no listening socket and MUST connect only to its target.
+
+MCP server (milestone 3)
+
+- **FR-030**: The command MUST offer an MCP server over standard input and output only. It MUST open no listening
+  socket.
+- **FR-031**: Its tools MUST map one to one to the headless session's actions and reports (FR-002, FR-003, FR-004,
+  FR-007), with sessions named by an id the server returns.
+- **FR-032**: Targets and headers MUST be given when the server starts, not in tool inputs. Header values MUST NOT
+  appear in any tool result, log or file.
+- **FR-033**: Tool results that hold data from the target (frames, messages, tool arguments, surface text, state) MUST
+  be marked as untrusted target content, apart from the tool's own text.
+- **FR-034**: Results MUST be bounded: frames and long lists are paged, each result has a size limit, and a cut is said
+  in the result.
+- **FR-035**: A tool MUST NOT wait longer than its time limit. A run continues in the background, and a later call can
+  wait again.
+- **FR-036**: The server MUST be able to run several sessions at once without sharing threads, headers or frames.
+- **FR-037**: The server MUST send no request except to its targets, and no telemetry.
+
+Shared
+
+- **FR-040**: All new code MUST stay out of the page bundle.
+- **FR-041**: Tests MUST search every output (files, standard output and error, exit messages, tool results) for a
+  synthetic header value.
+- **FR-042**: The docs site MUST have a page for tests and coding agents. It covers the test API, the command, the MCP
+  server once it ships, the embedded Python case, the hand-off through session files and launch links, passing a token
+  through an environment variable, and two warnings: a session file and every tool result can hold sensitive data from
+  the target, which an agent sends to its model provider; and target data in a tool result can contain text written to
+  mislead the agent.
 
 ### Key Entities
 
-- **Headless run**: one invocation of the command. It has one target, optional headers held in memory, a run input or a
-  message, an optional client profile, a time limit and an output path. It produces one session file and one exit code.
-- **Session file**: the version-0 file that Export session writes. It holds exchanges, runs, frames and findings, and
-  no headers. Both the page and the command write it, and the page imports it.
-- **Finding**: a rule hit on a frame or a run, with a rule id from the rule catalogue (feature 007).
-- **Launch link**: defined by feature 016. This feature only points to it.
+- **Headless session**: one conversation with one target, held in memory. It has a thread, headers in memory, a client
+  profile, the recorded exchanges, frames and findings, and what is pending. Live or loaded from a file.
+- **Session file**: the version-0 file Export session writes. Holds exchanges, runs, frames and findings, no headers.
+- **Finding**: a rule hit with a rule id from the catalogue (feature 007).
+- **Launch link**: defined by feature 016. Referred to only.
 
 ## Success Criteria *(mandatory)*
 
 ### Measurable Outcomes
 
-- **SC-001**: For every reference agent scenario, the session file from the command and an export of the same run from
-  the page hold the same frames in the same order and the same findings by rule id.
-- **SC-002**: A coding agent that only has a shell and the docs page can run an input against the reference agent, read
-  its findings, and name the failing rule, without opening a browser.
-- **SC-003**: A synthetic header value passed to the command is found in none of: the output file, standard output,
-  standard error, any other file the command writes.
-- **SC-004**: The command adds no runtime dependency and nothing to the page bundle.
-- **SC-005**: A run against the reference agent takes no more than one second longer from the command than the same
-  scenario takes to stream, measured on the CI machine.
+- **SC-001**: For every reference agent scenario, a headless session and the page record the same frames in the same
+  order and the same findings by rule id.
+- **SC-002**: A test for the reference agent's interrupt scenario (send, resolve, wait, assert) fits in 20 lines.
+- **SC-003**: A coding agent with only a shell and the docs page can find the failing rule for a broken scenario without
+  opening a browser.
+- **SC-004**: A synthetic header value is absent from every output listed in FR-041.
+- **SC-005**: Milestone 1 adds no runtime dependency and nothing to the page bundle.
+- **SC-006**: Against the reference agent, a headless run takes at most one second longer than the scenario takes to
+  stream.
 
 ## Assumptions
 
-- The agents in view are coding agents that run in the developer's terminal or repository and can run commands. A chat
-  client without a shell is not in view; research.md names it as the reason to revisit an MCP server.
-- One run per invocation, plus the follow-up runs that automatic replies start. A multi-turn conversation built over
-  several invocations is out of scope.
-- Presets, variables, preparation requests and plugins are out of scope for the first version. An agent that needs a
-  preparation step can make that request itself and put the result into the run input. The page keeps all of them.
-- Feature 016 defines the launch link. This feature depends on it for User Story 3 and does not repeat its format. As of
-  2026-11-11 its branch has no commits, so the docs page is written once 016 merges.
-- The conformance suite (issue #83) and replay (issue #84) remain separate features. The suite may reuse the headless
-  run.
-- The developer passes a token to the command through an environment variable that the shell expands, so the agent
-  writes the variable's name and never sees its value. No new option is needed for that.
+- Milestone 2 is the conformance suite (#83), specified on its own. It is listed here only to fix the order.
+- The engine is the existing framework-free core. Its unit tests already run the runtime in Node, and the audit ran it
+  over real HTTP against the reference agent (research.md, section 3).
+- A2UI: the v0.9 surface model is in scope. It needs a catalog that does not use React, which the plan must provide.
+  v0.8 surfaces exist only inside the React renderer today, so their model is out of scope. Rendered checks (what the
+  renderer draws) are out of scope: they need a browser, and browser automation on the page with a launch link already
+  covers them.
+- Presets, variables, preparation requests and plugins are not run headless in this feature. Reading agents and presets
+  from an embedded page's configuration is deferred until cookie authentication and plugin loading have an answer.
+- The Python package does not change. Python projects use the command (and later the MCP server), which needs Node on
+  the developer's machine. A pytest helper may come later through the command.
+- Driving the session open in the developer's browser is out of scope (Clarifications).
+- A token reaches the session through an environment variable that the shell expands, so a coding agent writes the
+  variable's name and never sees the value.

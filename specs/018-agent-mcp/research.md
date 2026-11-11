@@ -1,132 +1,137 @@
-# Research: Agent access to the inspector
+# Research: Headless sessions for tests and agents
 
-**Feature**: [spec.md](spec.md) | **Date**: 2026-11-11
+**Feature**: [spec.md](spec.md) | **Date**: 2026-11-11, revised the same day
 
-The maintainer asked whether agui-inspector needs an MCP server so that coding agents can act on it for the developer.
-This file answers the question before any plan: what an agent can already do, what each candidate MCP tool would add,
-and the smallest thing worth building.
+This file records how the scope was decided: the first question (does an agent need an MCP server?), the maintainer's
+wider goal, the independent audit of the design, and the decisions that followed. The plan starts from section 4.
 
-## 1. What an agent can do today
+## 1. First question: what would an MCP server add?
 
-A coding agent works in the developer's repository and terminal. It can run commands, read and write files, and make
-HTTP requests with `curl`. It cannot see the developer's browser tab.
-
-| Need | Today | Gap |
-| --- | --- | --- |
-| Open the page for the developer | `npx agui-inspector --target <url>` (feature 005), then `open http://127.0.0.1:4747/` | The page opens empty. Feature 016 adds the prefilled launch link. |
-| Send a run and see the raw stream | `curl -N -X POST <target> -d @input.json` | Bytes only. No frame split, no schema check, no sequence or capability findings. |
-| Send a raw or invalid request | `curl` | None. `curl` sends exactly what it is given. |
-| Read what the developer recorded | Developer presses Export session, gives the agent the path, agent reads the JSON | One click by the developer. The format is documented in `recordings.mdx`, but no page says where an agent should look. |
-| Get rule findings for a run | Only in the page | **Missing.** The checks run in `src/core` (frame reader, `core/rules`, `@ag-ui/client` verification), and nothing outside the page calls them. |
-
-Checked in the code on this branch:
-
-- `src/core` has no browser globals: a search for `window` and `localStorage` under `packages/inspector/src/core`
-  finds nothing. The recorder needs `fetch`, streams, `TextDecoder` and a clock, which Node 24 has. The runtime
-  (`core/runtime/index.ts`, `createRuntime`) takes its store, policy, settings, `fetch`, UUID source and clock as
-  options. Running it in Node looks possible. The plan must confirm it with a test before relying on it.
-- The session file (`core/session-files`) already holds exchanges, runs, frames and findings, and by construction no
-  headers: export copies an explicit list of fields, and no record has a header field.
-- The command (`src/cli/args.ts`) keeps a first positional argument free for later commands ("replay, the conformance
-  suite"), so a new command name fits without breaking the current options.
-
-## 2. Candidate MCP tools, one by one
-
-For each tool: what it would do, what the agent does without it, and the value an MCP tool adds over that.
+The maintainer asked what an agent could do with an MCP server that it cannot already do with the command of feature
+005, the launch link of feature 016, session file export and plain HTTP.
 
 | Candidate tool | Without MCP | What MCP adds | Value |
 | --- | --- | --- | --- |
-| `open_launch_link` (build a 016 link and open it) | Agent reads the 016 docs, builds the URL, runs `open <url>` | A typed schema for the link fields. The link format is already a public contract, so the schema duplicates it. | Low |
-| `run_scenario` (run against a target, return frames and findings, no browser) | Nothing gives the findings | The findings. But a command gives the same thing to an agent with a shell, and it is also the engine the conformance suite (#83) needs. | High for the capability, none for MCP as the carrier |
-| `read_session` (the session the developer just recorded) | Export session, then read the file | Reading the live session with no export. That needs the page to send its session to a local process, which principle IV forbids ("Captured sessions MUST NOT be stored server-side") without an amendment, and a new channel from the page. It saves one click. | Low, high cost |
-| `send_raw_request` | `curl` | Nothing, unless it also records and checks. Then it is `run_scenario` with an unchanged input. | None |
+| Build a 016 launch link and open it | Agent reads 016's docs, builds the URL, runs `open` | A typed schema that repeats a public format | Low |
+| Run against a target, return frames and findings | Nothing outside the page gives the findings | The findings. A command gives them as well to an agent with a shell | High for the capability |
+| Read the session the developer just recorded | Export session, then read the file | Reading the live page session, which needs a page-to-process channel and an amendment to principle IV | Low, high cost |
+| Send a raw request | `curl` | Nothing, unless it also records and checks, which is the run above | None |
 
-What MCP would add in general:
+The first draft concluded: no MCP server, one command for a run without a browser, and a docs page.
 
-- **Discovery.** The agent sees typed tools without reading docs. A docs page and `--help` do the same job for a coding
-  agent, which reads both well.
-- **Agents without a shell.** A chat client with MCP support and no terminal could use the inspector. This is the one
-  case where MCP gives a capability a command cannot. It is not the audience the maintainer described (coding agents
-  acting for the developer), and those agents all run commands.
-- **Credential handling.** Not better. An MCP server configured with a header in its launch arguments puts the token in
-  a config file the agent can read. A command run as `--header "Authorization: Bearer $TOKEN"` has the shell expand the
-  variable, so the agent writes only the variable name. Neither is airtight, and the second needs no new code.
+## 2. The maintainer's goal
 
-What MCP would cost:
+The maintainer then set a wider goal: "Playwright for AG-UI agents". Tests and coding agents load the inspector, drive
+a session and make assertions on outcomes such as A2UI surfaces, activities, several messages in one run, interrupts,
+tool calls and state. It must work for a project with the embedded inspector, such as a Python server with
+`mount_inspector`, run locally and driven by the developer's coding agent.
 
-- A dependency (the official SDK) with its own transitive tree, an exact pin and a row in `dependencies.mdx`, or a
-  hand-written JSON-RPC loop over stdio (newline-delimited JSON-RPC 2.0, about 150 lines) that the repository would own.
-- A second interface to keep in step with the command: tool schemas, error shapes, docs and tests for both.
-- A long-running process holding headers in memory for the agent's whole session, where a command holds them for one run.
+That changes the first answer in one place. Driving a session step by step (answer an interrupt, fire an A2UI action,
+read what changed) needs state that survives between calls: the thread, the pending interrupts, the headers. The runtime
+holds that state in memory (`core/runtime/index.ts:245-262`), and nothing restores a runtime from a session file, so a
+one-shot command cannot answer an interrupt it did not script in advance. A long-lived process can. For coding agents,
+MCP is the usual way to talk to one.
 
-## 3. Recommendation
+The proposed design had three layers over one engine: the framework-free core run in Node as a headless session, an MCP
+server over standard input and output, and a test API for CI. It put MCP before the test API.
 
-Do not build an MCP server now. Build the one missing capability as a command, and document the rest for agents.
+## 3. Independent audit
 
-1. **A headless run in the command** (spec User Story 1). One invocation: one target, optional headers, a run input or a
-   message, an optional client profile, a time limit. It writes a version-0 session file and exits with a code that says
-   whether findings were found. It reuses `src/core` (recorder, frame reader, rules, runtime, session files) and the
-   argument rules of `src/cli/args.ts`. It opens no socket. It ships in `lib/cli`, never in the page bundle. No new
-   dependency.
-2. **A docs page for coding agents** (spec User Stories 2 and 3): run the command and read its output, read an exported
-   session, build and open a 016 launch link by linking to 016's description, pass a token through an environment
-   variable, and the warning that a session file can hold target data that the agent sends to its model provider.
+A separate agent (Fable 5.2, read-only, asked to argue against the design) audited it on 2026-11-11. Its findings, with
+the evidence it gave. The main code claims were spot-checked in this session.
 
-The command name is left to the plan. `run` is the obvious one. It must not take `test` or `replay`, which #83 and #84
-reserve.
+**Usefulness.** Real but narrower than the pitch. What only this project gives outside a browser: rule findings, raw
+frames with timing, and the inspector's client behavior (interrupt and tool continuation, automatic replies). Assertions
+on messages, state and tool calls are already possible with `HttpAgent` from `@ag-ui/client` and a subscriber. A2UI is
+the weakest part: headless gives the v0.9 data model only. Browser automation on the page with a launch link already
+lets an agent drive and inspect, embedded mode included, slowly. The durable audience is tests in CI, which do not need
+MCP.
 
-This answers every candidate use. Three of them need no code: open a launch link, read an export, send a raw request.
-The fourth, findings without a browser, needs one command, and #83 needs that engine anyway.
+**Order.** The layering is right; the order was wrong. The engine and a typed test API are the product: deterministic,
+proven in CI, and needed by the conformance suite (#83). MCP first would shape the engine around tool calls with nothing
+proving it in CI. MCP should be a thin adapter, last.
 
-### When to revisit MCP
+**Feasibility.** Better than assumed.
 
-Any of these would change the answer:
+- The unit tests already run `createRuntime` under `node --test` with an injected `fetch`, interrupts and tool results
+  included (`packages/inspector/tests/runtime/support.ts:160-170`, used by seven test files). Checked.
+- The auditor bundled `core/runtime`, `store`, `projection` and `session-files` for Node 24.11.1 and ran them with the
+  global `fetch` against `examples/reference-agent/server.ts`: five frames, one exchange, a projection of a run and two
+  messages, and a session file that round-tripped through `serializeSession` and `parseSession`.
+- The globals the core uses exist in Node 24: `crypto.randomUUID`, `performance.now`, `TextDecoder`, `structuredClone`.
+  The store falls back to `setTimeout` for scheduling.
 
-- The maintainer wants agents without a shell (chat clients) to use the inspector.
-- Agents need to read the live session in the developer's page, and the maintainer accepts a constitution amendment for
-  a page-to-process channel.
-- MCP gains a capability a command cannot match for this use, such as the agent being notified as frames arrive in the
-  developer's page.
+Blockers and rough edges it found:
 
-If it is revisited, the shape is set by the constraints already in place: `agui-inspector mcp` as a command of the same
-binary, stdio only (no listener, so loopback holds trivially), compiled into `lib/cli` and never into the page bundle,
-with one tool that wraps the headless run and returns the session file. Headers come from the command line of the MCP
-server's own launch, live in memory, and are never part of a tool's input or output. Tests search every tool result and
-every stdio message for a synthetic header value. The SDK, if used, gets an exact pin, a lockfile entry and a row in
-`dependencies.mdx` naming the hand-written JSON-RPC loop as the alternative that falls short (or the reverse).
+- The A2UI catalog is React code in the views (`views/a2ui/catalog.tsx`), and `createSurfaceSession` requires a catalog
+  (`core/a2ui/index.ts:61-68`, checked). A headless v0.9 model needs a catalog without React.
+- v0.8 surfaces live inside the React renderer (`views/a2ui/v08.tsx`). No headless v0.8 model without new code.
+- `lib/` is built by plain `tsc` (`scripts/build.mjs`), and `src/cli` and `src/server` import nothing from the core
+  today. The core uses `.ts` import specifiers and `core/a2ui` uses extensionless ones. The build needs work.
+- No "settled" signal: tests poll the exchanges (`support.ts:181-188`). The engine needs a real wait until idle.
+- The transport's error text speaks of the browser and CORS (`core/runtime/transport.ts:189-191`), which is wrong in
+  Node.
+- `resolveTarget` needs a page origin (`transport.ts:126-141`). A headless policy needs a written rule, not a fake
+  origin.
 
-## 4. Constitution check (for the recommended scope)
+Not verified by the audit: an interrupt or A2UI round trip over real HTTP in Node (the Node reference server it used
+plays the plain scenario), and whether `@a2ui/web_core` touches the DOM outside what the unit tests exercise.
+
+**Embedded mode through its configuration.** Reading the embedded page's `config.json` to learn agents and presets is
+half sound. The parser takes an injected `fetchText` (`core/config/index.ts`), but: the embedded page relies on the
+host's cookies (`credentials: 'same-origin'` in the transport) and Node has no cookie jar; the configuration lists
+plugin modules that the page imports, and importing them in Node would run remote code while skipping them makes runs
+differ from the page; and the transport policy assumes a page origin.
+
+**Risks.** Target-supplied frames, tool arguments and A2UI text go straight into the coding agent's context (prompt
+injection). A session can echo a credential, principle IV forbids redaction, and every tool result goes to the agent's
+model provider. A header in an MCP client's configuration file sits where the agent can read it. Tests against
+model-backed agents flake unless assertions check structure. Two interfaces double docs, tests and error shapes. The
+design lacked timeouts, result size limits, paging, concurrency, a plugin story and cookie authentication.
+
+**Verdict.** Build smaller. Milestone 1: a headless session in `lib/` with send, interrupt, tool result, raw input,
+reads of frames, findings, projection and state, a wait until idle, and save to a session file; tests against the
+reference agent over real HTTP including the interactive scenarios; the one-shot command on top; no new dependency.
+Then #83 on the engine. MCP third, as a hand-written adapter over standard input and output, once the engine's API has
+survived #83. Defer configuration discovery, headless A2UI beyond v0.9 and the live bridge.
+
+## 4. Decisions
+
+The maintainer accepted the audit's order on 2026-11-11.
+
+| Topic | Decision | Rationale | Alternatives rejected |
+| --- | --- | --- | --- |
+| MCP | Yes, as milestone 3, a thin layer over the engine | Step-by-step driving needs state kept between calls | MCP first: shapes the engine around tools, unproven in CI. No MCP: agents cannot answer interrupts interactively |
+| Order | Engine and test API, then #83, then MCP | The audit's order; the engine is the product | MCP before the test API |
+| One-shot command | In milestone 1, over the engine | Cheap; serves shell-only agents and non-JavaScript CI | Leave it out: Python projects would have no CI entry |
+| Embedded mode | Target the agent endpoint by URL; headers from environment variables | Works for any server, no change to the Python package | Read `config.json` now: cookie auth and plugins have no answer |
+| Engine location | Node, in the npm package's `lib/`; Python package unchanged | The constitution keeps the Python package free of a Node toolchain; porting the core to Python duplicates it | Engine in Python |
+| A2UI | v0.9 surface model headless, with a catalog without React | Assertions on surfaces are part of the goal | v0.8 model (needs new code inside the renderer); rendered checks (need a browser) |
+| Presets and plugins | Not headless in this feature | Preparation requests and plugin loading raise the policy and remote-code questions above | Import plugins in Node |
+| Live page session | Out of scope; session files and 016 links are the hand-off | Needs a page-to-process channel, a CSP change and an amendment | A live bridge now |
+| MCP transport code | Decide in the plan for milestone 3: the official SDK with an exact pin and a `dependencies.mdx` row, or a hand-written loop over standard input and output | The audit prefers the hand-written loop for auditability | Settled now without measuring the SDK's dependency tree |
+
+## 5. Constitution check
 
 | Principle | Check |
 | --- | --- |
-| I. The wire comes first | The command records with the same recorder and frame reader as the page and writes the session file as export does. An invalid run input is sent unchanged with a finding. Nothing is repaired. |
-| II. The protocol, not a framework | Runs go through `@ag-ui/client` as in the page. No chat framework. |
-| III. Generic core | No server-specific branch. Presets and plugins stay out of the first version; nothing about them changes. |
-| IV. Local-only and credential privacy | No listener, no telemetry, requests only to the named target. Headers in memory, never in output, messages or files; the recorder still reads no header; the session file has no header field. Principle IV's line "CLI mode MUST reach targets through its local proxy" is about the page in CLI mode. The headless run has no page: the process itself is the client, like the relay is. The plan should state this reading, and the maintainer should confirm it. |
-| V. Small and auditable | No new dependency. New code is a command and its tests. No MCP layer. |
-| VI. Every event type has a view | The views are unchanged. The output imports into the page, where every event type has its view. |
-| Architecture | Compiled to `lib/cli`, outside the page bundle, as feature 005. Scope follows `ROADMAP.md` once the maintainer adds it. |
+| I. The wire comes first | Same recorder and frame reader as the page; raw input sent unchanged with a finding; FR-009 tests equality with the page. |
+| II. The protocol, not a framework | Runs go through `@ag-ui/client`; A2UI through `@a2ui/web_core`. No chat framework. |
+| III. Generic core | No server-specific branch. Presets and plugins are left out, not special-cased. |
+| IV. Local-only and credential privacy | No listener, no telemetry, requests only to named targets, headers in memory and absent from every output (FR-041). Three readings to state in the plan and confirm with the maintainer: "CLI mode MUST reach targets through its local proxy" is about the page in command mode, and a headless session is itself the client, like the relay; "entered tokens MUST be cleared on reload or target change" maps to the end of the session or process; "captured sessions MUST NOT be stored server-side" is not broken by files the developer's own process writes on their machine. If the maintainer reads any of these differently, an amendment comes first. |
+| V. Small and auditable | Milestone 1 adds no dependency. Milestone 3 decides on the SDK with the measured cost. Milestones keep the MCP layer from shipping before the engine has a user. |
+| VI. Every event type has a view | Views unchanged. Headless session files import into the page, where every event type has its view. |
+| Architecture | New code in `lib/`, never in the page bundle. "Embedded requests MUST use the host's same-origin authentication" is about the embedded page; a headless session is not embedded mode and uses headers. Scope: needs a `ROADMAP.md` row and an issue. |
 
-## 5. Roadmap fit
+## 6. Roadmap fit
 
-0.2.0 is closed. 0.3.0 holds the conformance suite (#83), the Python reference agent (#82), replay (#84) and rule docs
-(#85). The headless run fits 0.3.0 and should land before #83, which plays inputs against a target and reports rule
-findings: the suite becomes a list of inputs and expected findings on top of this command. If 0.3.0 should stay as it
-is, the feature goes to the release after it. Either way `ROADMAP.md` gets a row and an issue.
+0.3.0 holds the conformance suite (#83), the Python reference agent (#82), replay (#84) and rule docs (#85). Milestone 1
+belongs in 0.3.0 before #83, which then becomes a set of scenarios and expected findings on the engine. Where the MCP
+server lands (0.3.0 or the release after) is the one open question in the spec. Either way `ROADMAP.md` gets a row and
+an issue.
 
-## 6. Spec 016
+## 7. Spec 016
 
-The launch link (feature 016) is being specified in another session, on branch
-`worktree/remembered-setup-and-launch-links-fcf81b`. On 2026-11-11 that branch has no commits and no `specs/016-*`
-directory, so this research could not read its link format. Spec 018 depends on it by number only and repeats none of
-it. The agent docs section on launch links is written after 016 merges, and links to 016's description.
-
-## 7. Open questions for the maintainer
-
-1. **MCP or not** (spec FR-015). Recommended: no MCP; build the headless run and the docs page. Alternatives: add an
-   `agui-inspector mcp` stdio command with one tool over the same engine; or build nothing and write only the docs page.
-2. **Release** (FR-016). Recommended: 0.3.0, before #83. Alternative: after 0.3.0.
-3. **Live session** (FR-017). Recommended: out of scope; Export session is the way. Alternative: in scope, which needs a
-   constitution amendment to principle IV first.
-
-The plan (`speckit-plan`) starts only after these are answered.
+The launch link is in pull request #109, not merged on 2026-11-11. Its format: the URL fragment, `name=value` pairs with
+the keys `v`, `agent`, `endpoint`, `var.<name>`, `context` and `forwardedProps`. It fills the composer and never sends a
+message by itself, in every serving mode including embedded. Spec 018 refers to it only and repeats none of it.
