@@ -75,8 +75,8 @@ The build path from `src/headless` to `lib/`, the two core fixes, and a spike th
 
 **Independent test**: the command against a host that requires a header records a full run with the header and a 401 without it.
 
-- [ ] T021 [P] [US4] Add `packages/inspector/tests/headless/guarded-host.test.ts`: a small `node:http` server in the test answers 401 without `authorization: Basic <synthetic>` and serves the reference agent's plain scenario with it, at a path like `/agents/demo/stream`. A session with the header records the run; one without records a 401 exchange and `error`; the synthetic value is absent from every read and from the saved file.
-- [ ] T022 [US4] Run quickstart step 5 by hand against `examples/fastapi/app.py` and write the result (pass or what differed) under "Validation" at the end of `specs/018-agent-mcp/quickstart.md`. No code change expected; if one is needed, add a task here.
+- [x] T021 [P] [US4] Add `packages/inspector/tests/headless/guarded-host.test.ts`: a small `node:http` server in the test answers 401 without `authorization: Basic <synthetic>` and serves the reference agent's plain scenario with it, at a path like `/agents/demo/stream`. A session with the header records the run; one without records a 401 exchange and `error`; the synthetic value is absent from every read and from the saved file.
+- [x] T022 [US4] Run quickstart step 5 by hand against `examples/fastapi/app.py` and write the result (pass or what differed) under "Validation" at the end of `specs/018-agent-mcp/quickstart.md`. No code change expected; if one is needed, add a task here.
 
 ## Phase 6: User Story 5 - The agent hands the session to the developer (P3)
 
@@ -84,7 +84,7 @@ The build path from `src/headless` to `lib/`, the two core fixes, and a spike th
 
 **Independent test**: save headless, import in the page; export from the page, load headless; frames and findings equal.
 
-- [ ] T023 [P] [US5] Add `packages/inspector/tests/headless/load.test.ts`: `loadSession` on a file exported by the page's export path (`serializeSession` on a store filled by the runtime fixtures) has equal frames and findings; it has no step methods; a file that fails a check rejects with the page's `Import failed:` message; a headless file passes `parseSession`.
+- [x] T023 [P] [US5] Add `packages/inspector/tests/headless/load.test.ts`: `loadSession` on a file exported by the page's export path (`serializeSession` on a store filled by the runtime fixtures) has equal frames and findings; it has no step methods; a file that fails a check rejects with the page's `Import failed:` message; a headless file passes `parseSession`.
 - [ ] T024 [US5] After PR #109 (feature 016) merges, add the launch link section to the docs page of T030, linking to `website/content/docs/launch-links.mdx` without repeating its format. Until then the section says the link comes with feature 016.
 
 ## Phase 7: User Story 3 - A coding agent drives a session step by step (P2, milestone 3)

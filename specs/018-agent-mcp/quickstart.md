@@ -64,3 +64,12 @@ tests does the same without a model.
 ```bash
 npm run check:ci
 ```
+
+## Validation
+
+2026-11-12, T022, step 5 on macOS with Node 24.11.1 and uv 0.9.30: the FastAPI example on port 8018 with synthetic
+credentials. With the header, `run` exited 0 and the file held the example's five events (`RUN_STARTED`,
+`TEXT_MESSAGE_START`, `TEXT_MESSAGE_CONTENT`, `TEXT_MESSAGE_END`, `RUN_FINISHED`), with no trace of the password or of its
+Base64 form. Without the header, the exchange was recorded with status 401 and `run` exited 1. No code change was
+needed.
+
