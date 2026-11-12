@@ -155,3 +155,63 @@ test('--plugin is in the usage text, and a missing or empty value is a usage err
   assert.equal(failed(['--target', 'http://a.example', '--plugin', '']), '--plugin must name a file');
   assert.equal(failed(['--plugin', 'a.js']), '--target is required');
 });
+
+// Feature 018: the `run` command.
+function ran(argv: string[]): Extract<Cli, { kind: 'run' }> {
+  const cli = parseCli(argv);
+  assert.equal(cli.kind, 'run', cli.kind === 'error' ? cli.message : cli.kind);
+  return cli as Extract<Cli, { kind: 'run' }>;
+}
+
+test('run: one target with its headers, a message or an input, and the defaults', () => {
+  const cli = ran(['run', '--target', 'http://127.0.0.1:8787/agent', '--header', `Authorization: Bearer ${SECRET}`, '--message', 'hello']);
+  assert.equal(cli.target.url.href, 'http://127.0.0.1:8787/agent');
+  assert.deepEqual(headersOf(cli.target), [`Authorization: Bearer ${SECRET}`]);
+  assert.equal(cli.message, 'hello');
+  assert.equal(cli.input, undefined);
+  assert.equal(cli.timeoutMs, 60_000);
+  assert.equal(cli.out, undefined);
+  assert.equal(cli.force, false);
+  const other = ran(['run', '--target', 'http://a.example/', '--input', '-', '--profile', 'p.json', '--timeout', '5', '--out', 'f.json', '--force']);
+  assert.deepEqual([other.input, other.profile, other.timeoutMs, other.out, other.force], ['-', 'p.json', 5000, 'f.json', true]);
+  assert.deepEqual(parseCli(['run', '--help']), { kind: 'help', command: 'run' });
+});
+
+test('run: wrong combinations are refused with a message that names options only', () => {
+  assert.equal(failed(['run', '--message', 'hi']), '--target is required');
+  assert.equal(failed(['run', '--target', 'http://a.example/', '--target', 'http://b.example/', '--message', 'hi']), 'run takes one --target');
+  assert.equal(failed(['run', '--target', 'http://a.example/']), 'run needs --message or --input');
+  assert.equal(failed(['run', '--target', 'http://a.example/', '--message', 'hi', '--input', 'x.json']), 'run takes --message or --input, not both');
+  for (const timeout of ['0', '1.5', 'x', '01']) assert.equal(failed(['run', '--target', 'http://a.example/', '--message', 'hi', '--timeout', timeout]), '--timeout must be a whole number of seconds from 1');
+  assert.equal(failed(['run', '--target', 'http://a.example/', '--message', 'hi', '--timeout=-1']), '--timeout must be a whole number of seconds from 1');
+  assert.equal(failed(['run', '--target', 'http://a.example/', '--message', 'hi', '--force']), '--force needs --out');
+  assert.equal(failed(['run', '--target', 'http://a.example/', '--message', 'hi', '--port', '1']), 'unknown option "--port"');
+  assert.equal(failed(['run', '--target', 'http://a.example/', '--message', 'hi', '--plugin', 'p.js']), 'unknown option "--plugin"');
+  assert.equal(failed(['run', '--header', `x: ${SECRET}`, '--target', 'http://a.example/', '--message', 'hi']), '--header must come after the --target it belongs to');
+  assert.equal(failed(['run', '--target', `http://a.example/?k=${SECRET}`, '--message', 'hi']), '--target must not contain a query or a fragment; use --header for secrets');
+  assert.equal(failed(['run', '--target', 'http://a.example/', '--message', 'hi', 'extra']), 'unexpected argument; quote a --header value that has spaces');
+});
+
+test('run is a command; test and replay stay reserved', () => {
+  assert.equal(failed(['test']), 'unknown command "test"');
+  assert.equal(failed(['replay']), 'unknown command "replay"');
+  assert.match(USAGE, /agui-inspector run --target <url>/);
+});
+
+test('mcp: several targets with their headers, a profile and a timeout; refused options name only the option', () => {
+  const cli = parseCli(['mcp', '--target', 'http://a.example/agent', '--header', `x-a: ${SECRET}`, '--target', 'http://b.example/', '--profile', 'p.json', '--timeout', '9']);
+  assert.equal(cli.kind, 'mcp');
+  const mcp = cli as Extract<Cli, { kind: 'mcp' }>;
+  assert.deepEqual(mcp.targets.map((target) => [target.n, target.origin, headersOf(target)]), [
+    [1, 'http://a.example', [`x-a: ${SECRET}`]],
+    [2, 'http://b.example', []],
+  ]);
+  assert.equal(mcp.profile, 'p.json');
+  assert.equal(mcp.timeoutMs, 9000);
+  assert.deepEqual(parseCli(['mcp', '--help']), { kind: 'help', command: 'mcp' });
+  assert.equal(failed(['mcp']), '--target is required');
+  for (const option of ['--port', '--plugin', '--out', '--message', '--input']) assert.equal(failed(['mcp', '--target', 'http://a.example/', option, 'x']), `unknown option "${option}"`);
+  assert.equal(failed(['mcp', '--target', 'http://a.example/', '--timeout', '0']), '--timeout must be a whole number of seconds from 1');
+  assert.equal(failed(['mcp', '--target', 'http://a.example/', 'extra']), 'unexpected argument; quote a --header value that has spaces');
+  assert.match(USAGE, /agui-inspector mcp --target <url>/);
+});

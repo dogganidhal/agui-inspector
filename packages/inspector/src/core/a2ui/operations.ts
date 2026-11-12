@@ -2,9 +2,9 @@
 // a v0.9 operation declares `"version": "v0.9"`, and a v0.8 message declares nothing and holds one of its
 // four message names. Everything else is refused with its position, and the entry is never altered.
 // Framework-free; the session applies what this module sorts.
-import type { JsonValue } from '../../contracts';
-import type { A2uiVersion } from './catalogs';
-import type { SurfaceIssue } from './index';
+import type { JsonValue } from '../../contracts.ts';
+import type { A2uiVersion } from './catalogs.ts';
+import type { SurfaceIssue } from './index.ts';
 
 /** One entry of the list, sorted by version. `operation` is the entry as received. */
 export interface Entry {

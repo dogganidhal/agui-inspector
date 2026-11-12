@@ -141,9 +141,11 @@ The command sends no telemetry, checks for no update and makes no request except
 - Certificates of `https` targets are checked against the certificates Node.js trusts. There is no option to skip the check. To trust a development certificate or a private CA, set `NODE_EXTRA_CA_CERTS` to its file.
 - It does not open a browser. It prints the address.
 - It sets no theme, brand, preset or capability for the agents it lists. For those, use a [helper](./embedding.mdx) or the [static assets](./hosted.mdx). The one file it can serve for the page is a plugin.
-- A first argument that is not an option is reserved for commands that come later, such as `replay`. Today it stops the command with `unknown command "<name>"`.
+- The first argument can name a command: `run` or `mcp`, described below. Any other name is reserved for commands that come later, such as `replay`, and stops the command with `unknown command "<name>"`.
 
 ## Exit codes and output
+
+These are the codes of the command that serves the page. [`run`](#run-one-input) has its own.
 
 | Code | When |
 | --- | --- |
@@ -152,6 +154,53 @@ The command sends no telemetry, checks for no update and makes no request except
 | 2 | The arguments are wrong, a `--plugin` is not a readable file, or a target points at the command's own address. |
 
 `--help`, `--version` and the startup lines go to standard output. A usage error, a startup failure and the failures to reach a target go to standard error. The command logs nothing about requests.
+
+## Run one input
+
+`agui-inspector run` sends one input to one target without a browser, records it as the page does, and writes the session file. It serves no page, has no proxy and listens on no port: the command itself is the client. [Tests and coding agents](./tests-and-agents.mdx) shows how to use it.
+
+```bash
+npx agui-inspector run --target http://127.0.0.1:8787/agent --message "hello" --out session.json
+```
+
+| Option | What it does |
+| --- | --- |
+| `--target <url>` | The AG-UI endpoint. Exactly one. The same rules as above. |
+| `--header "<Name>: <value>"` | A header to send to the target before it. Repeat it for more. |
+| `--message <text>` | Sends this text as a user message. |
+| `--input <file>` | Sends this run input unchanged, even when it is not a valid run input. Use `-` for standard input. Text that is not JSON is refused. Give `--message` or `--input`, not both. |
+| `--profile <file>` | A client profile file exported from the page: automatic replies and the encoding. |
+| `--timeout <seconds>` | Stops capture after this long. The default is 60. |
+| `--out <file>` | Writes the session file here. Without it, the file goes to standard output. |
+| `--force` | Replaces an existing `--out` file. Without it, the command refuses and writes nothing. |
+
+The session file goes to standard output or `--out`. Standard error gets one line when the run could not complete, then this warning, then a summary line such as `5 frames, 0 findings`:
+
+```text
+The session file holds every frame and request body as received. They may contain personal or sensitive data, including a credential the target echoed. Headers are not in the file.
+```
+
+| Exit code | When |
+| --- | --- |
+| 0 | The run completed with no findings. |
+| 1 | The run could not complete: the target was unreachable, answered with a status that is not 2xx, hit the time limit, or was stopped with Ctrl+C. The file holds what arrived. |
+| 2 | The arguments are wrong, or `--input`, `--profile` or `--out` cannot be used. Nothing was sent or written. |
+| 3 | The run completed with findings. |
+
+No header value appears in the file, on standard output or on standard error.
+
+## MCP server
+
+`agui-inspector mcp` is an MCP server for a coding agent. It speaks JSON-RPC over standard input and output and listens on no port. Its tools open sessions against the targets you name, drive them, read them and save them. [Tests and coding agents](./tests-and-agents.mdx#give-a-coding-agent-an-mcp-server) lists the tools.
+
+| Option | What it does |
+| --- | --- |
+| `--target <url>` | An AG-UI endpoint the sessions may reach. Repeat it for more than one. Tools name targets by number. |
+| `--header "<Name>: <value>"` | A header to send to the target before it. Repeat it for more. No tool can set or read a header. |
+| `--profile <file>` | The client profile that sessions start with. |
+| `--timeout <seconds>` | Stops a run's capture after this long. The default is 60. |
+
+Standard output carries JSON-RPC messages only. The command exits with 0 when standard input closes, and closes every session first.
 
 ## Troubleshooting
 
@@ -163,6 +212,7 @@ The command sends no telemetry, checks for no update and makes no request except
 | A 502 that names an origin and a code | The command could not reach the target. `ECONNREFUSED` means nothing listens there. `ENOTFOUND` means the name is unknown. `DEPTH_ZERO_SELF_SIGNED_CERT` means the certificate is not trusted: see `NODE_EXTRA_CA_CERTS` above. |
 | `… is not an allowed destination` in the page | You typed the target's real address. Type the proxy path from the agent list, such as `/proxy/1/agent`. |
 | `the packaged inspector files are missing` | You run a source checkout that has not been built. Run `npm run build`. |
-| `unknown command "replay"` | Replay and the conformance suite are planned for 0.3.0. They are not in this release. |
+| `unknown command "replay"` | Replay and the conformance suite are planned for 0.3.0. They are not in this release. The commands of this release are `run` and `mcp`. |
+| `run` exits with 1 and `Could not complete the request` | The target is not reachable from this machine, or refused the connection. Check the URL and that the server runs. |
 
 For the page's own messages, see [Troubleshooting](./troubleshooting.mdx).

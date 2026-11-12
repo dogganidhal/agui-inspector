@@ -441,7 +441,7 @@ test('hosted: a target the browser blocks is a visible failure naming the rules,
   const { closed, site, remote } = servers;
   await open(page, servers, { mode: 'hosted', allow: [closed.origin], target: `${closed.origin}/agent` });
   await send(page, 'hello');
-  await expect(alert(page)).toContainText('The run request failed: The browser could not complete the request to ' + closed.origin);
+  await expect(alert(page)).toContainText('The run request failed: Could not complete the request to ' + closed.origin);
   await expect(alert(page)).toContainText('CORS');
   expect(closed.requests(), 'the preflight failed, so the run never reached the server').toEqual([]);
   expect(site.requests().concat(remote.requests()), 'nothing was retried through another origin').toEqual([]);

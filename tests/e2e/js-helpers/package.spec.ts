@@ -19,12 +19,14 @@ const entries = { './express': 'mountInspector', './hono': 'mountInspector', './
 
 const node = (args: string[]) => execFileSync(process.execPath, args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
 
-test('exports lists the static path and the three helpers, each with types and an ES module, and every target exists', () => {
+test('exports lists the static path, the three helpers and the headless sessions, each with types and an ES module, and every target exists', () => {
   expect(manifest.exports).toEqual({
     '.': './src/static-path.js',
     './express': { types: './lib/server/express.d.ts', default: './lib/server/express.js' },
     './hono': { types: './lib/server/hono.d.ts', default: './lib/server/hono.js' },
     './next': { types: './lib/server/next.d.ts', default: './lib/server/next.js' },
+    // Feature 018: agui-inspector/testing, an ES module only.
+    './testing': { types: './lib/headless/index.d.ts', default: './lib/headless/index.js' },
   });
   for (const name of ['express', 'hono', 'next']) {
     for (const extension of ['js', 'd.ts']) expect(readdirSync(path.join(packageDir, 'lib', 'server'))).toContain(`${name}.${extension}`);
@@ -43,12 +45,18 @@ test('the manifest adds no web framework and no peer dependency', () => {
   expect(manifest.optionalDependencies).toBeUndefined();
 });
 
-test('the compiled files import only node built-ins and their own files, with no .ts specifier left', () => {
+// The helpers and the command import no package. The headless sessions of feature 018 (lib/headless) run the page's core
+// (lib/core, lib/contracts.js), which imports the package's own declared dependencies, and nothing else.
+const usesCore = (file: string) => /^(headless|core)\//.test(file) || file === 'contracts.js';
+const declared = (specifier: string) => Object.keys(manifest.dependencies).some((name) => specifier === name || specifier.startsWith(`${name}/`));
+
+test('the compiled files import only node built-ins and their own files, the core only declared dependencies, with no .ts specifier left', () => {
   for (const file of readdirSync(path.join(packageDir, 'lib'), { recursive: true, encoding: 'utf8' }).filter((name) => name.endsWith('.js'))) {
     const text = readFileSync(path.join(packageDir, 'lib', file), 'utf8');
-    const specifiers = [...text.matchAll(/(?:from|import)\s+['"]([^'"]+)['"]/g)].map((match) => match[1] ?? '');
+    const specifiers = [...text.matchAll(/(?:from|import)\s*\(?\s*['"]([^'"]+)['"]/g)].map((match) => match[1] ?? '');
     for (const specifier of specifiers) {
-      expect(specifier.startsWith('node:') || /^\.\.?\/.*\.js$/.test(specifier), `${file} imports ${specifier}`).toBe(true);
+      const ok = specifier.startsWith('node:') || /^\.\.?\/.*\.js$/.test(specifier) || (usesCore(file.split(path.sep).join('/')) && declared(specifier));
+      expect(ok, `${file} imports ${specifier}`).toBe(true);
     }
   }
 });

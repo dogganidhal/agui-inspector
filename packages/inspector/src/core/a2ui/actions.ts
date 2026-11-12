@@ -2,7 +2,7 @@
 // the contract names, and nothing a surface asks for reaches outside the page.
 import { OpenUrlApi, createFunctionImplementation, type ActionPayload, type FunctionImplementation } from '@a2ui/web_core/v0_9';
 import type { ClientToServerMessage } from '@a2ui/web_core/types/client-event';
-import type { A2uiAction, JsonObject } from '../../contracts';
+import type { A2uiAction, JsonObject } from '../../contracts.ts';
 
 /** What was refused: a media component's source, or an `openUrl` call. */
 export interface BlockedResource {

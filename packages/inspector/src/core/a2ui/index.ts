@@ -12,10 +12,10 @@ import {
   type SurfaceModel,
 } from '@a2ui/web_core/v0_9';
 import { A2uiMessageSchema } from '@a2ui/web_core/v0_8';
-import type { A2uiAction, CatalogAliases, JsonValue, Unsubscribe } from '../../contracts';
-import { blockedMessage, toA2uiAction, type ReportBlocked } from './actions';
-import { BASIC_V09, STANDARD_V08, catalogIds, resolves } from './catalogs';
-import { classify, surfaceKey, type Entry } from './operations';
+import type { A2uiAction, CatalogAliases, JsonValue, Unsubscribe } from '../../contracts.ts';
+import { blockedMessage, toA2uiAction, type ReportBlocked } from './actions.ts';
+import { BASIC_V09, STANDARD_V08, catalogIds, resolves } from './catalogs.ts';
+import { classify, surfaceKey, type Entry } from './operations.ts';
 
 /** The activity type that carries A2UI operations. Every other type stays JSON. */
 export const A2UI_ACTIVITY_TYPE = 'a2ui-surface';

@@ -292,6 +292,9 @@ that is not an option. Check output and exit codes.
   in this feature, so such an argument stops the command with `unknown command "<name>"` and exit code 2. Options without
   a command MUST keep their meaning when commands are added later. A stray argument anywhere else MUST be a usage error
   that does not echo it, because it can be the rest of an unquoted header value. This feature builds no subcommand.
+  *Note, 2026-11-12: [feature 018](../018-agent-mcp/spec.md) (approved by the maintainer for 0.3.0) adds the commands
+  `run` and `mcp`. Without a command name the command serves the page as this feature defines. `test` and `replay` stay
+  reserved.*
 - **FR-004**: A target MUST be an absolute `http` or `https` URL with a host, and MUST have no credentials, no query and
   no fragment. A target that breaks a rule MUST stop the command before it listens, with a message that names `--target`
   and the rule and does not echo the URL.
@@ -345,6 +348,10 @@ that is not an option. Check output and exit codes.
   to standard error. It MUST NOT log requests, paths, queries, headers or bodies.
 - **FR-016**: The command MUST NOT make any request other than the relays of FR-009, and MUST NOT check for updates, send
   telemetry or contact any third party. It MUST add no cookie, session or file storage of its own.
+  *Note, 2026-11-12: this requirement governs the command serving the page, which this feature defines.
+  [Feature 018](../018-agent-mcp/spec.md) adds `run` and `mcp`, which have no page and no relay: they reach their named
+  targets directly and write a session file only where the caller asks. Its FR-023, FR-037 and FR-043 govern them. Neither
+  checks for updates, sends telemetry or contacts a third party.*
 - **FR-017**: A target whose host is loopback and whose port equals the command's own port MUST stop the command at
   startup with a message that names `--target` and exit code 2.
 - **FR-018**: On `SIGINT` or `SIGTERM` the command MUST stop listening, close its open connections, including relays in

@@ -33,6 +33,10 @@
     "./next": {
       "types": "./lib/server/next.d.ts",
       "default": "./lib/server/next.js"
+    },
+    "./testing": {
+      "types": "./lib/headless/index.d.ts",
+      "default": "./lib/headless/index.js"
     }
   },
   "typesVersions": {

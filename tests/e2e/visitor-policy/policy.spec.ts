@@ -405,7 +405,7 @@ test('a target that does not grant CORS fails visibly in the browser; the inspec
   const site = await openSite({ hosting: () => OPTED_IN, config: (o) => ({ version: 0, agents: [{ id: 'closed', name: 'Closed', url: `${o.closed.origin}/agent` }] }) });
   await open(page, site);
   await send(page, 'hello');
-  const alert = page.getByRole('alert').filter({ hasText: 'The browser could not complete the request' });
+  const alert = page.getByRole('alert').filter({ hasText: 'Could not complete the request' });
   await expect(alert).toContainText(`to ${site.closed.origin}`);
   await expect(alert).toContainText('CORS');
   await expect(alert).toContainText('does not proxy or bypass');

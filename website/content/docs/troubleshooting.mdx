@@ -30,9 +30,9 @@ These messages mean nothing reached your server. A page fixes the destinations i
 
 On a page that allows visitor targets, the inspector refuses plain `http` to any host other than `localhost` or `127.0.0.1`. It also refuses other loopback addresses such as `127.0.0.2`, names such as `foo.localhost`, and IPv6 addresses such as `http://[::1]:8787`. See [visitor-chosen targets](./hosted.mdx#visitor-chosen-targets).
 
-## The browser could not complete the request
+## Could not complete the request
 
-"The browser could not complete the request to `<origin>`" means the browser blocked the request or could not reach the server. The browser tells the page only that the fetch failed. So the inspector lists the likely causes, keeps the exchange as `failed` with a `transport` finding, and sends nothing else. Open your browser's developer tools: the console and the network panel show the real cause.
+"Could not complete the request to `<origin>`" means the server could not be reached or, in the page, the browser blocked the request. The browser tells the page only that the fetch failed. So the inspector lists the likely causes, keeps the exchange as `failed` with a `transport` finding, and sends nothing else. Open your browser's developer tools: the console and the network panel show the real cause.
 
 Check, in this order:
 
