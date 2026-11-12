@@ -11,7 +11,7 @@ agui-inspector run --target <url> [--header "<Name>: <value>"]...
 | `--target` | One target, feature 005 rules. Exactly one. |
 | `--header` | After `--target`, feature 005 rules. Values are never printed. |
 | `--message` | Send this text as a user message. |
-| `--input` | A run input as JSON text from a file, or `-` for standard input. Sent unchanged, valid or not. |
+| `--input` | A run input as JSON text from a file, or `-` for standard input. Sent unchanged, even when it is not a valid run input. Text that is not JSON is refused (exit 2). |
 | `--profile` | A client profile file: automatic replies, their limit, encoding. |
 | `--timeout` | Seconds before capture is stopped. Default 60. |
 | `--out` | Write the session file here. Without it, the file goes to standard output. |

@@ -214,8 +214,9 @@ Headless session (milestone 1)
 
 - **FR-001**: The npm package MUST offer a headless session that runs outside a browser and uses the same recording,
   frame reading, protocol checks, client behavior and session format as the page.
-- **FR-002**: A session MUST be able to: send a message; send a run input unchanged, valid or not; resolve or cancel an
-  interrupt; return a client tool result; fire an action on an A2UI v0.9 component; stop the current capture.
+- **FR-002**: A session MUST be able to: send a message; send a run input as JSON unchanged, valid against the protocol
+  schema or not (text that is not JSON is refused, as in the page); resolve or cancel an interrupt; return a client tool
+  result; fire an action on an A2UI v0.9 component; stop the current capture.
 - **FR-003**: A session MUST be able to report: exchanges and frames as received; findings with rule ids; the
   conversation as the page projects it (messages, tool calls, interrupts, activities, subagent runs); the state and its
   history; A2UI v0.9 surfaces with components and data model; what is pending (interrupts, tool calls).

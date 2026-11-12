@@ -40,8 +40,8 @@ What a step returns once the session is idle or the limit passed.
 
 | Field | Meaning |
 | --- | --- |
-| `interrupts` | `{ id, reason?, payload? }` for each unanswered interrupt of the latest run. |
-| `toolCalls` | `{ id, name, arguments }` for each client tool call without a result. |
+| `interrupts` | `{ id, reason?, message?, responseSchema? }` for each unanswered interrupt, with the reason and message the run declared. |
+| `toolCalls` | `{ id, name, argumentsText, arguments? }` for each client tool call without a result; `arguments` when the text is valid JSON. |
 | `notice` | The runtime's notice, such as the automatic-reply limit. |
 
 ## SurfaceView
@@ -50,11 +50,12 @@ A2UI v0.9 surface as the session holds it.
 
 | Field | Meaning |
 | --- | --- |
+| `activityId` | The activity message that carries the surface. |
 | `surfaceId` | From the stream. |
-| `catalogId` | The catalog the surface resolved against, after aliases. |
-| `components` | `{ id, type, props }` with properties resolved against the data model. |
+| `catalogId` | The catalog id the stream's `createSurface` named, an alias included. |
+| `components` | `{ id, type, props }`. A `{ path }` binding reads from the data model; other values stay as sent, so reading never runs a function. |
 | `dataModel` | The surface's data model. |
-| `issues` | Problems the lifecycle reported (refused resources, unknown components). |
+| `issues` | Problems the surface session reported: a refused `openUrl`, surface errors. |
 
 ## MCP session registry (milestone 3)
 

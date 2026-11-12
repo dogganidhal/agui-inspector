@@ -31,7 +31,7 @@ what the target sent; it rejects only for a wrong argument (unknown interrupt id
 
 ```ts
 session.send(text: string): Promise<Step>
-session.sendRaw(json: string): Promise<Step>            // sent unchanged, valid or not
+session.sendRaw(json: string): Promise<Step>            // JSON sent unchanged, a schema-invalid run input included; text that is not JSON is refused, as in the page
 session.answerInterrupt(id: string, status: 'resolved' | 'cancelled', payload?: JsonValue): Promise<Step>
 session.submitToolResult(toolCallId: string, result: string): Promise<Step>
 session.a2ui.set(surfaceId: string, path: string, value: JsonValue): void   // data model only, no request

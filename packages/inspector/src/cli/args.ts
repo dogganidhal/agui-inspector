@@ -1,8 +1,8 @@
 // The command line of `agui-inspector` (feature 005): the options, the rules for targets and headers, and the usage text.
 // Pure, with no I/O. A message is fixed text with at most an option name, never a value the developer typed: a header
 // value or the password of a target URL must not reach a terminal or a log.
-import { validateHeaderValue } from 'node:http';
 import { parseArgs } from 'node:util';
+import { checkHeader, checkTarget } from '../headless/target.ts';
 
 export const DEFAULT_PORT = 4747;
 
@@ -48,13 +48,13 @@ export type Cli =
 
 type Result<T> = { readonly ok: true; readonly value: T } | { readonly ok: false; readonly message: string };
 
-const TOKEN = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
-// The proxy sets these itself, so a header of the same name from the command line would fight it.
-const SET_BY_PROXY = new Set(['host', 'content-length', 'transfer-encoding', 'connection']);
-
 const HEADER_FORM = '--header must be "Name: value" with a nonempty value';
 const HEADER_RESERVED = '--header must not set Host, Content-Length, Transfer-Encoding or Connection';
-const TARGET_FORM = '--target must be an absolute http or https URL';
+const TARGET_PROBLEMS = {
+  form: '--target must be an absolute http or https URL',
+  credentials: '--target must not contain credentials; use --header',
+  query: '--target must not contain a query or a fragment; use --header for secrets',
+} as const;
 
 /** The option a `parseArgs` error is about, and nothing else from it: its text can quote what was typed. */
 function optionProblem(error: unknown): string {
@@ -68,27 +68,15 @@ function parseHeader(raw: string): Result<HeldHeader> {
   const colon = raw.indexOf(':');
   const name = raw.slice(0, colon);
   const value = raw.slice(colon + 1).trim();
-  if (colon < 1 || !TOKEN.test(name) || value === '') return { ok: false, message: HEADER_FORM };
-  if (SET_BY_PROXY.has(name.toLowerCase())) return { ok: false, message: HEADER_RESERVED };
-  try {
-    validateHeaderValue(name, value);
-  } catch {
-    return { ok: false, message: HEADER_FORM };
-  }
+  const problem = colon < 1 ? 'form' : checkHeader(name, value);
+  if (problem !== undefined) return { ok: false, message: problem === 'reserved' ? HEADER_RESERVED : HEADER_FORM };
   return { ok: true, value: { name, value } };
 }
 
 function parseTarget(raw: string, n: number, rawHeaders: readonly string[]): Result<Target> {
-  let url: URL;
-  try {
-    url = new URL(raw);
-  } catch {
-    return { ok: false, message: TARGET_FORM };
-  }
-  if (url.protocol !== 'http:' && url.protocol !== 'https:') return { ok: false, message: TARGET_FORM };
-  // A credential or a token in the URL would be written into `config.json`, so it is refused. `--header` is the way.
-  if (url.username !== '' || url.password !== '') return { ok: false, message: '--target must not contain credentials; use --header' };
-  if (raw.includes('?') || raw.includes('#')) return { ok: false, message: '--target must not contain a query or a fragment; use --header for secrets' };
+  const checked = checkTarget(raw);
+  if (!checked.ok) return { ok: false, message: TARGET_PROBLEMS[checked.problem] };
+  const { url } = checked;
 
   const headers = new Map<string, HeldHeader>();
   for (const text of rawHeaders) {
