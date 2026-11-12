@@ -1,0 +1,130 @@
+---
+title: Saved setup and launch links
+description: What the page keeps across a reload, and links that open the inspector with everything filled in.
+---
+
+The page keeps your setup when you reload it. A launch link opens the page with an agent, its variables, the context, the forwarded properties and a message already filled in. You check them and press send.
+
+## What a reload keeps
+
+The page saves these in browser storage, beside the [client profile](./configuration.mdx#profile-file-and-browser-storage) and the light or dark choice:
+
+- the agent you selected, or the endpoint you typed and applied;
+- the values of that agent's [preset variables](./presets.mdx#variables), such as `userId`.
+
+It saves them when you change them. On the next start it selects the same agent or endpoint and fills in the same values.
+
+The page never saves the token, the header name, the thread, the conversation or the text in the message box. A reload clears all of them, as before.
+
+A saved value that no longer fits is dropped with a configuration warning, and the rest applies:
+
+- the agent is no longer in the configuration, so the first agent is selected;
+- the endpoint is no longer allowed by the page, so the first agent is selected;
+- a variable is no longer declared by the agent, or has the wrong kind of value.
+
+If the browser blocks storage, the page works and remembers nothing. To forget the saved setup, clear the site's data in your browser. Browser storage belongs to the origin, so every inspector page on one origin shares it.
+
+The saved endpoint is kept as you typed it. Do not put a secret in an endpoint URL. Type it in the [token field](./runs.mdx#the-token).
+
+## Launch links
+
+A launch link is the address of the inspector page with launch values after `#`:
+
+```text
+http://127.0.0.1:4747/#agent=target-1&message=Hello
+```
+
+The browser never sends the part after `#` to the server. The message and the context stay out of server and proxy logs.
+
+Use this when a coding agent or a script prepares a run for you. The agent builds the link, you open it, read what it filled in, and press send.
+
+### Keys
+
+Every key is optional. Write each key once.
+
+| Key | Value | What it does |
+| --- | --- | --- |
+| `v` | `0` | The format version. Leave it out or write `0`. |
+| `agent` | An agent id from the configuration | Selects that agent. |
+| `endpoint` | A URL or a path | Uses that endpoint, as if you typed it and pressed Use endpoint. |
+| `var.<name>` | Text | Sets the selected agent's variable `<name>`. A `json` variable reads the text as JSON. |
+| `context` | A JSON list of `{ "description", "value" }` | Replaces the profile's context. |
+| `forwardedProps` | A JSON object | Replaces the profile's forwarded properties. |
+| `message` | Text | Puts the text in the message box. |
+
+A link names `agent` or `endpoint`, not both. Variables need an agent, because an endpoint has no preset.
+
+Write the values the way `URLSearchParams` writes them, so a space is `+` or `%20`. Build the link with the platform instead of by hand:
+
+```js
+const params = new URLSearchParams({
+  agent: 'support',
+  'var.userId': '42',
+  context: JSON.stringify([{ description: 'locale', value: 'fr-FR' }]),
+  forwardedProps: JSON.stringify({ tenant: 'acme' }),
+  message: 'Book a table for two',
+});
+const link = `http://127.0.0.1:4747/#${params}`;
+```
+
+```python
+from urllib.parse import urlencode
+import json
+
+params = urlencode({
+    "agent": "support",
+    "var.userId": "42",
+    "context": json.dumps([{"description": "locale", "value": "fr-FR"}]),
+    "message": "Book a table for two",
+})
+link = f"http://localhost:8000/agui-inspector/#{params}"
+```
+
+### Where to point a link
+
+| How the inspector runs | Page address |
+| --- | --- |
+| The [command](./cli.mdx) | `http://127.0.0.1:4747/`. The agents are `target-1`, `target-2` and so on. |
+| The [Python, Express, Hono or Next.js helper](./embedding.mdx) | The mount path, `/agui-inspector/` by default, on your server. |
+| A [hosted page](./hosted.mdx) | The page's address. |
+| The [public demo](./demo.mdx) | `https://dogganidhal.github.io/agui-inspector/`. Only `message` is useful there. |
+
+### What the page does with a link
+
+The page reads the link once, when it starts:
+
+1. It applies the values. A link value wins over the saved setup and the saved profile. A value the link does not set comes from the saved setup, then from the configuration's defaults. A link that selects another agent than the saved one starts from that agent's default variables.
+2. It saves what it applied, as if you had chosen it by hand. The message is not saved.
+3. It removes the link from the address bar. A reload then shows the saved setup with an empty message box.
+4. It shows a notice under the top bar that lists the keys the link set. Check those values before you send.
+
+The page never sends anything because of a link. It makes no run and no preparation request until you press send.
+
+If you paste a new link into a tab that already shows the inspector, the page starts again and applies it. As with a reload, the token and the conversation on screen are cleared.
+
+### Warnings
+
+A bad key or value is dropped with a warning marked "Link". The rest of the link applies and the page starts. A warning names the key and never shows its value.
+
+| Problem | Result |
+| --- | --- |
+| An unknown key, or a key written twice | That key is ignored. |
+| `agent` and `endpoint` together | Both are ignored. |
+| An agent id that is not configured | The saved or first agent stays. |
+| An endpoint the page may not reach, or with `user:password@` | The saved or first agent stays. The warning gives the same reason a typed endpoint gets. |
+| A variable the agent does not declare, or a variable with an endpoint | That variable is ignored. |
+| JSON that does not parse, or that the profile does not accept | That key is ignored, and the saved value stays. |
+| A version other than `0` | The whole link is ignored. |
+| A link longer than 65,536 characters | The whole link is ignored. |
+
+### Security
+
+A link can come from anyone, so the page limits what it can do.
+
+- A link carries no credentials. `token`, `auth`, `authorization`, `header`, `headers` and keys that start with `header.` are refused, and their values reach no storage, recording, export or request. Type a token in the [token field](./runs.mdx#the-token).
+- A link can only point the page at an endpoint you could type yourself. It does not change the [allowed destinations](./hosted.mdx) or the content security policy, name another configuration file, or load a plugin.
+- A link never sends a message. An embedded page sends runs with your session cookies, so a link that sent by itself would let any website start a run in your name.
+- A link can fill in a message, context or forwarded properties you did not write. Read the notice and the values before you press send.
+- Values are text or JSON. The page shows them as text and never runs them.
+
+The format is version 0. A version-0 link keeps opening the same way in later releases.

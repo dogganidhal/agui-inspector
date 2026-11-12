@@ -283,3 +283,27 @@ test('markup in a plugin message is shown as text', () => {
   assert.ok(markup.includes('&lt;img src=x onerror=alert(1)&gt;'));
   assert.doesNotMatch(markup, /<img src=x/);
 });
+
+// Spec 016: what a launch link set shows in the page, and the message is only filled in.
+test('a launch link fills the composer and names the keys it set in a Link notice', () => {
+  const { markup, calls } = build({ launch: { message: 'Book a table for two', keys: ['agent', 'var.userId', 'message'], warnings: [] } });
+  assert.ok(markup.includes('>Book a table for two</textarea>'));
+  assert.match(markup, /aria-label="Configuration warnings"/);
+  assert.ok(markup.includes('<b>Link</b>'));
+  assert.ok(markup.includes('This page was set up from a link: agent, var.userId, message. Check these values before you send.'));
+  assert.deepEqual(calls, []);
+});
+
+test('link warnings show as Link warnings beside the configuration ones', () => {
+  const { markup } = build({ warnings: ['theme.light: bad'], launch: { keys: [], warnings: ['agent: no configured agent has this id; it was ignored'] } });
+  assert.ok(markup.includes('agent: no configured agent has this id; it was ignored'));
+  assert.ok(markup.includes('theme.light: bad'));
+  assert.ok(!markup.includes('This page was set up from a link'));
+  assert.ok(markup.includes('></textarea>'));
+});
+
+test('without a launch link the composer is empty and there is no Link notice', () => {
+  const { markup } = build();
+  assert.ok(!markup.includes('<b>Link</b>'));
+  assert.ok(!markup.includes('aria-label="Configuration warnings"'));
+});

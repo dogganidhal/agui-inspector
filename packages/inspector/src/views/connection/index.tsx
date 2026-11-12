@@ -30,6 +30,8 @@ export interface ConnectionViewExtras {
   readonly mode?: DeploymentMode;
   /** The agent picker, drawn before the endpoint field. The assembly supplies it, since agents belong to settings. */
   readonly agentPicker?: ReactNode;
+  /** The composer's starting text: the message of a launch link (spec 016). It is only filled in, never sent. */
+  readonly initialText?: string;
 }
 
 const pretty = (value: JsonValue): string => JSON.stringify(value, null, 2) ?? '';
@@ -155,9 +157,9 @@ export function TargetControls({ connection, mode, agentPicker, onChangeTarget, 
 // Composer
 // ---------------------------------------------------------------------------------------------
 
-export function Composer({ running, quickMessages, notice, capturing, onSend, onStop, onNewThread, error }: Pick<ConnectionViewProps, 'running' | 'quickMessages' | 'onSend' | 'onStop' | 'onNewThread' | 'error'> & Pick<ConnectionViewExtras, 'notice' | 'capturing'>): ReactElement {
+export function Composer({ running, quickMessages, notice, capturing, initialText, onSend, onStop, onNewThread, error }: Pick<ConnectionViewProps, 'running' | 'quickMessages' | 'onSend' | 'onStop' | 'onNewThread' | 'error'> & Pick<ConnectionViewExtras, 'notice' | 'capturing' | 'initialText'>): ReactElement {
   const boxId = useId();
-  const [text, setText] = useState('');
+  const [text, setText] = useState(initialText ?? '');
   const sent = useRef(false);
   const wasRunning = useRef(false);
 

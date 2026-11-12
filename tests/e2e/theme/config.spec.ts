@@ -266,7 +266,8 @@ for (const scheme of ['light', 'dark'] as const) {
     await page.emulateMedia({ colorScheme: scheme });
 
     /** Opens the three floating layers in turn and reads how each looks and where it sits. */
-    const layers = async () => {
+    // The page remembers an applied endpoint across a reload (spec 016), so each round applies a different one.
+    const layers = async (endpoint: string) => {
       const read = (selector: string) =>
         page.locator(selector).first().evaluate((element) => {
           const style = getComputedStyle(element);
@@ -279,7 +280,7 @@ for (const scheme of ['light', 'dark'] as const) {
       const popover = await read('[popover]:popover-open');
       await page.getByRole('textbox', { name: 'Token' }).fill('synthetic-token-7f3a91');
       await page.keyboard.press('Escape');
-      await page.getByRole('textbox', { name: 'Endpoint URL' }).fill(`${site.agent.origin}/agent?other=1`);
+      await page.getByRole('textbox', { name: 'Endpoint URL' }).fill(`${site.agent.origin}/agent?${endpoint}`);
       await page.getByRole('button', { name: 'Use endpoint' }).click();
       await expect(page.getByText('Token cleared')).toBeVisible();
       const toast = await read('.agui-toast');
@@ -293,7 +294,7 @@ for (const scheme of ['light', 'dark'] as const) {
 
     await page.goto(site.page.origin);
     await expect(page.getByRole('heading', { name: 'agui-inspector', level: 1 })).toBeVisible();
-    const plain = await layers();
+    const plain = await layers('other=1');
     const plainShell = await look(page);
     expect([plain.popover.inMount, plain.toast.inMount, plain.dialog.inMount], 'every floating layer is a descendant of the mount').toEqual([true, true, true]);
 
@@ -309,7 +310,7 @@ for (const scheme of ['light', 'dark'] as const) {
     expect(await look(page)).toEqual(plainShell);
     expect(await page.evaluate(() => getComputedStyle(document.getElementById('root') as HTMLElement).getPropertyValue('--bg').trim())).not.toBe('rgb(255, 0, 0)');
 
-    const hostile = await layers();
+    const hostile = await layers('other=2');
     expect(hostile.popover).toEqual(plain.popover);
     expect(hostile.toast).toEqual(plain.toast);
     expect(hostile.dialog).toEqual(plain.dialog);

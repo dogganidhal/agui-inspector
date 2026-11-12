@@ -13,6 +13,7 @@ import { createRoot, type Root as ReactRoot } from 'react-dom/client';
 import type { A2uiAction, AppProps, BrandConfig, ClientProfileSettings, DeploymentMode, EvidenceTarget, InspectionSession, SessionStore } from '../contracts';
 import { declaredOf, loadCapabilities } from '../core/config/index';
 import { exportProfile, importProfile, saveProfile, type StorageLike } from '../core/profiles/index';
+import { saveSetup } from '../core/setup/index';
 import type { PluginHost } from '../core/plugins/index';
 import { publishChunkExpansions, type ActivityEntry, type CustomEntry } from '../core/projection/index';
 import { guardedFetchText } from '../core/runtime/index';
@@ -32,7 +33,7 @@ import './app.css';
 import { Brand, type LogoField } from './brand';
 import { PaneBoundary, describeError } from './boundary';
 import { PluginSlot } from './plugin-slot';
-import { startPage, type StartupEnvironment, type Started } from './startup';
+import { startPage, type Launch, type StartupEnvironment, type Started } from './startup';
 import { saveThemeChoice } from './theme-choice';
 
 // ---------------------------------------------------------------------------------------------
@@ -68,6 +69,8 @@ export interface AppExtras {
   readonly brand?: BrandConfig;
   /** Where the theme switch remembers its choice. Without it the choice lasts until a reload. */
   readonly storage?: StorageLike;
+  /** What a launch link set (spec 016): the composer's starting text, the notice and the Link warnings. */
+  readonly launch?: Launch;
 }
 
 type Pane = 'conversation' | 'inspection';
@@ -123,11 +126,13 @@ function ThemeSwitch({ storage }: { storage?: StorageLike }): ReactElement {
  * The app shell: a fixed top bar above two panes that scroll on their own, conversation left and
  * inspection right. Under 960 px one pane shows and a segmented control switches between them.
  */
-export function App({ settings, connection, conversation, inspection, mode, allowedOrigins = [], allowVisitorTargets = false, brand, capabilities, capturing, notice, onPaneError, pluginWarnings = [], plugins = 0, recording, renderActivity, renderCustom, storage, warnings: configWarnings = [] }: AppProps & AppExtras): ReactElement {
+export function App({ settings, connection, conversation, inspection, mode, allowedOrigins = [], allowVisitorTargets = false, brand, capabilities, capturing, launch, notice, onPaneError, pluginWarnings = [], plugins = 0, recording, renderActivity, renderCustom, storage, warnings: configWarnings = [] }: AppProps & AppExtras): ReactElement {
   const [pane, setPane] = useState<Pane>('conversation');
   // A logo that does not load shows the default mark and a warning, so a missing file is not a silent no-op.
   const [failedLogos, setFailedLogos] = useState<readonly LogoField[]>([]);
   const warnings = [...configWarnings, ...failedLogos.map((field) => `brand.${field} could not be loaded; the default mark is shown`)];
+  const linkWarnings = launch?.warnings ?? [];
+  const linkKeys = launch?.keys ?? [];
   const [tab, setTab] = useState<Tab>('inspection');
   const [reveal, setReveal] = useState<EvidenceTarget>();
   // One navigation action for every run id and frame reference. It selects the inspection pane and tab; the frames
@@ -155,8 +160,18 @@ export function App({ settings, connection, conversation, inspection, mode, allo
         <ThemeSwitch {...(storage !== undefined && { storage })} />
       </header>
 
-      {(warnings.length > 0 || pluginWarnings.length > 0) && (
+      {(warnings.length > 0 || pluginWarnings.length > 0 || linkWarnings.length > 0 || linkKeys.length > 0) && (
         <div className="agui-app-warnings" role="status" aria-label="Configuration warnings" data-view="warnings">
+          {linkKeys.length > 0 && (
+            <Finding variant="neutral" kind="Link">
+              This page was set up from a link: {linkKeys.join(', ')}. Check these values before you send.
+            </Finding>
+          )}
+          {linkWarnings.map((warning) => (
+            <Finding key={`link:${warning}`} variant="warn" kind="Link">
+              {warning}
+            </Finding>
+          ))}
           {warnings.map((warning) => (
             <Finding key={`configuration:${warning}`} variant="warn" kind="Configuration">
               {warning}
@@ -198,6 +213,7 @@ export function App({ settings, connection, conversation, inspection, mode, allo
                 onSend={connection.onSend}
                 onStop={connection.onStop}
                 onNewThread={connection.onNewThread}
+                {...(launch?.message !== undefined && { initialText: launch.message })}
                 {...(connection.error !== undefined && { error: connection.error })}
                 {...(notice !== undefined && { notice })}
                 {...(capturing !== undefined && { capturing })}
@@ -356,6 +372,11 @@ function Root({ started, storage }: { started: Started; storage?: StorageLike })
   /** Nothing is sent while a recording is open; the user is told why, once. */
   const sending = <A extends unknown[]>(action: (...args: A) => void) => (...args: A) => (recording ? toast(RECORDING_NOTICE) : action(...args));
 
+  /** The selection and its variables, remembered for the next start (spec 016). Never a token or a header. */
+  const remember = (setup: Parameters<typeof saveSetup>[1]) => {
+    if (storage !== undefined) saveSetup(storage, setup);
+  };
+
   const changeProfile = useCallback(
     (next: ClientProfileSettings) => {
       settings.profile = next;
@@ -381,6 +402,7 @@ function Root({ started, storage }: { started: Started; storage?: StorageLike })
     plugins: plugins.count(),
     ...(storage !== undefined && { storage }),
     ...(started.brand !== undefined && { brand: started.brand }),
+    ...(started.launch !== undefined && { launch: started.launch }),
     // The A2UI view first: its activity type belongs to the A2UI renderer packages, and a plugin cannot claim it.
     renderActivity: (entry) => a2uiActivity(entry, { renderEnabled: profile.renderA2ui, onAction, ...(started.catalogAliases !== undefined && { catalogAliases: started.catalogAliases }) }) ?? pluginActivity(plugins, entry),
     renderCustom: (entry) => pluginCustom(plugins, entry),
@@ -396,6 +418,7 @@ function Root({ started, storage }: { started: Started; storage?: StorageLike })
         if (next === undefined) return;
         resetVariables();
         setSelectedId(id);
+        remember({ agent: id });
         const cleared = runtime.selectAgent(next);
         // Selecting clears the old declaration. Picking the agent again after a typed endpoint changes no state above.
         runtime.setDeclaredCapabilities(declaredOf(next, loaded));
@@ -405,6 +428,7 @@ function Root({ started, storage }: { started: Started; storage?: StorageLike })
       onChangeVariable(name, value) {
         settings.variables = { ...settings.variables, [name]: value };
         setVariables(settings.variables);
+        if (selectedId !== undefined) remember({ agent: selectedId, variables: settings.variables });
       },
       onImportProfile(text) {
         const imported = importProfile(text);
@@ -424,6 +448,8 @@ function Root({ started, storage }: { started: Started; storage?: StorageLike })
         resetVariables();
         setSelectedId(undefined);
         targetChanged(runtime.setTarget(url));
+        // Only an endpoint the page may use is remembered; a refused one shows its error and is forgotten on reload.
+        if (runtime.getState().error === undefined) remember({ endpoint: url });
       },
       onChangeAuth: runtime.setAuth,
       onSend: sending((text) => void runtime.send(text)),
@@ -516,9 +542,17 @@ function browserStorage(): StorageLike | undefined {
 /** Starts the page and renders it. Returns once the first render is queued. */
 export async function mountApp(container: Element, env: StartupEnvironment): Promise<ReactRoot> {
   const root = createRoot(container);
-  const started = await startPage(env);
-  // Before the first render, so the page never paints with the defaults and then jumps.
   const view = env.document.defaultView;
+  // A launch link (spec 016) is read once and taken out of the address bar without a history entry, so a reload
+  // shows the saved setup and does not apply it again. A new fragment pasted into this tab later starts the page
+  // again, so it goes through the same checks as a fresh open.
+  const fragment = env.launch ?? view?.location.hash ?? '';
+  if (view !== null && view.location.hash !== '') view.history.replaceState(view.history.state, '', `${view.location.pathname}${view.location.search}`);
+  view?.addEventListener('hashchange', () => {
+    if (view.location.hash.length > 1) view.location.reload();
+  });
+  const started = await startPage({ ...env, ...(fragment.length > 1 && { launch: fragment }) });
+  // Before the first render, so the page never paints with the defaults and then jumps.
   if (started.ok && view !== null) applyTheme(env.document.documentElement, started.theme, view);
   root.render(
     <StrictMode>
