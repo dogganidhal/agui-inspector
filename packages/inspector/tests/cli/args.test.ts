@@ -197,3 +197,21 @@ test('run is a command; test and replay stay reserved', () => {
   assert.equal(failed(['replay']), 'unknown command "replay"');
   assert.match(USAGE, /agui-inspector run --target <url>/);
 });
+
+test('mcp: several targets with their headers, a profile and a timeout; refused options name only the option', () => {
+  const cli = parseCli(['mcp', '--target', 'http://a.example/agent', '--header', `x-a: ${SECRET}`, '--target', 'http://b.example/', '--profile', 'p.json', '--timeout', '9']);
+  assert.equal(cli.kind, 'mcp');
+  const mcp = cli as Extract<Cli, { kind: 'mcp' }>;
+  assert.deepEqual(mcp.targets.map((target) => [target.n, target.origin, headersOf(target)]), [
+    [1, 'http://a.example', [`x-a: ${SECRET}`]],
+    [2, 'http://b.example', []],
+  ]);
+  assert.equal(mcp.profile, 'p.json');
+  assert.equal(mcp.timeoutMs, 9000);
+  assert.deepEqual(parseCli(['mcp', '--help']), { kind: 'help', command: 'mcp' });
+  assert.equal(failed(['mcp']), '--target is required');
+  for (const option of ['--port', '--plugin', '--out', '--message', '--input']) assert.equal(failed(['mcp', '--target', 'http://a.example/', option, 'x']), `unknown option "${option}"`);
+  assert.equal(failed(['mcp', '--target', 'http://a.example/', '--timeout', '0']), '--timeout must be a whole number of seconds from 1');
+  assert.equal(failed(['mcp', '--target', 'http://a.example/', 'extra']), 'unexpected argument; quote a --header value that has spaces');
+  assert.match(USAGE, /agui-inspector mcp --target <url>/);
+});

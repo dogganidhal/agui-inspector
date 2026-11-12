@@ -26,11 +26,27 @@ Options:
 Exit codes: 0 no findings, 1 the run could not complete, 2 wrong arguments, 3 findings.
 `;
 
+export const MCP_USAGE = `Usage: agui-inspector mcp --target <url> [--header "<Name>: <value>"]... [options]
+
+Starts an MCP server over standard input and output, for a coding agent. Its tools open headless sessions against the
+targets you name here, drive them, read them and save them. It listens on no port. Start it from your MCP client's
+configuration, and take header values from the environment so they never appear in that configuration.
+
+Options:
+  --target <url>              An AG-UI endpoint the sessions may reach. Repeat it for more than one.
+  --header "<Name>: <value>"  A header to send to the target before it. Repeat it for more.
+  --profile <file>            The client profile sessions start with.
+  --timeout <seconds>         Stop a run's capture after this long. Default ${DEFAULT_TIMEOUT_SECONDS}.
+  --help                      Show this text.
+`;
+
 export const USAGE = `Usage: agui-inspector [options]
        agui-inspector run --target <url> (--message <text> | --input <file>) [options]
+       agui-inspector mcp --target <url> [options]
 
 Serves the AG-UI inspector on this machine and relays its requests to the targets you name. The run command runs one
-input without a browser and writes the session file; see agui-inspector run --help.
+input without a browser and writes the session file; see agui-inspector run --help. The mcp command serves the same
+sessions to a coding agent; see agui-inspector mcp --help.
 
 Options:
   --target <url>              An AG-UI endpoint to inspect. Repeat it for more than one.
@@ -74,9 +90,17 @@ export interface RunCommand {
   readonly force: boolean;
 }
 
+export interface McpCommand {
+  readonly kind: 'mcp';
+  readonly targets: readonly Target[];
+  readonly profile?: string;
+  readonly timeoutMs: number;
+}
+
 export type Cli =
-  | { readonly kind: 'help'; readonly command?: 'run' }
+  | { readonly kind: 'help'; readonly command?: 'run' | 'mcp' }
   | RunCommand
+  | McpCommand
   | { readonly kind: 'version' }
   | { readonly kind: 'serve'; readonly port: number; readonly targets: readonly Target[]; readonly plugins: readonly string[] }
   | { readonly kind: 'error'; readonly message: string };
@@ -194,11 +218,8 @@ function parseRun(argv: readonly string[]): Cli {
   if (target === undefined || extra !== undefined) return { kind: 'error', message: 'run takes one --target' };
   if (values.message === undefined && values.input === undefined) return { kind: 'error', message: 'run needs --message or --input' };
   if (values.message !== undefined && values.input !== undefined) return { kind: 'error', message: 'run takes --message or --input, not both' };
-  let seconds = DEFAULT_TIMEOUT_SECONDS;
-  if (values.timeout !== undefined) {
-    if (!/^[1-9]\d*$/.test(values.timeout)) return { kind: 'error', message: '--timeout must be a whole number of seconds from 1' };
-    seconds = Number(values.timeout);
-  }
+  const seconds = timeoutOf(values.timeout);
+  if (seconds === undefined) return { kind: 'error', message: TIMEOUT };
   if (values.force === true && values.out === undefined) return { kind: 'error', message: '--force needs --out' };
   for (const [option, value] of [['input', values.input], ['profile', values.profile], ['out', values.out]] as const) {
     if (value === '') return { kind: 'error', message: `--${option} must name a file` };
@@ -215,9 +236,43 @@ function parseRun(argv: readonly string[]): Cli {
   };
 }
 
+const TIMEOUT = '--timeout must be a whole number of seconds from 1';
+const timeoutOf = (value: string | undefined): number | undefined => (value === undefined ? DEFAULT_TIMEOUT_SECONDS : /^[1-9]\d*$/.test(value) ? Number(value) : undefined);
+
+function parseMcp(argv: readonly string[]): Cli {
+  let parsed;
+  try {
+    parsed = parseArgs({
+      args: [...argv],
+      options: {
+        target: { type: 'string', multiple: true },
+        header: { type: 'string', multiple: true },
+        profile: { type: 'string' },
+        timeout: { type: 'string' },
+        help: { type: 'boolean' },
+      },
+      allowPositionals: true,
+      strict: true,
+      tokens: true,
+    });
+  } catch (error) {
+    return { kind: 'error', message: optionProblem(error) };
+  }
+  if (parsed.tokens.some((token) => token.kind === 'positional')) return { kind: 'error', message: STRAY };
+  const { values } = parsed;
+  if (values.help === true) return { kind: 'help', command: 'mcp' };
+  const targets = targetsOf(parsed.tokens);
+  if (!targets.ok) return { kind: 'error', message: targets.message };
+  const seconds = timeoutOf(values.timeout);
+  if (seconds === undefined) return { kind: 'error', message: TIMEOUT };
+  if (values.profile === '') return { kind: 'error', message: '--profile must name a file' };
+  return { kind: 'mcp', targets: targets.value, ...(values.profile !== undefined && { profile: values.profile }), timeoutMs: seconds * 1000 };
+}
+
 /** The command line as a result. Nothing is read, listened to or printed here. */
 export function parseCli(argv: readonly string[]): Cli {
   if (argv[0] === 'run') return parseRun(argv.slice(1));
+  if (argv[0] === 'mcp') return parseMcp(argv.slice(1));
   let parsed;
   try {
     parsed = parseArgs({
@@ -238,7 +293,7 @@ export function parseCli(argv: readonly string[]): Cli {
     return { kind: 'error', message: optionProblem(error) };
   }
 
-  // `run` is the one command so far (feature 018). Others (replay, the conformance suite) come later, so any other first
+  // `run` and `mcp` are the commands so far (feature 018). Others (replay, the conformance suite) come later, so any other first
   // argument that is not an option is an error and its name is kept free. A stray argument elsewhere is not echoed.
   const stray = parsed.tokens.find((token) => token.kind === 'positional');
   if (stray?.kind === 'positional') {

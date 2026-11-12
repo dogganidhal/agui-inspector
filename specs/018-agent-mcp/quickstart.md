@@ -73,3 +73,8 @@ credentials. With the header, `run` exited 0 and the file held the example's fiv
 Base64 form. Without the header, the exchange was recorded with status 401 and `run` exited 1. No code change was
 needed.
 
+2026-11-12, step 6 against the built command: `initialize`, `notifications/initialized`, `tools/list` and `tools/call
+targets` piped into `node packages/inspector/lib/cli/main.js mcp --target http://127.0.0.1:9/agent --header "x-test:
+synthetic-header-018"`. Three answers on standard output, one JSON-RPC message per line, nothing on standard error, exit
+0 when standard input closed, and the header value in neither stream.
+

@@ -5,7 +5,7 @@
 // (the port is taken, the page files are missing); 2 when the arguments are wrong.
 import { accessSync, constants, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
-import { parseCli, RUN_USAGE, USAGE, type Target } from './args.ts';
+import { MCP_USAGE, parseCli, RUN_USAGE, USAGE, type Target } from './args.ts';
 import { listen } from './server.ts';
 
 export interface Io {
@@ -17,6 +17,8 @@ export interface Io {
   readonly stop: AbortSignal;
   /** Standard input as text, for `run --input -`. */
   readonly stdin?: () => Promise<string>;
+  /** Standard input as a stream, for `mcp`. */
+  readonly input?: NodeJS.ReadableStream;
 }
 
 export interface RunOptions {
@@ -54,12 +56,13 @@ export async function run(argv: readonly string[], io: Io, options: RunOptions =
   };
   const cli = parseCli(argv);
   if (cli.kind === 'help' || cli.kind === 'version') {
-    io.out(cli.kind === 'help' ? (cli.command === 'run' ? RUN_USAGE : USAGE) : `${options.version ?? packageVersion()}\n`);
+    io.out(cli.kind === 'help' ? (cli.command === 'run' ? RUN_USAGE : cli.command === 'mcp' ? MCP_USAGE : USAGE) : `${options.version ?? packageVersion()}\n`);
     return 0;
   }
   if (cli.kind === 'error') return usage(cli.message);
   // Loaded only for `run`: it brings the core and its packages, which serving the page never needs.
   if (cli.kind === 'run') return (await import('./once.ts')).runOnce(cli, io);
+  if (cli.kind === 'mcp') return (await import('./mcp.ts')).runMcp(cli, io, options.version ?? packageVersion());
   const plugins = pluginFiles(cli.plugins);
   if (plugins === undefined) return usage('--plugin must name a file that can be read');
 

@@ -24,13 +24,15 @@ never contain a header value. Methods:
 
 ## Tools
 
-Every tool that acts on a session takes `session` (the id `open` returned). Steps wait like the library
+Every tool that acts on a session takes `session` (the id `open` returned). A step tool returns after 25 seconds at most;
+when the run is still going its result is `{ "running": true }` and `wait` waits again (up to 55 seconds per call). The
+session's `--timeout` stops a run that never ends. Only one step runs per session at a time. Steps wait like the library
 ([testing-api.md](testing-api.md)) and return a `Step` together with the `summary` view of what the step added: new
 messages, interrupts, tool calls, surfaces and findings (FR-031).
 
 | Tool | Input | Result |
 | --- | --- | --- |
-| `targets` | none | the numbered targets: number and origin, no headers |
+| `targets` | none | the numbered targets: number, origin and path, no headers |
 | `open` | `target` (number), `profile`? | `session` id |
 | `load` | `file` | `session` id of a read-only session |
 | `send` | `session`, `text` | Step and summary |
