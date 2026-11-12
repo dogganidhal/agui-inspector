@@ -208,8 +208,8 @@ export async function runMcp(command: McpCommand, io: Io, version: string): Prom
       },
     },
     read: {
-      description: 'Reads one view of a session: summary, conversation, state, pending, findings or surfaces.',
-      inputSchema: schema({ ...SESSION, what: { enum: ['summary', 'conversation', 'state', 'pending', 'findings', 'surfaces'] } }, ['session', 'what']),
+      description: 'Reads one view of a session: summary, conversation, state, pending, findings, surfaces or exchanges.',
+      inputSchema: schema({ ...SESSION, what: { enum: ['summary', 'conversation', 'state', 'pending', 'findings', 'surfaces', 'exchanges'] } }, ['session', 'what']),
       async run(args) {
         const { session } = entryOf(args);
         const views: Record<string, () => object> = {
@@ -219,9 +219,10 @@ export async function runMcp(command: McpCommand, io: Io, version: string): Prom
           pending: () => session.pending(),
           findings: () => ({ findings: session.findings() }),
           surfaces: () => ({ surfaces: session.surfaces() }),
+          exchanges: () => ({ exchanges: session.exchanges() }),
         };
         const view = typeof args['what'] === 'string' && Object.hasOwn(views, args['what']) ? views[args['what']] : undefined;
-        if (view === undefined) throw new Refused('what must be summary, conversation, state, pending, findings or surfaces');
+        if (view === undefined) throw new Refused('what must be summary, conversation, state, pending, findings, surfaces or exchanges');
         return text(`The ${String(args['what'])} view.`, fit(view()));
       },
     },

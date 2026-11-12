@@ -98,6 +98,8 @@ test('a session drives the interrupt scenario to the same messages as the librar
     assert.equal(data(last)['summary']['messages'].length, 1, 'the summary holds what the step added');
     const summary = await client.tool('read', { session, what: 'summary' });
     assert.equal(data(summary)['messages'].length, 3);
+    const exchanges = data(await client.tool('read', { session, what: 'exchanges' }))['exchanges'];
+    assert.deepEqual(exchanges.map((exchange: { status: number; transport: string }) => [exchange.status, exchange.transport]), [[200, 'completed'], [200, 'completed']]);
     await client.close();
   });
 });
@@ -175,7 +177,7 @@ test('the first block never holds a string from the target, and wrong arguments 
     const client = connect(['--target', served.agent]);
     const { session } = data(await client.tool('open', { target: 1 }));
     const results = [await client.tool('send', { session, text: 'hi' })];
-    for (const what of ['summary', 'conversation', 'state', 'pending', 'findings', 'surfaces']) results.push(await client.tool('read', { session, what }));
+    for (const what of ['summary', 'conversation', 'state', 'pending', 'findings', 'surfaces', 'exchanges']) results.push(await client.tool('read', { session, what }));
     results.push(await client.tool('frames', { session }));
     for (const result of results) assert.ok(!result.content[0]!.text.includes(marker), result.content[0]!.text);
     assert.ok(results.some((result) => result.content[1]?.text.includes(marker)), 'the data block holds it');

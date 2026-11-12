@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
+import { PROTOBUF_MEDIA_TYPE } from '../../../../examples/reference-agent/protobuf.ts';
 import { INTERRUPT_FOREVER, SCENARIOS } from '../../../../examples/reference-agent/scenarios.ts';
+import { fromBase64 } from '../../src/core/frames/bytes.ts';
 import { parseSession } from '../../src/core/session-files/index.ts';
 import { defaultProfile } from '../../src/core/profiles/index.ts';
 import { openSession, type Session } from '../../src/headless/session.ts';
@@ -235,3 +237,23 @@ test('findings of a damaged stream come back with their rule ids, and the frames
     session.close();
   });
 });
+
+test('a profile that asks for protobuf gets binary frames, kept byte for byte as the page keeps them', async () => {
+  await withAgent(async (server, agent) => {
+    const session = await openSession({ target: agent, profile: { ...defaultProfile(), encoding: 'protobuf' } });
+    const step = await session.send('hello');
+    assert.equal(step.error, undefined);
+    assert.match(server.requests()[0]?.accept ?? '', new RegExp(PROTOBUF_MEDIA_TYPE.replace(/[.+]/g, '\\$&')));
+    assert.equal(session.exchanges()[0]?.encoding, 'protobuf');
+    const frames = session.frames();
+    assert.ok(frames.length > 2 && frames.every((frame) => frame.bytes !== undefined && frame.data === undefined));
+    const received = Buffer.concat(frames.map((frame) => fromBase64(frame.bytes ?? '') ?? new Uint8Array()));
+    assert.deepEqual(new Uint8Array(received), server.sent()[0]);
+    assertMessageText(session, 'Hello from the reference agent.');
+    session.close();
+  });
+});
+
+function assertMessageText(session: Session, text: string): void {
+  assert.ok(messages(session).includes(`assistant: ${text}`), messages(session).join('\n'));
+}

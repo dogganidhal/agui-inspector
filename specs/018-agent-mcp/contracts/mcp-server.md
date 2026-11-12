@@ -42,7 +42,7 @@ messages, interrupts, tool calls, surfaces and findings (FR-031).
 | `a2ui_set` | `session`, `surfaceId`, `path`, `value` | the surface |
 | `a2ui_fire` | `session`, `surfaceId`, `componentId` | Step and summary |
 | `wait` | `session`, `timeoutSeconds`? | Step and summary (for a run still going after a step timed out) |
-| `read` | `session`, `what`: `summary`, `conversation`, `state`, `pending`, `findings`, `surfaces` | that view |
+| `read` | `session`, `what`: `summary`, `conversation`, `state`, `pending`, `findings`, `surfaces`, `exchanges` | that view |
 | `frames` | `session`, `cursor`?, `limit`? (default 50, max 200) | a page of frames and the next cursor |
 | `stop` | `session` | `{}` |
 | `save` | `session`, `file`, `overwrite`? | the absolute path written, and the export warning (FR-043) in the first content block |

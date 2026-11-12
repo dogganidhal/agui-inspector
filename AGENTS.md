@@ -50,7 +50,8 @@ spec. Everything else does, including small bug fixes.
 | --- | --- |
 | `packages/inspector/src/core` | Framework-free TypeScript: recorder, frame reader, session store, config, presets, profiles, runtime and transport, A2UI lifecycle. No React here. |
 | `packages/inspector/src/server` | Node-side code for the Express, Hono and Next.js helpers, one core and thin adapters. Compiled to `packages/inspector/lib` by `npm run build`, never in the browser bundle. No React, no framework import. |
-| `packages/inspector/src/cli` | The `agui-inspector` command: argument parsing, the listener on `127.0.0.1` and the relay to the targets. It reuses the core in `src/server`. Compiled to `packages/inspector/lib/cli` with the helpers, never in the browser bundle. |
+| `packages/inspector/src/cli` | The `agui-inspector` command: argument parsing, the listener on `127.0.0.1` and the relay to the targets, plus the `run` and `mcp` commands (`once.ts`, `mcp.ts`, `jsonrpc.ts`), loaded only when used. It reuses the core in `src/server` and the sessions in `src/headless`. Compiled to `packages/inspector/lib/cli` with the helpers, never in the browser bundle. |
+| `packages/inspector/src/headless` | Headless sessions (spec 018): the core's runtime, recorder and rules run in Node against one target, A2UI v0.9 without React, assertions, and the shared target and header rules. Exported as `agui-inspector/testing`. Only `session.ts` makes requests and writes files. Compiled to `packages/inspector/lib`, never in the browser bundle. |
 | `packages/inspector/src/views` | React views: connection, conversation, inspection, A2UI, settings, and the theme tokens and primitives. |
 | `packages/inspector/src/app` | Page entry, startup and the content security policy (`security.ts`). |
 | `packages/inspector/src/contracts.ts` | Shared types. Must not import React. |
@@ -115,6 +116,10 @@ These come from the [constitution](.specify/memory/constitution.md). Read it bef
   checks), and a test reads the page bundle for them.
 - The command relays bytes unchanged and binds `127.0.0.1` only. A header from its command line is never printed, served
   or exported, and no message of the command may echo one: tests search for a synthetic value.
+- `run` and `mcp` print no header value either, and their outputs are searched for a synthetic one. Requests and file
+  writes stay in `src/headless/session.ts`, so the outbound test on `src/cli` holds. Serving the page loads no package from
+  the registry: `run.ts` imports `once.ts` and `mcp.ts` only when they are used, and the packed-tarball test checks it.
+  `mcp` writes JSON-RPC only to standard output.
 - The brand mark exists in four copies (`branding/mark.svg`, `branding/icon.svg`, `icons.mark` in
   `views/theme/primitives.tsx`, and the favicon data URI in both `index.html` files). Change all or none. Repo assets stay
   black and white; adopters recolor through `--agui-accent`.
