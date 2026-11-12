@@ -4,8 +4,7 @@
 
 **Created**: 2026-11-11
 
-**Status**: Draft, revised 2026-11-11 after the maintainer set the goal and accepted the audit's order. Waiting for the
-maintainer's approval of this spec. No plan until then.
+**Status**: Accepted by the maintainer on 2026-11-12. Planning follows.
 
 **Input**: The maintainer asked whether agui-inspector needs an MCP server so that coding agents can act on the inspector
 for the developer. The first draft of this spec answered no. The maintainer then set a wider goal: use the inspector for
@@ -35,8 +34,12 @@ the MCP server last. The maintainer accepted that order.
 - Q: Can an agent read or drive the session open in the developer's browser? → A: Not in this feature. It needs a
   channel from the page to a local process and an amendment to principle IV. A session file and a launch link
   (feature 016) are the hand-off in both directions (User Story 5).
-- Q: Which release? → A: [NEEDS CLARIFICATION: Milestone 1 in 0.3.0, before #83? Recommended: yes. The MCP server
-  (milestone 3) in 0.3.0 too, or the release after?]
+- Q: Which release? → A: 0.3.0 for all three milestones. Milestone 1 lands before #83, and the MCP server ships in
+  0.3.0 as well (maintainer, 2026-11-12).
+
+### Session 2026-11-12, approval
+
+The maintainer approved this spec on 2026-11-12 and chose 0.3.0 for the MCP server. Planning follows.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -257,7 +260,8 @@ Shared
 
 - **FR-040**: All new code MUST stay out of the page bundle.
 - **FR-041**: Tests MUST search every output (files, standard output and error, exit messages, tool results) for a
-  synthetic header value.
+  synthetic header value. A frame in which the target itself echoes the value is evidence and keeps it (principle IV);
+  the value appears nowhere else.
 - **FR-042**: The docs site MUST have a page for tests and coding agents. It covers the test API, the command, the MCP
   server once it ships, the embedded Python case, the hand-off through session files and launch links, passing a token
   through an environment variable, and two warnings: a session file and every tool result can hold sensitive data from

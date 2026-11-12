@@ -13,7 +13,7 @@
 
 ## Requirement Completeness
 
-- [ ] No [NEEDS CLARIFICATION] markers remain
+- [x] No [NEEDS CLARIFICATION] markers remain
 - [x] Requirements are testable and unambiguous
 - [x] Success criteria are measurable
 - [x] Success criteria are technology-agnostic (no implementation details)
@@ -31,8 +31,7 @@
 
 ## Notes
 
-- One marker remains on purpose: the release of milestone 1 and of the MCP server (Clarifications). `speckit-clarify`
-  records the answer.
+- The release question was answered on 2026-11-12: 0.3.0 for all three milestones.
 - Revised 2026-11-11 for the new goal (tests and agents) and the audit's order. Checked again against every item.
 - The spec names the command, the MCP server, session files and the npm package because they are the product surfaces
   this feature is about. It names no library or code structure.

@@ -135,3 +135,84 @@ an issue.
 The launch link is in pull request #109, not merged on 2026-11-11. Its format: the URL fragment, `name=value` pairs with
 the keys `v`, `agent`, `endpoint`, `var.<name>`, `context` and `forwardedProps`. It fills the composer and never sends a
 message by itself, in every serving mode including embedded. Spec 018 refers to it only and repeats none of it.
+
+## 8. Plan research (2026-11-12)
+
+Checked in this worktree after `npm ci --ignore-scripts`.
+
+### R1. Where the session lives and how it builds
+
+- **Decision**: `packages/inspector/src/headless`, compiled with the command and the helpers by
+  `tsc -p packages/inspector/tsconfig.server.json` into `lib/headless`. The core files it imports compile with it.
+- **Rationale**: `tsconfig.server.json` already emits ES modules with `rewriteRelativeImportExtensions`. Ten relative
+  imports in five `core/a2ui` files have no extension (`actions.ts`, `catalogs.ts`, `index.ts`, `lifecycle.ts`,
+  `operations.ts`); Node cannot resolve them in emitted code, so they get `.ts`, which the rest of the core already
+  uses. Nothing in `src/core` or `contracts.ts` imports React or `views/` (searched).
+- **Alternatives**: bundle `lib/headless` with esbuild (a second build path for `lib/`); put the session in `src/core`
+  (it is Node-side and owns process concerns such as files and timers).
+
+### R2. Policy, headers and errors
+
+- **Decision**: a headless session builds its policy as `{ mode: 'hosted', pageOrigin: <target origin>,
+  allowedOrigins: [] }`, so `resolveTarget` allows the target and nothing else, and credentials are omitted. Headers go
+  through a `fetch` wrapper that adds them to each request, as the command's relay adds them, so they never enter
+  runtime state, the store or the recorder. The transport's network error stops naming the browser when no page is
+  involved.
+- **Rationale**: no change to `TransportPolicy` or `DeploymentMode`; the rule "a headless session's origin is its
+  target's origin" is one line and testable. `setAuth` takes one header, and the command already accepts several per
+  target.
+- **Alternatives**: a third `DeploymentMode` (touches contracts and every mode check); `setAuth` per header (one only).
+
+### R3. Headless A2UI v0.9
+
+- **Decision**: a catalog built with `@a2ui/web_core`'s `Catalog` class from the basic catalog's component definitions
+  (`TextApi`, `ButtonApi` and the others in `@a2ui/web_core/v0_9/basic_catalog`), with the same catalog ids and aliases
+  as the page. Reads come from the surface model. Actions go through the surface model's `dispatchAction`, so an action
+  is built the way the renderer builds it, then through `toA2uiAction` and `runtime.sendA2uiAction`.
+- **Evidence**: `@a2ui/web_core/v0_9/basic_catalog` loads in Node 24 (a probe listed 18 components). `dispatchAction` is
+  declared in `state/surface-model.d.ts` and `resolution/component-context.d.ts`. The basic catalog's components import
+  Lit, which loaded in Node without a DOM in the probe; the spike confirms that rendering is never triggered.
+- **Alternatives**: the page's React catalog (pulls React into `lib/`); a hand-made list of component names (would drift
+  from the package's schemas).
+
+### R4. Waiting until idle
+
+- **Decision**: every action resolves when `runtime.send` (or the interrupt, tool result or action call) has resolved,
+  which already covers automatic continuations, and then when `getState().capturing` is false, observed through
+  `subscribe`. A time limit always applies (default 60 seconds); on expiry the session calls `runtime.stop()`, so capture
+  ends `user-stopped`, and the step reports `timedOut: true`.
+- **Rationale**: no polling, and the recorder's own end marker decides.
+
+### R5. Command line
+
+- **Decision**: the first positional argument selects the command: none serves the page as today, `run` runs once, `mcp`
+  starts the MCP server. `test` and `replay` stay reserved for #83 and #84. Target and header parsing is shared.
+- **Exit codes for `run`**: 0 no findings, 1 could not complete the run, 2 wrong arguments, 3 findings. 1 and 2 keep
+  their meaning from feature 005.
+
+### R6. MCP without the SDK
+
+- **Decision**: a hand-written loop of newline-delimited JSON-RPC 2.0 over standard input and output. It handles
+  `initialize`, `notifications/initialized`, `ping`, `tools/list` and `tools/call`, answers anything else with "method
+  not found", and writes nothing but JSON-RPC to standard output. Protocol versions: it answers with the client's
+  requested version when it supports it, otherwise with its latest supported one.
+- **Rationale**: the server needs five methods. A loop of that size is easier to audit than a dependency tree, and the
+  audit recommended it. No row in `dependencies.mdx` is needed.
+- **Alternatives**: the official SDK, with an exact pin and a `dependencies.mdx` row. Reconsider if the server later
+  needs resources, prompts, sampling or an HTTP transport.
+
+### R7. Untrusted target content in tool results
+
+- **Decision**: each tool result has two content blocks: the tool's own short text, then the data as JSON under a fixed
+  heading that says it comes from the target and is not an instruction. The same data goes in `structuredContent`.
+  Strings from the target are never put into the first block.
+- **Rationale**: an agent can tell the server's own words from the target's. It does not stop injection; the docs page
+  says so.
+
+### R8. Tests
+
+- **Decision**: unit tests run sessions against `createInteractiveServer` over real HTTP (interrupts, tool calls,
+  A2UI, never-finishing streams, credential echo). Parity: the frames a session records equal `server.sent()` bytes, and
+  findings match the expectations already in `examples/reference-agent/rule-fixtures.ts`. Header search: a synthetic
+  value passed as a header is searched in every file written, standard output and error, and every tool result. One
+  Playwright test imports a headless file into the page.

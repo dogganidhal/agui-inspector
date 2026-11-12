@@ -61,10 +61,11 @@ light or dark choice survives a reload ([#101](https://github.com/dogganidhal/ag
 
 These build on 0.2.0 and ship in the release after it. They are tracked in the
 [0.3.0 milestone](https://github.com/dogganidhal/agui-inspector/milestone/1). Their dependencies in 0.2.0 have
-merged, so only the conformance suite waits, for the Python reference agent.
+merged, so only the conformance suite waits, for the Python reference agent and for the headless sessions it runs on.
 
 | Capability | Scope | Needs | Issue |
 | --- | --- | --- | --- |
+| Headless sessions | A session that runs outside the browser, `agui-inspector/testing` with assertions for tests, `agui-inspector run`, and `agui-inspector mcp` for coding agents, in that order. See [spec 018](specs/018-agent-mcp/spec.md) | #75, #77 | Not opened yet |
 | Conformance suite | `agui-inspector test --target <url>` with JSON and JUnit reports, and a violating test for every catalogue rule | #75, #77, #82 | [#83](https://github.com/dogganidhal/agui-inspector/issues/83) |
 | Python reference agent | The scripted, model-free scenarios of the TypeScript reference agent, in Python | | [#82](https://github.com/dogganidhal/agui-inspector/issues/82) |
 | Replay | `agui-inspector replay <session file>` serves a recorded session as an AG-UI endpoint, for client tests | #75 | [#84](https://github.com/dogganidhal/agui-inspector/issues/84) |
