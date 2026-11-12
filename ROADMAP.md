@@ -66,6 +66,7 @@ merged, so only the conformance suite waits, for the Python reference agent and 
 | Capability | Scope | Needs | Issue |
 | --- | --- | --- | --- |
 | Headless sessions | A session that runs outside the browser, `agui-inspector/testing` with assertions for tests, `agui-inspector run`, and `agui-inspector mcp` for coding agents, in that order. See [spec 018](specs/018-agent-mcp/spec.md) | #75, #77 | Not opened yet |
+| Agent discovery | `llms.txt`, a guide for coding agents served next to the page in every mode and named in the startup output, and blocks for a project's `AGENTS.md`. See [spec 019](specs/019-agent-discovery/spec.md) | Headless sessions | Not opened yet |
 | Conformance suite | `agui-inspector test --target <url>` with JSON and JUnit reports, and a violating test for every catalogue rule | #75, #77, #82 | [#83](https://github.com/dogganidhal/agui-inspector/issues/83) |
 | Python reference agent | The scripted, model-free scenarios of the TypeScript reference agent, in Python | | [#82](https://github.com/dogganidhal/agui-inspector/issues/82) |
 | Clear session | A button that empties the recorded exchanges, frames and runs and starts a new thread, without a reload | | [spec 017](specs/017-clear-recording/spec.md) |

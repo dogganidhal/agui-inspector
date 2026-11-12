@@ -27,12 +27,15 @@ Run the command with the address of the agent endpoint.
 npx agui-inspector --target http://127.0.0.1:8787/agent
 ```
 
-It prints where it listens and which proxy path stands for the target:
+It prints where it listens, which proxy path stands for the target, and where the guide for coding agents is:
 
 ```text
 agui-inspector listening on http://127.0.0.1:4747/
   /proxy/1 -> http://127.0.0.1:8787
+guide for coding agents: http://127.0.0.1:4747/llms.txt
 ```
+
+The guide tells a coding agent where the page and its agents are and how to drive them. See [Point a coding agent at the inspector](./agent-guide.mdx).
 
 </Step>
 <Step>

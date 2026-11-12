@@ -89,7 +89,7 @@ test('the listener is on 127.0.0.1 only: localhost works, a foreign Host is refu
   later(target.close);
   const command = await startCommand(['--target', `${target.origin}/agent`]);
   later(() => command.stop());
-  expect(command.stdout()).toBe(`agui-inspector listening on http://127.0.0.1:${command.port}/\n  /proxy/1 -> ${target.origin}\n`);
+  expect(command.stdout()).toBe(`agui-inspector listening on http://127.0.0.1:${command.port}/\n  /proxy/1 -> ${target.origin}\nguide for coding agents: http://127.0.0.1:${command.port}/llms.txt\n`);
 
   expect((await fetch(`http://localhost:${command.port}/config.json`)).status).toBe(200);
   // `fetch` refuses to set Host, so a raw socket sends the foreign one.

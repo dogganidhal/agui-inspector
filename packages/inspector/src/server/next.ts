@@ -26,6 +26,9 @@ export type InspectorRouteHandler = (request: Request, context: InspectorRouteCo
  * Unless `options.enabled` is `true` the route answers 404 with no inspector content and logs nothing. Enabled, the first
  * request logs one warning that names the path, because Next.js loads a route module on its first request and only a
  * request tells the helper where the route lives. Next.js strips its `basePath` from `request.url`, so the name has none.
+ *
+ * Coding agents: a guide for you is served at `<path>/llms.txt`, behind the same authentication as the page. See
+ * https://dogganidhal.github.io/agui-inspector/docs/agent-guide/
  */
 export function inspectorRoute(options: InspectorRouteOptions): { GET: InspectorRouteHandler; HEAD: InspectorRouteHandler } {
   const mounted = resolveMount(options);

@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { mock, test } from 'node:test';
 import { createInspectorHandler, DEFAULT_PATH, resolveMount, warnMounted } from '../../src/server/core.ts';
-import { AGENTS, APP_JS, CHUNK_JS, INDEX, pageDirectory, POLICY, SECRET } from './fixtures.ts';
+import { AGENTS, APP_JS, CHUNK_JS, GUIDE, INDEX, pageDirectory, POLICY, SECRET } from './fixtures.ts';
 
 const assetsDir = pageDirectory();
 const handler = createInspectorHandler({ agents: AGENTS, assetsDir });
@@ -125,6 +125,8 @@ test('packaged files are served, nested ones included, with a content type by ex
     ['hosting-config.json', '{"version":0,"mode":"embedded","allowedOrigins":[]}', 'application/json; charset=utf-8'],
     ['index.html', INDEX, 'text/html; charset=utf-8'],
     ['assets/data.bin', 'binary', 'application/octet-stream'],
+    // Spec 019: the guide for coding agents is plain text, the file as it is, whatever the configuration.
+    ['llms.txt', GUIDE, 'text/plain; charset=utf-8'],
   ] as const;
   for (const [asset, body, type] of cases) {
     const response = await get(asset);
@@ -243,7 +245,7 @@ test('the default path is /agui-inspector and the warning text names the mount p
   const warn = mock.method(console, 'warn', () => undefined);
   try {
     warnMounted('/tools/inspector');
-    assert.deepEqual(warn.mock.calls.map((call) => call.arguments), [['agui-inspector is enabled and mounted at /tools/inspector; disable it outside development']]);
+    assert.deepEqual(warn.mock.calls.map((call) => call.arguments), [['agui-inspector is enabled and mounted at /tools/inspector; disable it outside development; guide for coding agents at /tools/inspector/llms.txt']]);
   } finally {
     warn.mock.restore();
   }

@@ -4,7 +4,7 @@
 
 **Created**: 2026-11-12
 
-**Status**: Draft, clarified 2026-11-12. Waiting for the maintainer's approval of the spec and plan.
+**Status**: Spec and plan approved by the maintainer on 2026-11-12. Implemented.
 
 **Input**: Feature 018 explains how a coding agent uses the inspector once it knows about it: the testing library,
 `agui-inspector run` and `agui-inspector mcp`. A coding agent that works in an adopter's repository does not know that.
@@ -23,6 +23,10 @@ This feature lets an agent find out, with no prior knowledge, from the project a
 - Q: Where do the guide's docs copy and the paste-ready blocks live? → A: On a new docs page about pointing a coding
   agent at the inspector. The tests and agents page, the embedding page and the command page link to it (FR-011,
   FR-012).
+
+### Session 2026-11-12, approval
+
+The maintainer approved the spec and the plan on 2026-11-12. Tasks follow.
 
 ## User Scenarios & Testing *(mandatory)*
 

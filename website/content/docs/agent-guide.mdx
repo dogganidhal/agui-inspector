@@ -1,0 +1,136 @@
+---
+title: Point a coding agent at the inspector
+description: A guide for coding agents served next to the page, and blocks to paste into your AGENTS.md or CLAUDE.md, so an agent in your repository finds the inspector and knows how to use it.
+---
+
+A coding agent that works in your repository does not know that your server mounts the inspector, where the page is, or that [Tests and coding agents](./tests-and-agents.mdx) exists. Two things tell it:
+
+- A short guide, `llms.txt`, served next to the page in every mode. The agent reads it from the running server.
+- A block you paste once into your own `AGENTS.md` or `CLAUDE.md`. The agent reads it before it runs anything.
+
+## Where the guide is
+
+The guide is one of the page's files, so it is wherever the page is:
+
+| Mode | Address |
+| --- | --- |
+| Python helper, `mount_inspector` | `<mount path>/llms.txt`, for example `http://127.0.0.1:8000/agui-inspector/llms.txt` |
+| Express, Hono and Next.js helpers | `<mount path>/llms.txt` |
+| The command, `npx agui-inspector` | `http://127.0.0.1:4747/llms.txt`, or the port you chose |
+| Static assets or the hosted page | `llms.txt` next to `index.html` |
+
+It is served as plain text through the same routes as the page. Your server's authentication guards it as it guards the page, and a helper that is not enabled serves neither.
+
+Three places name the address, so an agent finds it without this page:
+
+- The helpers' startup warning ends with it: `agui-inspector is enabled and mounted at /agui-inspector; disable it outside development; guide for coding agents at /agui-inspector/llms.txt`.
+- The command prints `guide for coding agents: http://127.0.0.1:4747/llms.txt` after its target lines.
+- The page's HTML points to it with `<link rel="describedby" href="llms.txt">`, as the [llms.txt proposal](https://llmstxt.org/) suggests.
+
+The docstring of `mount_inspector` and the documentation of the JavaScript helpers name it too.
+
+## What the guide holds
+
+The guide is the same file in every mode. Nothing generates it, and it holds nothing from your configuration: no agent, no path, no header, no credential. Addresses in it are relative to its own address. The list of agents is in `config.json` next to it, which the page reads too.
+
+It says where the page and `config.json` are, how to build a [launch link](./launch-links.mdx) for a person, how to drive an agent with `agui-inspector run` and `agui-inspector mcp`, and how to pass your server's authentication from the environment. Here it is, exactly as served:
+
+```text
+# agui-inspector
+
+> A developer tool for AG-UI agents, served next to this file. It records every request and frame of an agent run, checks them against the protocol and drives runs like a client. This file tells a coding agent how to use it.
+
+Addresses here are relative to this file. If this file is `http://127.0.0.1:8000/agui-inspector/llms.txt`, the page is `http://127.0.0.1:8000/agui-inspector/`.
+
+## Where things are
+
+- The page is the directory this file is in. A person opens it in a browser.
+- `config.json`, next to this file, lists the agents the page knows. Each has an `id` and a `url`, the agent's AG-UI endpoint. A `url` that starts with `/` is on the same origin as this file.
+- When the `agui-inspector` command serves the page, each `url` is a `/proxy/<n>/` path of the command and each agent's `name` is the real endpoint. Point the commands below at the real endpoint.
+- This file, the page and `config.json` sit behind the same authentication as the server's other routes.
+
+## Open the page for a person
+
+A launch link opens the page with an agent and a first message filled in. The person presses send. The page never sends by itself.
+
+    <page>#agent=<id>&message=<text>
+
+Build the fragment with `URLSearchParams` in JavaScript or `urllib.parse.urlencode` in Python. A link never carries a credential: the page refuses keys such as `token`, `authorization` and `header.*`. All keys: https://dogganidhal.github.io/agui-inspector/docs/launch-links/
+
+## Drive an agent yourself
+
+Point these commands at an agent endpoint from `config.json`, never at the page. They need Node.js 24 or newer, in Python projects too.
+
+    npx agui-inspector run --target http://127.0.0.1:8000/agents/demo/stream --message "hello" --out session.json
+
+Exit code 0 means the run completed with no findings, 3 completed with findings, 1 could not complete, 2 wrong arguments. A person opens `session.json` in the page with Import session.
+
+For several steps, such as answering an interrupt, returning a tool result or firing an A2UI action, add the MCP server to your MCP client:
+
+    npx agui-inspector mcp --target http://127.0.0.1:8000/agents/demo/stream
+
+## Credentials
+
+The page sends the host's cookies. The commands do not. Pass the host's authentication as a header whose value comes from the environment, for example `--header "Authorization: $AGENT_AUTH"`. Never write a credential into a file, a link or a command you show.
+
+## Docs
+
+- [Point a coding agent at the inspector](https://dogganidhal.github.io/agui-inspector/docs/agent-guide/): this file, and blocks for AGENTS.md and CLAUDE.md
+- [Tests and coding agents](https://dogganidhal.github.io/agui-inspector/docs/tests-and-agents/): the testing library, `run` and `mcp`
+- [Launch links](https://dogganidhal.github.io/agui-inspector/docs/launch-links/): every key and what the page refuses
+- [Rules](https://dogganidhal.github.io/agui-inspector/docs/rules/): what each finding means
+- [Command](https://dogganidhal.github.io/agui-inspector/docs/cli/): serving the page locally against a target
+- [Embedding](https://dogganidhal.github.io/agui-inspector/docs/embedding/): the Python and JavaScript helpers
+```
+
+## Blocks for AGENTS.md and CLAUDE.md
+
+Paste the block for your setup into the instructions file that your coding agents read. Change the addresses to yours. Keep the credential in an environment variable: the block names the variable, never its value.
+
+### Python server with the embedded inspector
+
+```markdown
+## AG-UI inspector
+
+When the server runs with the inspector enabled, `mount_inspector` serves agui-inspector at `/agui-inspector`.
+
+- Read the guide for coding agents first: http://127.0.0.1:8000/agui-inspector/llms.txt
+- A person opens the page at http://127.0.0.1:8000/agui-inspector/. Its agents are listed in `config.json` next to it.
+- To drive an agent, run `npx agui-inspector run --target http://127.0.0.1:8000/<agent route> --message "hello"`, or use `npx agui-inspector mcp` for several steps. Both need Node.js 24 or newer.
+- The inspector routes use this server's authentication. Pass it as `--header "Authorization: $AGENT_AUTH"` from the environment. Never write a credential in a file, a link or a command you show.
+- Docs: https://dogganidhal.github.io/agui-inspector/docs/agent-guide/
+```
+
+### JavaScript server with a helper
+
+```markdown
+## AG-UI inspector
+
+When the server runs with the inspector enabled, the agui-inspector helper (`mountInspector` or `inspectorRoute`) serves it at `/agui-inspector`.
+
+- Read the guide for coding agents first: http://127.0.0.1:3000/agui-inspector/llms.txt
+- A person opens the page at http://127.0.0.1:3000/agui-inspector/. Its agents are listed in `config.json` next to it.
+- To drive an agent, run `npx agui-inspector run --target http://127.0.0.1:3000/<agent route> --message "hello"`, or use `npx agui-inspector mcp` for several steps. In tests, use `agui-inspector/testing`.
+- The inspector routes use this server's authentication. Pass it as `--header "Authorization: $AGENT_AUTH"` from the environment. Never write a credential in a file, a link or a command you show.
+- Docs: https://dogganidhal.github.io/agui-inspector/docs/agent-guide/
+```
+
+### The command
+
+```markdown
+## AG-UI inspector
+
+`npx agui-inspector --target http://127.0.0.1:8787/agent` serves agui-inspector at http://127.0.0.1:4747/ against this project's agent.
+
+- Read the guide for coding agents first: http://127.0.0.1:4747/llms.txt
+- A person opens the page at http://127.0.0.1:4747/.
+- To drive the agent yourself, run `npx agui-inspector run --target http://127.0.0.1:8787/agent --message "hello"`, or use `npx agui-inspector mcp` for several steps. Both need Node.js 24 or newer.
+- If the agent needs authentication, pass it as `--header "Authorization: $AGENT_AUTH"` from the environment. Never write a credential in a file, a link or a command you show.
+- Docs: https://dogganidhal.github.io/agui-inspector/docs/agent-guide/
+```
+
+## What to keep in mind
+
+- The guide is served to anyone who can reach the page. It holds nothing secret, and it tells nobody more than the page itself does.
+- When an agent drives your agent, the frames go to the agent's model provider. See [Tests and coding agents](./tests-and-agents.mdx#what-to-keep-in-mind).
+- If your server already serves an `llms.txt` at its root, nothing changes: the inspector's guide is only below its own path.

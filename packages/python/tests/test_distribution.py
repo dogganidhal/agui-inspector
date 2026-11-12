@@ -101,6 +101,9 @@ class DistributionTest(unittest.TestCase):
 
     def test_wheel_and_sdist_hold_exactly_the_npm_static_assets(self):
         self.assertIn("index.html", self.expected)
+        # Spec 019: the guide for coding agents ships unchanged with the page (the installed-wheel test serves it).
+        guide = REPO / "packages" / "inspector" / "public" / "llms.txt"
+        self.assertEqual(sha256(guide.read_bytes()), self.expected.get("llms.txt"))
         self.assertEqual(self.expected, self.wheel_static())
         self.assertEqual(self.expected, self.sdist_static())
 
@@ -311,7 +314,7 @@ class DistributionTest(unittest.TestCase):
 
     def test_the_demo_build_is_separate_from_the_ordinary_assets_it_shares(self):
         demo = tree(self.demo)
-        self.assertEqual({"app.css", "app.js", "bootstrap.js", "demo.css", "examples.json", "hosting-config.json", "index.html", "service-worker.js"}, set(demo))
+        self.assertEqual({"app.css", "app.js", "bootstrap.js", "demo.css", "examples.json", "hosting-config.json", "index.html", "llms.txt", "service-worker.js"}, set(demo))
         # The shared app is the ordinary app, byte for byte; the demo adds files and replaces the page and the hosting file.
         for shared in ("app.js", "app.css"):
             self.assertEqual(self.expected[shared], demo[shared], shared)

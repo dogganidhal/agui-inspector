@@ -23,6 +23,7 @@ Addresses here are relative to this file. If this file is `http://127.0.0.1:8000
 
 - The page is the directory this file is in. A person opens it in a browser.
 - `config.json`, next to this file, lists the agents the page knows. Each has an `id` and a `url`, the agent's AG-UI endpoint. A `url` that starts with `/` is on the same origin as this file.
+- When the `agui-inspector` command serves the page, each `url` is a `/proxy/<n>/` path of the command and each agent's `name` is the real endpoint. Point the commands below at the real endpoint.
 - This file, the page and `config.json` sit behind the same authentication as the server's other routes.
 
 ## Open the page for a person

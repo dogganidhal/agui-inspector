@@ -176,7 +176,7 @@ test('enabling logs one warning that names the mount path, the custom one withou
     [{ path: '/tools/inspect/' }, '/tools/inspect'],
   ] as const) {
     const { logged } = warnings(() => mountInspector(express(), { agents: AGENTS, enabled: true, assetsDir, ...options }));
-    assert.deepEqual(logged, [`agui-inspector is enabled and mounted at ${mount}; disable it outside development`]);
+    assert.deepEqual(logged, [`agui-inspector is enabled and mounted at ${mount}; disable it outside development; guide for coding agents at ${mount}/llms.txt`]);
   }
 });
 
