@@ -43,6 +43,17 @@ The maintainer approved this spec on 2026-11-12 and chose 0.3.0 for the MCP serv
 
 The maintainer approved the plan on 2026-11-12, with the three readings of principle IV in its constitution check.
 
+### Session 2026-11-12, analysis
+
+The maintainer approved the fixes from `speckit-analyze`.
+
+- Feature 005 FR-016 forbids the command any request other than its relay and any file storage of its own, and a test
+  enforces it on `src/cli`. Spec 005 now carries a dated note: FR-016 governs serving the page; `run` and `mcp` follow
+  FR-023, FR-037 and FR-043 here. The requests and file writes live in the headless session, outside `src/cli`.
+- Principle IV requires a warning on every session export. Writing a session file from the library, `run` or `mcp` is
+  an export (FR-043).
+- A step of the MCP server returns the summary of what changed, not only counts (FR-031).
+
 ## User Scenarios & Testing *(mandatory)*
 
 The actors are a developer who builds an AG-UI agent, the tests they run in CI, and the coding agent that works in their
@@ -246,7 +257,8 @@ MCP server (milestone 3)
 - **FR-030**: The command MUST offer an MCP server over standard input and output only. It MUST open no listening
   socket.
 - **FR-031**: Its tools MUST map one to one to the headless session's actions and reports (FR-002, FR-003, FR-004,
-  FR-007), with sessions named by an id the server returns.
+  FR-007), with sessions named by an id the server returns. A tool that takes a step MUST return the step and a summary
+  of the new messages, interrupts, tool calls, surfaces and findings.
 - **FR-032**: Targets and headers MUST be given when the server starts, not in tool inputs. Header values MUST NOT
   appear in any tool result, log or file.
 - **FR-033**: Tool results that hold data from the target (frames, messages, tool arguments, surface text, state) MUST
@@ -269,6 +281,10 @@ Shared
   through an environment variable, and two warnings: a session file and every tool result can hold sensitive data from
   the target, which an agent sends to its model provider; and target data in a tool result can contain text written to
   mislead the agent.
+- **FR-043**: Writing a session file is an export under principle IV. The command MUST print a warning to standard error
+  each time it writes one, the MCP server's save result MUST carry the warning in its own text, and the library's `save`
+  MUST document it. The warning says that raw frames and request bodies may contain personal or sensitive data,
+  including a credential the target echoed, and that headers are not in the file.
 
 ### Key Entities
 

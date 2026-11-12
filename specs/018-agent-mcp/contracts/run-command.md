@@ -19,8 +19,14 @@ agui-inspector run --target <url> [--header "<Name>: <value>"]...
 
 Exactly one of `--message` and `--input` is required.
 
-Output: one version-0 session file. Standard error gets one line per problem and, at the end, one summary line
-(`<n> frames, <n> findings[, timed out]`). Standard output gets the file only, or nothing when `--out` is given.
+Output: one version-0 session file. Standard error gets one line per problem, then the export warning (FR-043) whenever a
+file is written:
+
+```text
+The session file holds every frame and request body as received. They may contain personal or sensitive data, including a credential the target echoed. Headers are not in the file.
+```
+
+and at the end one summary line (`<n> frames, <n> findings[, timed out]`). Standard output gets the file only, or nothing when `--out` is given.
 
 Exit codes:
 
@@ -32,3 +38,7 @@ Exit codes:
 | 3 | The run completed with findings. |
 
 Messages name options and target numbers, never a header value or anything the developer typed after `--header`.
+
+The command contacts only its `--target`, opens no listening socket, and writes no file other than `--out`. The request
+and the file write happen in the headless session (`src/headless`), not in `src/cli`, so feature 005's outbound test on
+`src/cli` still holds.

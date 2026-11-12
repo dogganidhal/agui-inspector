@@ -209,6 +209,14 @@ Checked in this worktree after `npm ci --ignore-scripts`.
 - **Rationale**: an agent can tell the server's own words from the target's. It does not stop injection; the docs page
   says so.
 
+### R7b. Feature 005 and the export warning
+
+- **Decision**: requests and file writes live in `src/headless` (`session.ts`), never in `src/cli`, so
+  `packages/inspector/tests/cli/outbound.test.ts` keeps holding for the whole command. A twin test restricts
+  `src/headless`: only `session.ts` calls `fetch` and writes a file, only `assert.ts` reads the environment, nothing
+  listens, resolves names directly or starts a process. Spec 005 FR-016 carries a dated note.
+- **Decision**: every written session file comes with the export warning of principle IV (FR-043).
+
 ### R8. Tests
 
 - **Decision**: unit tests run sessions against `createInteractiveServer` over real HTTP (interrupts, tool calls,

@@ -55,7 +55,7 @@ session.conversation(): ConversationModel             // the page's projection: 
 session.state(): JsonValue | undefined
 session.pending(): Pending
 session.surfaces(): readonly SurfaceView[]            // A2UI v0.9 only
-session.save(file: string, options?: { overwrite?: boolean }): Promise<void>  // refuses an existing file unless overwrite
+session.save(file: string, options?: { overwrite?: boolean }): Promise<void>  // refuses an existing file unless overwrite; export warning in its doc comment (FR-043)
 session.toJSON(): SessionEnvelope                     // the session file as an object
 ```
 
@@ -83,3 +83,6 @@ there under a name built from the assertion and a counter, and the message gives
 - Frames and findings equal what the page records for the same run (FR-009).
 - No header value reaches a frame, an exchange, a finding, a file, an error message or a log.
 - The library opens no listening socket and requests only `target`.
+- The library prints nothing. `save` is an export under principle IV: its doc comment and the docs page say that raw
+  frames and request bodies may contain personal or sensitive data, including a credential the target echoed, and that
+  headers are not in the file.

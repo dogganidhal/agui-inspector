@@ -25,24 +25,25 @@ never contain a header value. Methods:
 ## Tools
 
 Every tool that acts on a session takes `session` (the id `open` returned). Steps wait like the library
-([testing-api.md](testing-api.md)) and return a `Step`.
+([testing-api.md](testing-api.md)) and return a `Step` together with the `summary` view of what the step added: new
+messages, interrupts, tool calls, surfaces and findings (FR-031).
 
 | Tool | Input | Result |
 | --- | --- | --- |
 | `targets` | none | the numbered targets: number and origin, no headers |
 | `open` | `target` (number), `profile`? | `session` id |
 | `load` | `file` | `session` id of a read-only session |
-| `send` | `session`, `text` | Step |
-| `send_raw` | `session`, `json` | Step |
-| `answer_interrupt` | `session`, `id`, `status`, `payload`? | Step |
-| `submit_tool_result` | `session`, `toolCallId`, `result` | Step |
+| `send` | `session`, `text` | Step and summary |
+| `send_raw` | `session`, `json` | Step and summary |
+| `answer_interrupt` | `session`, `id`, `status`, `payload`? | Step and summary |
+| `submit_tool_result` | `session`, `toolCallId`, `result` | Step and summary |
 | `a2ui_set` | `session`, `surfaceId`, `path`, `value` | the surface |
-| `a2ui_fire` | `session`, `surfaceId`, `componentId` | Step |
-| `wait` | `session`, `timeoutSeconds`? | Step (for a run still going after a step timed out) |
+| `a2ui_fire` | `session`, `surfaceId`, `componentId` | Step and summary |
+| `wait` | `session`, `timeoutSeconds`? | Step and summary (for a run still going after a step timed out) |
 | `read` | `session`, `what`: `summary`, `conversation`, `state`, `pending`, `findings`, `surfaces` | that view |
 | `frames` | `session`, `cursor`?, `limit`? (default 50, max 200) | a page of frames and the next cursor |
 | `stop` | `session` | `{}` |
-| `save` | `session`, `file`, `overwrite`? | the absolute path written |
+| `save` | `session`, `file`, `overwrite`? | the absolute path written, and the export warning (FR-043) in the first content block |
 | `close` | `session` | `{}` |
 
 ## Results
@@ -59,5 +60,6 @@ Every tool that acts on a session takes `session` (the id `open` returned). Step
 
 - Header values appear in no result, no notification, no standard error line, no file.
 - Sessions are independent: own thread, frames, findings and pending work.
-- Requests go only to the numbered targets. No telemetry.
+- Requests go only to the numbered targets. No telemetry. Requests and file writes happen in `src/headless`; `src/cli`
+  keeps feature 005's outbound guarantees.
 - When standard input closes, the command stops every capture and exits 0.

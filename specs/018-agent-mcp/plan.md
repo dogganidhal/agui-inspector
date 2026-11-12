@@ -51,12 +51,12 @@ takes to stream (SC-006). A 5,000-frame session reads and saves without paging p
 | I. The wire comes first | Same recorder, frame reader and session format as the page | Pass. The session uses `createRuntime` unchanged; `sendRaw` sends text unchanged; parity test against `server.sent()` bytes (FR-009). |
 | II. The protocol, not a framework | `@ag-ui/client` for runs, `@a2ui/web_core` for A2UI | Pass. The headless catalog is built from `@a2ui/web_core`'s own component definitions (R3). |
 | III. Generic core, application presets | No server-specific code | Pass. Presets and plugins are not used headless; nothing in core branches on headless. |
-| IV. Local-only operation and credential privacy | Needs three readings confirmed | Pass with the readings below, which the maintainer confirms by approving this plan. |
+| IV. Local-only operation and credential privacy | Needs three readings confirmed | Pass with the readings below, confirmed by the maintainer. Every session file written by the library, `run` or `mcp` carries the export warning (FR-043). |
 | V. Small and auditable | No new dependency | Pass. Hand-written MCP loop instead of the SDK (R6). |
 | VI. Every event type has a view | Views unchanged | Pass. Headless files import into the page. |
 | One static bundle | New code outside the page | Pass. `src/headless` and the new commands compile to `lib/`; a test reads the page bundle for them (FR-040). |
 | Python package without Node | Python package unchanged | Pass. |
-| CLI binds localhost, relays unchanged | `run` and `mcp` listen on nothing | Pass. |
+| CLI binds localhost, relays unchanged | `run` and `mcp` listen on nothing | Pass. Feature 005 FR-016 (no request but the relay, no file storage) governs serving the page; spec 005 carries a dated note for `run` and `mcp`. Requests and file writes stay in `src/headless`, so the outbound test on `src/cli` holds unchanged, and a new one covers `src/headless`. |
 | Scope through `ROADMAP.md` | Not listed yet | Pass after this plan adds the 0.3.0 row. |
 
 Readings of principle IV (from [research.md](research.md), section 5), confirmed by the maintainer with the approval of
@@ -99,7 +99,8 @@ packages/inspector/
 │   ├── core/a2ui/*.ts            # changed: relative imports get their .ts extension (10 imports, 5 files), so tsc output runs in Node
 │   ├── core/runtime/transport.ts # changed: the network error names no browser when no page is involved
 │   ├── headless/                 # new, Node side, never in the page bundle
-│   │   ├── session.ts            # openSession, loadSession: runtime + store + policy + header fetch + wait
+│   │   ├── target.ts             # target and header rules, moved from cli/args.ts and shared
+│   │   ├── session.ts            # openSession, loadSession: runtime + store + policy + header fetch + wait; the only fetch and file write
 │   │   ├── a2ui.ts               # headless v0.9 catalog and surface reads, set value, fire action
 │   │   ├── assert.ts             # structural assertions (node:assert errors)
 │   │   └── index.ts              # the agui-inspector/testing entry
@@ -135,7 +136,7 @@ Milestone 1 (0.3.0, before #83)
 3. Headless A2UI: catalog, surfaces, set value, fire action.
 4. Assertions and the `./testing` export.
 5. `agui-inspector run`, exit codes, header search across outputs.
-6. Parity test for every reference scenario; end-to-end import of a headless file into the page.
+6. Parity and timing test for every reference scenario (FR-009, SC-006); end-to-end import of a headless file into the page.
 7. Docs page, `cli.mdx`, AGENTS.md row, changeset.
 
 Milestone 2: #83 on the session, in its own spec.
