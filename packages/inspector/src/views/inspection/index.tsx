@@ -29,7 +29,7 @@ interface WaterfallState extends WaterfallChoices {
 }
 const freshWaterfall = (store: SessionStore, threadId: string | undefined): WaterfallState => ({ ...NO_CHOICES, store, threadId });
 
-export function InspectionView({ store, error, onSendRaw, onExportSession, onImportSession, reveal, threadId }: InspectionViewProps & InspectionViewExtras): ReactElement {
+export function InspectionView({ store, error, onSendRaw, onExportSession, onImportSession, onClearSession, clearBlocked, pendingExport, reveal, threadId }: InspectionViewProps & InspectionViewExtras): ReactElement {
   const session = useSyncExternalStore(store.subscribe, store.snapshot, store.snapshot);
   const [tab, setTab] = useState<Tab>('frames');
   const [filter, setFilter] = useState<FrameFilter>(NO_FILTER);
@@ -134,6 +134,9 @@ export function InspectionView({ store, error, onSendRaw, onExportSession, onImp
             onImportSession(text);
           }}
           onReadError={setReadError}
+          {...(onClearSession !== undefined && { onClear: onClearSession })}
+          {...(clearBlocked !== undefined && { clearBlocked })}
+          {...(pendingExport !== undefined && { pendingExport })}
         />
       </div>
       {(error ?? readError) !== undefined && (

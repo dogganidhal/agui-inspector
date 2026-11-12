@@ -1,6 +1,6 @@
-// Session export and import controls (design.md, Session export and import). Export always shows
-// the sensitive-data warning first and only then calls the host; import reads a local file and
-// hands its text over. Neither makes a request. What a file holds and how it is validated lives in
+// Session export, import and clear controls (design.md, Session export and import; specs/017). Export always
+// shows the sensitive-data warning first and only then calls the host; import reads a local file and
+// hands its text over; clear asks first when the host says something was not exported. None makes a request. What a file holds and how it is validated lives in
 // core/session-files.
 import { useRef, useState, type ReactElement } from 'react';
 import { SESSION_FILE_NAME } from '../../core/session-files/index.ts';
@@ -16,12 +16,19 @@ export interface SessionControlsProps {
   onImport(text: string): void;
   /** The chosen file could not be read at all. */
   onReadError(message: string): void;
+  /** Empties the capture. Absent: no Clear session control. */
+  onClear?(): void;
+  /** Why Clear session is unavailable. */
+  clearBlocked?: string;
+  /** What a clear would lose; undefined clears at once. */
+  pendingExport?(): { readonly exchanges: number; readonly frames: number } | undefined;
 }
 
 const count = (n: number, noun: string) => `${n.toLocaleString('en-US')} ${noun}${n === 1 ? '' : 's'}`;
 
-export function SessionControls({ exchangeCount, frameCount, onExport, onImport, onReadError }: SessionControlsProps): ReactElement {
+export function SessionControls({ exchangeCount, frameCount, onExport, onImport, onReadError, onClear, clearBlocked, pendingExport }: SessionControlsProps): ReactElement {
   const [warning, setWarning] = useState(false);
+  const [unexported, setUnexported] = useState<{ readonly exchanges: number; readonly frames: number }>();
   const picker = useRef<HTMLInputElement>(null);
 
   async function chosen(file: File | undefined) {
@@ -46,6 +53,20 @@ export function SessionControls({ exchangeCount, frameCount, onExport, onImport,
         <Icon name="import" size={15} />
         Import session
       </Button>
+      {onClear && (
+        <Button
+          disabled={clearBlocked !== undefined}
+          {...(clearBlocked !== undefined && { title: clearBlocked })}
+          onClick={() => {
+            const pending = pendingExport?.();
+            if (pending === undefined) onClear();
+            else setUnexported(pending);
+          }}
+        >
+          <Icon name="x" size={15} />
+          Clear session
+        </Button>
+      )}
       <input
         ref={picker}
         type="file"
@@ -89,6 +110,32 @@ export function SessionControls({ exchangeCount, frameCount, onExport, onImport,
           {SESSION_FILE_NAME} · {count(exchangeCount, 'exchange')} · {count(frameCount, 'frame')} · 0 headers
         </p>
       </Dialog>
+      {onClear && (
+        <Dialog
+          open={unexported !== undefined}
+          onClose={() => setUnexported(undefined)}
+          title="Clear this session"
+          footer={
+            <>
+              <Button onClick={() => setUnexported(undefined)}>Cancel</Button>
+              <Button
+                variant="primary"
+                onClick={() => {
+                  setUnexported(undefined);
+                  onClear();
+                }}
+              >
+                Clear session
+              </Button>
+            </>
+          }
+        >
+          <p>
+            {count(unexported?.exchanges ?? 0, 'exchange')} and {count(unexported?.frames ?? 0, 'frame')} were recorded since the last export. Clearing removes them from the page and cannot be undone.
+          </p>
+          <p>Export session keeps a copy. The agent, the endpoint, the token and the profile stay as they are.</p>
+        </Dialog>
+      )}
     </>
   );
 }

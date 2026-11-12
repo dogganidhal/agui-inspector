@@ -8,7 +8,7 @@
 // Every request goes through the runtime's guarded transport. The token is typed into the
 // connection controls, handed to `runtime.setAuth` and read again only by that transport: nothing
 // here keeps it in React state, storage, the store, a profile or a file.
-import { StrictMode, useCallback, useEffect, useState, useSyncExternalStore, type ReactElement, type ReactNode } from 'react';
+import { StrictMode, useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactElement, type ReactNode } from 'react';
 import { createRoot, type Root as ReactRoot } from 'react-dom/client';
 import type { A2uiAction, AppProps, BrandConfig, ClientProfileSettings, DeploymentMode, EvidenceTarget, InspectionSession, SessionStore } from '../contracts';
 import { declaredOf, loadCapabilities } from '../core/config/index';
@@ -219,7 +219,7 @@ export function App({ settings, connection, conversation, inspection, mode, allo
               onChange={(value) => setTab(value as Tab)}
             />
             {recording && (
-              <Finding variant="warn">Imported recording: inspection only. Reload the page to send requests again.</Finding>
+              <Finding variant="warn">Imported recording: inspection only. Clear session to send requests again.</Finding>
             )}
           </div>
           {/* The frames list keeps its filters and open rows while another tab shows; the state view
@@ -271,7 +271,11 @@ function pluginCustom(plugins: PluginHost, entry: CustomEntry): ReactNode | unde
   return <PluginSlot render={renderer.render} data={{ name: entry.name, value: entry.value }} label={`Value of ${entry.name}`} onError={(error) => plugins.report(renderer.plugin, `renderCustomEvent(${entry.name})`, error)} />;
 }
 
-const RECORDING_NOTICE = 'An imported recording is open for inspection. Reload the page to send requests again.';
+const RECORDING_NOTICE = 'An imported recording is open for inspection. Clear session to send requests again.';
+const CAPTURING = 'Stop the run first: a response is still being recorded';
+
+/** What an export or a clear counts: exchanges and frames received, as the export summary shows them. */
+const recorded = (session: InspectionSession) => ({ exchanges: session.exchanges.length, frames: session.frames.filter((frame) => frame.classification === 'data').length });
 
 /** Saves `text` as a file through a temporary link; the page makes no request for it. */
 function download(text: string, name: string): void {
@@ -298,6 +302,8 @@ function Root({ started, storage }: { started: Started; storage?: StorageLike })
   const [shown, setShown] = useState<SessionStore>(live);
   const [recording, setRecording] = useState(false);
   const [inspectionError, setInspectionError] = useState<string>();
+  // The live capture's counts at its last export (specs/017). After a capture ends, anything new adds an exchange or a frame.
+  const exported = useRef<string>(undefined);
   const { toasts, toast } = useToasts();
   const agent = agents.find((candidate) => candidate.id === selectedId);
 
@@ -444,7 +450,30 @@ function Root({ started, storage }: { started: Started; storage?: StorageLike })
         setInspectionError(undefined);
         void runtime.sendRaw(text).then(() => setInspectionError(runtime.getState().error));
       }),
-      onExportSession: () => download(serializeSession(shown.snapshot()), SESSION_FILE_NAME),
+      onExportSession() {
+        const session = shown.snapshot();
+        if (shown === live) exported.current = JSON.stringify(recorded(session));
+        download(serializeSession(session), SESSION_FILE_NAME);
+      },
+      // Read during render: every exchange is created while capturing, and the end of a capture re-renders the page.
+      ...(state.capturing ? { clearBlocked: CAPTURING } : !recording && live.snapshot().exchanges.length === 0 && { clearBlocked: 'Nothing to clear' }),
+      pendingExport() {
+        const counts = recorded(live.snapshot());
+        return counts.exchanges === 0 || JSON.stringify(counts) === exported.current ? undefined : counts;
+      },
+      onClearSession() {
+        // Never drop frames of a stream still arriving: the button is disabled then, and this checks again.
+        if (runtime.getState().capturing) {
+          toast(CAPTURING);
+          return;
+        }
+        runtime.newThread();
+        live.clear();
+        exported.current = undefined;
+        setShown(live);
+        setRecording(false);
+        setInspectionError(undefined);
+      },
       onImportSession(text) {
         const parsed = parseSession(text);
         if (!parsed.ok) return setInspectionError(`Import failed: ${parsed.error}`);

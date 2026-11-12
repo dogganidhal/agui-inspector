@@ -47,17 +47,17 @@ A file that passes replaces what is on screen. Its conversation, state and frame
 </Step>
 </Steps>
 
-You can only inspect an opened recording. A warning under the tabs reads "Imported recording: inspection only", and the footer says the same. The composer is disabled and shows "An imported recording is open for inspection. Reload the page to send requests again." A reply, a raw request or a surface action shows that message instead of sending. Import never sends the recording's requests, runs a preparation or starts a run, and it makes no network request of its own. Export session now writes the recording.
+You can only inspect an opened recording. A warning under the tabs reads "Imported recording: inspection only", and the footer says the same. The composer is disabled and shows "An imported recording is open for inspection. Clear session to send requests again." A reply, a raw request or a surface action shows that message instead of sending. Import never sends the recording's requests, runs a preparation or starts a run, and it makes no network request of its own. Export session now writes the recording.
 
 A recording can pass every check and still fail to render. A pane that throws shows its own error, and the rest of the page keeps working. If that happens while a recording is open, the inspector shows the previous capture again and reports `Import failed` with the pane's name and the error. The live capture stays usable and can still be exported.
 
 ### Back to live capture
 
-To send requests again, reload the page. The reload starts an empty session. Nothing else brings back the live session you had before the import.
+To send requests again, press Clear session. It closes the recording and empties the live session you had before the import, so export that one first if you want to keep it. A reload does the same and also forgets the token.
 
 ## Export before you reload
 
-A reload, or anything else that closes the page, loses every exchange you have not exported. Export first if you may want to show the session to someone or compare it later. Export before you import a file too, because leaving the recording needs a reload.
+A reload, Clear session, or anything else that closes the page, loses every exchange you have not exported. Clear session asks first when something was not exported; a reload does not. Export first if you may want to show the session to someone or compare it later. Export before you import a file too, because leaving the recording clears the live session.
 
 ## Read this before you share a file
 

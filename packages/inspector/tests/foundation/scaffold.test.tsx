@@ -29,6 +29,7 @@ const store: SessionStore = {
   addFinding: spy('addFinding'),
   upsertRun: spy('upsertRun'),
   appendDerived: spy('appendDerived'),
+  clear: spy('clear'),
   snapshot: () => session,
   subscribe: () => () => {},
 };

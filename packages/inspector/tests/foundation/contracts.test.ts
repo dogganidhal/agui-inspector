@@ -87,11 +87,11 @@ export type RecorderReturnsOriginalResponse = Expect<
   Equal<ReturnType<Recorder['record']>, Promise<Response>>
 >;
 
-// The store is the framework-free append/update/read/subscribe seam and nothing more.
+// The store is the framework-free append/update/clear/read/subscribe seam and nothing more.
 export type StoreSeamIsFixed = Expect<
   Equal<
     keyof SessionStore,
-    'appendExchange' | 'updateExchange' | 'appendFrame' | 'addFinding' | 'upsertRun' | 'appendDerived' | 'snapshot' | 'subscribe'
+    'appendExchange' | 'updateExchange' | 'appendFrame' | 'addFinding' | 'upsertRun' | 'appendDerived' | 'clear' | 'snapshot' | 'subscribe'
   >
 >;
 

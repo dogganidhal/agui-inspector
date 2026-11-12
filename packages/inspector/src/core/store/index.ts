@@ -175,6 +175,18 @@ export function createSessionStore(options: SessionStoreOptions = {}): SessionSt
       changed();
     },
 
+    clear() {
+      exchanges.clear();
+      frames.length = 0;
+      frameIds.clear();
+      findings.length = 0;
+      findingIds.clear();
+      runs.clear();
+      derived.length = 0;
+      derivedIds.clear();
+      changed();
+    },
+
     snapshot() {
       return (cached ??= {
         id: sessionId,

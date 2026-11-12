@@ -192,8 +192,8 @@ test('the footer names the counts and the privacy facts of the mode', () => {
 });
 
 test('an open recording is announced and the composer says why it cannot send', () => {
-  const { markup } = build({ recording: true, notice: 'An imported recording is open for inspection. Reload the page to send requests again.' });
-  assert.match(markup, /Imported recording: inspection only\. Reload the page to send requests again\./);
+  const { markup } = build({ recording: true, notice: 'An imported recording is open for inspection. Clear session to send requests again.' });
+  assert.match(markup, /Imported recording: inspection only\. Clear session to send requests again\./);
   assert.match(markup, /<p class="agui-conn-notice" role="status">An imported recording is open/);
   assert.doesNotMatch(build().markup, /Imported recording/);
 });

@@ -67,6 +67,7 @@ merged, so only the conformance suite waits, for the Python reference agent.
 | --- | --- | --- | --- |
 | Conformance suite | `agui-inspector test --target <url>` with JSON and JUnit reports, and a violating test for every catalogue rule | #75, #77, #82 | [#83](https://github.com/dogganidhal/agui-inspector/issues/83) |
 | Python reference agent | The scripted, model-free scenarios of the TypeScript reference agent, in Python | | [#82](https://github.com/dogganidhal/agui-inspector/issues/82) |
+| Clear session | A button that empties the recorded exchanges, frames and runs and starts a new thread, without a reload | | [spec 017](specs/017-clear-recording/spec.md) |
 | Replay | `agui-inspector replay <session file>` serves a recorded session as an AG-UI endpoint, for client tests | #75 | [#84](https://github.com/dogganidhal/agui-inspector/issues/84) |
 | Rule docs and examples | A page per rule, and examples for the major AG-UI server frameworks | #77 | [#85](https://github.com/dogganidhal/agui-inspector/issues/85) |
 
