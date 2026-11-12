@@ -186,8 +186,8 @@ export function createGuardedTransport(policy: TransportPolicy, options: Transpo
         if (isAbort(error) || !(error instanceof TypeError)) throw error;
         // Only the origin is named: the path and query may hold something the user would not paste into a bug report.
         throw new Error(
-          `The browser could not complete the request to ${target.value.origin}. Possible causes: the target does not allow this page's origin (CORS), ` +
-            `private-network or mixed-content rules, or the server is unreachable. The inspector does not proxy or bypass these checks.`,
+          `Could not complete the request to ${target.value.origin}. Possible causes: the server is unreachable, or, in a browser, the target does not ` +
+            `allow this page's origin (CORS), private-network or mixed-content rules. The inspector does not proxy or bypass these checks.`,
         );
       }
       if (response.type === 'opaqueredirect' || (response.status >= 300 && response.status < 400)) {

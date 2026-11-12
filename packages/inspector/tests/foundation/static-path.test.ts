@@ -30,3 +30,8 @@ test('the package keeps the static path as its main export, and its one bin is t
   assert.equal(pkg.exports['.'], './src/static-path.js');
   assert.deepEqual(pkg.bin, { 'agui-inspector': './lib/cli/main.js' });
 });
+
+test('the package exports the headless sessions as agui-inspector/testing, from lib/ with its declarations', () => {
+  const pkg = JSON.parse(readFileSync(path.join(root, 'packages/inspector/package.json'), 'utf8')) as { exports: Record<string, unknown> };
+  assert.deepEqual(pkg.exports['./testing'], { types: './lib/headless/index.d.ts', default: './lib/headless/index.js' });
+});

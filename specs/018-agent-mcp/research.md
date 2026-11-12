@@ -224,3 +224,36 @@ Checked in this worktree after `npm ci --ignore-scripts`.
   findings match the expectations already in `examples/reference-agent/rule-fixtures.ts`. Header search: a synthetic
   value passed as a header is searched in every file written, standard output and error, and every tool result. One
   Playwright test imports a headless file into the page.
+
+## 9. Spike results (T006, 2026-11-12)
+
+`packages/inspector/tests/headless/spike.test.ts`, Node 24.11.1, real HTTP on 127.0.0.1. All four checks pass.
+
+- **Plain run**: `createRuntime` with its own store, the policy `{ mode: 'hosted', pageOrigin: <target origin>,
+  allowedOrigins: [] }` and a `fetch` wrapper that adds a header records one exchange whose frames are all in the bytes
+  `server.sent()` wrote. Every request went to the target. The store snapshot does not contain the header value.
+- **Interrupts**: the interrupt scenario pauses with `i-approve` and `i-contact` unanswered; drafting and answering both
+  sends the continuation as a second run (`Resumed with i-approve=resolved, ...`).
+- **Client tools**: both tool calls appear as drafts; submitting both sends the continuation (`Tool results:
+  c-color=teal, c-size=2`).
+- **A2UI v0.9**: `createSurfaceSession` works in Node with `@a2ui/web_core/v0_9`'s own `basicCatalog` and alias copies
+  of it; no React, no DOM. The data model can be read and set. An action is built the way the renderer's binder builds
+  it: `ComponentContext.dataContext.resolveAction(action)` resolves the event's context paths, then
+  `ComponentContext.dispatchAction` reaches `onAction`. `runtime.sendA2uiAction` then sends the user action with the
+  edited value in its context. Dispatching the raw action without `resolveAction` sends unresolved paths, so the
+  resolve step is required.
+- **Build**: the core compiled by `tsc` with `tsconfig.server.json`'s options (after T002) loads from inside the package
+  in Node: runtime, a2ui, projection, session files, store and profiles.
+
+What this changes in the plan:
+
+- R3 is simpler: the headless catalog is `basicCatalog` itself (with alias copies, like the page's
+  `createBundledCatalogs`), not a catalog rebuilt from the component APIs. `openUrl` must be replaced by
+  `deniedOpenUrl`, as in the page, because a function-call action runs the catalog's function.
+- A function-call action (`functionCall` or `call`) is run through `dataContext.resolveDynamicValue`, as the binder does;
+  an event action goes through `resolveAction` and `dispatchAction`.
+- Media components load nothing headless because nothing renders, so the page's "blocked resource" issues for media do
+  not occur. Only a denied `openUrl` produces an issue.
+- Idle is `!running && !capturing`, observed through `runtime.subscribe`.
+- The store's read method is `snapshot()`.
+

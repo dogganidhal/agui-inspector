@@ -153,7 +153,7 @@ test('a connection failure stops the sequence and is recorded as a transport err
     ok200,
   ]);
   const result = await run(plan);
-  assert.match(result.ok ? '' : result.error, /Preparation failed: POST \/prepare\/warm: The browser could not complete the request/);
+  assert.match(result.ok ? '' : result.error, /Preparation failed: POST \/prepare\/warm: Could not complete the request/);
   assert.equal(net.calls.length, 2);
   const session = await settle();
   assert.equal(session.exchanges[1]?.transport, 'transport-error');

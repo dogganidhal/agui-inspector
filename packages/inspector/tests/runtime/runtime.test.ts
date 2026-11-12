@@ -384,7 +384,7 @@ test('a connection the browser blocks is a transport error on the exchange and a
   assert.equal(session.exchanges[0]?.transport, 'transport-error');
   assert.match(session.exchanges[0]?.transportError ?? '', /CORS/);
   assert.ok(session.findings.some((finding) => finding.kind === 'transport'));
-  assert.match(runtime.getState().error ?? '', /The run request failed: The browser could not complete the request to https:\/\/agent\.example/);
+  assert.match(runtime.getState().error ?? '', /The run request failed: Could not complete the request to https:\/\/agent\.example/);
   assert.equal(runtime.getState().running, false);
   assert.equal(session.runs[0]?.outcome.kind, 'unknown');
 });

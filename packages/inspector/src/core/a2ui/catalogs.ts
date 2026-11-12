@@ -4,7 +4,7 @@
 // fetches a catalog or rewrites an operation: an id only picks which bundled catalog a surface draws with.
 // Framework-free, and it imports no package, so config parsing can use it. A test compares the literals
 // with the renderer packages.
-import type { CatalogAliases } from '../../contracts';
+import type { CatalogAliases } from '../../contracts.ts';
 
 export type A2uiVersion = 'v0.8' | 'v0.9';
 

@@ -3,7 +3,7 @@
 // (optionally with `progressTokens`), `{ status: "retrying", attempt, maxAttempts, errors }` and
 // `{ status: "failed", error, attempts, maxAttempts }`, each stamped with the server's `debugExposure`.
 // The painted surface replaces it under the same message id. Framework-free; nothing here alters the content.
-import type { JsonValue } from '../../contracts';
+import type { JsonValue } from '../../contracts.ts';
 
 export type LifecycleStatus = 'building' | 'retrying' | 'failed';
 

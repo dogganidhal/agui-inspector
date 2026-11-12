@@ -218,13 +218,13 @@ test('a request the browser blocks is shown with its likely causes and kept as a
   await endpoint.fill(`${site.closed.origin}/agent`);
   await page.getByRole('button', { name: 'Use endpoint' }).click();
   await send(page, 'hello');
-  const alert = page.getByRole('alert').filter({ hasText: 'The browser could not complete the request' });
+  const alert = page.getByRole('alert').filter({ hasText: 'Could not complete the request' });
   await expect(alert).toContainText(`to ${site.closed.origin}`);
   await expect(alert).toContainText('CORS');
   await expect(alert).toContainText('private-network or mixed-content');
   await expect(alert).toContainText('does not proxy or bypass');
   await expect(page.getByRole('button', { name: /POST \/agent .* failed .* 1 issue/ })).toBeVisible();
-  await expect(page.getByText(/transport · transport\.failed · Error: The browser could not complete the request/)).toBeVisible();
+  await expect(page.getByText(/transport · transport\.failed · Error: Could not complete the request/)).toBeVisible();
 
   // Private-network and secure-context blocks reach the page the same way (one failed fetch), and loopback
   // cannot trigger them, so they are stood in for by aborting the request at the browser.
