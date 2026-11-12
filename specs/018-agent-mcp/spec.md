@@ -4,7 +4,7 @@
 
 **Created**: 2026-11-11
 
-**Status**: Accepted by the maintainer on 2026-11-12. Planning follows.
+**Status**: Spec and plan accepted by the maintainer on 2026-11-12. Tasks follow.
 
 **Input**: The maintainer asked whether agui-inspector needs an MCP server so that coding agents can act on the inspector
 for the developer. The first draft of this spec answered no. The maintainer then set a wider goal: use the inspector for
@@ -40,6 +40,8 @@ the MCP server last. The maintainer accepted that order.
 ### Session 2026-11-12, approval
 
 The maintainer approved this spec on 2026-11-12 and chose 0.3.0 for the MCP server. Planning follows.
+
+The maintainer approved the plan on 2026-11-12, with the three readings of principle IV in its constitution check.
 
 ## User Scenarios & Testing *(mandatory)*
 

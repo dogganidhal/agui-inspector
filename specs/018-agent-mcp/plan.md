@@ -59,7 +59,8 @@ takes to stream (SC-006). A 5,000-frame session reads and saves without paging p
 | CLI binds localhost, relays unchanged | `run` and `mcp` listen on nothing | Pass. |
 | Scope through `ROADMAP.md` | Not listed yet | Pass after this plan adds the 0.3.0 row. |
 
-Readings of principle IV (from [research.md](research.md), section 5), confirmed with the approval of this plan:
+Readings of principle IV (from [research.md](research.md), section 5), confirmed by the maintainer with the approval of
+this plan on 2026-11-12:
 
 1. "CLI mode MUST reach targets through its local proxy" governs the page served by the command. A headless session has
    no page; the process is the client, as the relay is.
