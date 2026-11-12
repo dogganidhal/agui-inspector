@@ -1,6 +1,6 @@
 // A stand-in for the packaged page, so the helper tests run before the build. `secret.txt` sits next to the page
 // directory, so a path that escapes it would read a real file.
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, mock } from 'node:test';
@@ -11,6 +11,9 @@ export const CHUNK_JS = 'export const chunk = 2;\n';
 export const SECRET = 'outside the static directory';
 export const POLICY = "script-src 'self'; object-src 'none'; base-uri 'none'";
 export const AGENTS = [{ id: 'support', url: '/agents/support/stream' }];
+/** The guide for coding agents (spec 019), the real file. */
+export const GUIDE_FILE = path.join(process.cwd(), 'packages', 'inspector', 'public', 'llms.txt');
+export const GUIDE = readFileSync(GUIDE_FILE, 'utf8');
 
 /** Creates the stand-in directory and removes it when the test file ends. Returns the page directory. */
 export function pageDirectory(): string {
@@ -24,6 +27,7 @@ export function pageDirectory(): string {
   writeFileSync(path.join(page, 'hosting-config.json'), '{"version":0,"mode":"embedded","allowedOrigins":[]}');
   writeFileSync(path.join(page, 'assets', 'chunk.js'), CHUNK_JS);
   writeFileSync(path.join(page, 'assets', 'data.bin'), 'binary');
+  copyFileSync(GUIDE_FILE, path.join(page, 'llms.txt'));
   return page;
 }
 

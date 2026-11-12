@@ -33,6 +33,7 @@ export const DEMO_FILES = Object.freeze([
   'demo.css',
   'service-worker.js',
   'hosting-config.json',
+  'llms.txt',
   EXAMPLES_FILE,
 ]);
 

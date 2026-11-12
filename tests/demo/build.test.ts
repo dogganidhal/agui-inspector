@@ -81,7 +81,7 @@ test('the complete demo set and the complete ordinary set each meet both budgets
 test('the ordinary build is byte-for-byte the same before and after a demo build, and holds no demo asset', () => {
   const before = tree(ordinaryBefore);
   assert.deepEqual(tree(ordinaryAfter), before);
-  assert.deepEqual(Object.keys(before).sort(), ['app.css', 'app.js', 'hosting-config.json', 'index.html']);
+  assert.deepEqual(Object.keys(before).sort(), ['app.css', 'app.js', 'hosting-config.json', 'index.html', 'llms.txt']);
   for (const file of Object.keys(before)) {
     const text = read(ordinaryAfter, file);
     for (const marker of DEMO_ONLY_MARKERS) assert.equal(text.includes(marker), false, `${file} mentions ${marker}`);

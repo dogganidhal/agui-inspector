@@ -136,7 +136,7 @@ test('enabling adds the two routes and logs one warning that names the mount pat
   ] as const) {
     const app = new Hono();
     const { logged } = warnings(() => mountInspector(app, { agents: AGENTS, enabled: true, assetsDir, ...options }));
-    assert.deepEqual(logged, [`agui-inspector is enabled and mounted at ${mount}; disable it outside development`]);
+    assert.deepEqual(logged, [`agui-inspector is enabled and mounted at ${mount}; disable it outside development; guide for coding agents at ${mount}/llms.txt`]);
     assert.equal(app.routes.length, 2);
   }
 });

@@ -18,6 +18,9 @@ export interface ExpressLike {
  * Serves the inspector page, its files and `<path>/config.json` from `app`. Does nothing, and checks nothing, unless
  * `options.enabled` is `true`. Enabling logs a warning that names the mount path. It adds no authentication: register the
  * host's own middleware with `app.use` before this call, so it runs first.
+ *
+ * Coding agents: a guide for you is served at `<path>/llms.txt`, behind the same authentication as the page. See
+ * https://dogganidhal.github.io/agui-inspector/docs/agent-guide/
  */
 export function mountInspector(app: ExpressLike, options: InspectorOptions): void {
   const mounted = resolveMount(options);

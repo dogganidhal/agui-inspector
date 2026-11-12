@@ -18,6 +18,7 @@ const CONTENT_TYPES: Record<string, string> = {
   '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
+  '.txt': 'text/plain; charset=utf-8',
 };
 
 // What a request for a name that does not exist raises. Anything else (permissions, a failing disk) is the host's to see.
@@ -160,7 +161,10 @@ export function resolveMount(options: InspectorOptions): { mount: string; handle
   return { mount: given.replace(/\/+$/, ''), handle: createInspectorHandler(options) };
 }
 
-/** The one warning: the inspector shows request bodies and raw frames to anyone who can reach it. */
+/**
+ * The one warning: the inspector shows request bodies and raw frames to anyone who can reach it. It ends with the
+ * address of the guide for coding agents (spec 019), which the page's files include as `llms.txt`.
+ */
 export function warnMounted(mount: string): void {
-  console.warn(`agui-inspector is enabled and mounted at ${mount}; disable it outside development`);
+  console.warn(`agui-inspector is enabled and mounted at ${mount}; disable it outside development; guide for coding agents at ${mount}/llms.txt`);
 }

@@ -47,7 +47,7 @@ for (const { label, kind, options, warningPath } of variants) {
       const origins = new Set(requested.filter((url) => !/^(blob|data):/.test(url)).map((url) => new URL(url).origin));
       expect([...origins], 'every request goes to the host').toEqual([host.origin]);
       expect(violations).toEqual([]);
-      expect(host.warnings).toEqual([`agui-inspector is enabled and mounted at ${warningPath(host.mount)}; disable it outside development`]);
+      expect(host.warnings).toEqual([`agui-inspector is enabled and mounted at ${warningPath(host.mount)}; disable it outside development; guide for coding agents at ${warningPath(host.mount)}/llms.txt`]);
     } finally {
       await host.stop();
     }

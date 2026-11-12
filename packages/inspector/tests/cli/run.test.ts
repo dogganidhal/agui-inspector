@@ -7,7 +7,7 @@ import path from 'node:path';
 import { after, test } from 'node:test';
 import { run } from '../../src/cli/run.ts';
 import { USAGE } from '../../src/cli/args.ts';
-import { ask, closedPort, recordingTarget, sleep, standInPage, start, within } from './support.ts';
+import { ask, closedPort, PAGE_FILES, recordingTarget, sleep, standInPage, start, within } from './support.ts';
 
 const SECRET = 'synthetic-secret-77ab10';
 const page = standInPage();
@@ -103,7 +103,7 @@ test('a normal run prints the address and one line for each target with the name
   const port = await listening(session);
   assert.equal(
     session.out(),
-    `agui-inspector listening on http://127.0.0.1:${port}/\n  /proxy/1 -> ${target.origin} (headers: Authorization, X-Key)\n  /proxy/2 -> https://agent.example\n`,
+    `agui-inspector listening on http://127.0.0.1:${port}/\n  /proxy/1 -> ${target.origin} (headers: Authorization, X-Key)\n  /proxy/2 -> https://agent.example\nguide for coding agents: http://127.0.0.1:${port}/llms.txt\n`,
   );
   assert.equal(session.err(), '');
   await ask({ port, path: '/proxy/1/agent', method: 'POST', body: '{}' });
@@ -162,6 +162,21 @@ test('a --plugin that is missing, a directory or unreadable stops the command be
   }
 });
 
+test('the guide for coding agents is served unchanged next to the page and holds no header value (spec 019)', async () => {
+  const target = await recordingTarget();
+  closers.push(target.close);
+  const session = begin(['--target', `${target.origin}/agent`, '--header', `X-Key: ${SECRET}`, '--port', '0']);
+  const port = await listening(session);
+  const guide = await ask({ port, path: '/llms.txt' });
+  assert.equal(guide.status, 200);
+  assert.equal(guide.headers['content-type'], 'text/plain; charset=utf-8');
+  assert.equal(guide.body.toString(), PAGE_FILES['llms.txt']);
+  assert.ok(!guide.body.toString().includes(SECRET));
+  assert.ok(session.out().endsWith(`guide for coding agents: http://127.0.0.1:${port}/llms.txt\n`));
+  session.stop();
+  assert.equal(await session.done, 0);
+});
+
 test('a plugin file is served at /plugins/<n>.js and listed in config.json, and the startup output names no plugin', async () => {
   const dir = mkdtempSync(path.join(tmpdir(), 'agui-cli-plugin-'));
   closers.push(async () => rmSync(dir, { recursive: true, force: true }));
@@ -170,7 +185,7 @@ test('a plugin file is served at /plugins/<n>.js and listed in config.json, and 
   closers.push(target.close);
   const session = begin(['--plugin', path.join(dir, 'sign.js'), '--target', `${target.origin}/agent`, '--port', '0']);
   const port = await listening(session);
-  assert.equal(session.out(), `agui-inspector listening on http://127.0.0.1:${port}/\n  /proxy/1 -> ${target.origin}\n`);
+  assert.equal(session.out(), `agui-inspector listening on http://127.0.0.1:${port}/\n  /proxy/1 -> ${target.origin}\nguide for coding agents: http://127.0.0.1:${port}/llms.txt\n`);
   const config = JSON.parse((await ask({ port, path: '/config.json' })).body.toString()) as { plugins: string[] };
   assert.deepEqual(config.plugins, ['/plugins/1.js']);
   const file = await ask({ port, path: '/plugins/1.js' });

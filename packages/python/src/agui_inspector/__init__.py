@@ -85,6 +85,11 @@ def mount_inspector(
     ``enabled`` defaults to False and a disabled call touches nothing, not even the optional
     Starlette import. Enabling logs a warning that names the mount path.
 
+    Coding agents: the page's files include a guide for you, served at ``<path>/llms.txt`` behind the
+    same authentication as the page. It says where the page and its list of agents are, how to build a
+    launch link and how to drive an agent with ``npx agui-inspector run`` or ``npx agui-inspector mcp``.
+    Docs: https://dogganidhal.github.io/agui-inspector/docs/agent-guide/
+
     The helper adds no authentication; every route inherits the host's. Middleware on ``app`` or on
     an application that mounts it covers all of them. On a FastAPI ``app`` the routes are API routes,
     so the dependencies passed to ``FastAPI(dependencies=[...])`` run too. A dependency on an
@@ -165,4 +170,8 @@ def mount_inspector(
         add = app.add_route
     add(mount, redirect, methods=["GET", "HEAD"])
     add(f"{mount}/{{asset:path}}", serve, methods=["GET", "HEAD"])
-    _log.warning("agui-inspector is enabled and mounted at %s; disable it outside development", mount)
+    _log.warning(
+        "agui-inspector is enabled and mounted at %s; disable it outside development; guide for coding agents at %s/llms.txt",
+        mount,
+        mount,
+    )

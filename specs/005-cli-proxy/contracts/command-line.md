@@ -43,6 +43,9 @@ agui-inspector listening on http://127.0.0.1:4747/
 
 The line for a target with no header ends after its origin. The first line is printed only after the listener is ready.
 
+Note, 2026-11-12: [spec 019](../../019-agent-discovery/spec.md) (FR-008) adds one last startup line,
+`guide for coding agents: http://127.0.0.1:<port>/llms.txt`.
+
 A failure to reach a target on a later request, one line:
 
 ```text

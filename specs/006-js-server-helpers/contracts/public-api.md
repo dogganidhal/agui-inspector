@@ -38,7 +38,8 @@ interface HonoLike { all(path: string, handler: (c: { req: { raw: Request; param
 - `enabled` not `true`: returns. No route, no log, no file read, no check.
 - Otherwise: validates `path`, then `agents`, then that the page exists, throws on the first failure, and registers the
   routes. Then logs one warning with `console.warn`:
-  `agui-inspector is enabled and mounted at <mount>; disable it outside development`.
+  `agui-inspector is enabled and mounted at <mount>; disable it outside development`. Note, 2026-11-12:
+  [spec 019](../../019-agent-discovery/spec.md) (FR-008) appends `; guide for coding agents at <mount>/llms.txt`.
 - Express: `app.use(<mount>, handler)`. It answers for every method and every path below the mount.
 - Hono: `app.all(<mount>, handler)` and `app.all(<mount>/:asset{.*}, handler)`.
 

@@ -26,6 +26,7 @@ from agui_inspector import Agent, Brand, mount_inspector
 INDEX = "<!doctype html><title>inspector</title><script type=\"module\" src=\"./app.js\"></script>"
 APP_JS = "export const app = 1;\n"
 CHUNK_JS = "export const chunk = 2;\n"
+GUIDE = "# agui-inspector\n\n> A stand-in for the guide for coding agents.\n"
 AGENTS = [Agent(id="support", url="/agents/support/stream")]
 
 
@@ -45,6 +46,7 @@ class StaticFixture(unittest.TestCase):
         (static / "index.html").write_text(INDEX)
         (static / "app.js").write_text(APP_JS)
         (static / "assets" / "chunk.js").write_text(CHUNK_JS)
+        (static / "llms.txt").write_text(GUIDE)
         patcher = mock.patch.object(agui_inspector, "_assets_root", return_value=static)
         patcher.start()
         self.addCleanup(patcher.stop)
@@ -62,7 +64,7 @@ class DisabledTest(StaticFixture):
                 mount_inspector(app, agents=AGENTS, enabled=False, path="/custom")
                 self.assertEqual(before, list(app.routes))
                 client = TestClient(app)
-                for path in ("/agui-inspector", "/agui-inspector/", "/agui-inspector/config.json", "/custom/"):
+                for path in ("/agui-inspector", "/agui-inspector/", "/agui-inspector/config.json", "/agui-inspector/llms.txt", "/custom/"):
                     self.assertEqual(404, client.get(path, follow_redirects=False).status_code, path)
 
     def test_disabled_needs_no_optional_dependency(self):
@@ -355,7 +357,23 @@ class EnabledTest(StaticFixture):
             with self.subTest(path), self.assertLogs("agui_inspector", logging.WARNING) as logs:
                 mount_inspector(Starlette(), agents=AGENTS, enabled=True, path=path)
             self.assertEqual(1, len(logs.records))
-            self.assertIn(path.rstrip("/"), logs.output[0])
+            mount = path.rstrip("/")
+            self.assertEqual(
+                f"agui-inspector is enabled and mounted at {mount}; disable it outside development; "
+                f"guide for coding agents at {mount}/llms.txt",
+                logs.records[0].getMessage(),
+            )
+
+    def test_serves_the_guide_for_coding_agents_as_plain_text_below_the_mount(self):
+        # Spec 019: the guide is one of the page's files, served as it is, whatever the configuration.
+        for name, app in self.apps():
+            for path in ("/agui-inspector", "/tools/inspector"):
+                with self.subTest(host=name, path=path):
+                    mount_inspector(app, agents=AGENTS, enabled=True, path=path, brand=Brand(name="Acme"))
+                    response = TestClient(app).get(f"{path}/llms.txt")
+                    self.assertEqual(200, response.status_code)
+                    self.assertEqual(GUIDE, response.text)
+                    self.assertEqual("text/plain; charset=utf-8", response.headers["content-type"])
 
     def test_every_response_carries_an_own_origin_no_eval_csp(self):
         app = Starlette()
@@ -409,7 +427,7 @@ class EnabledTest(StaticFixture):
         app.middleware("http")(guard)
         mount_inspector(app, agents=AGENTS, enabled=True)
         client = TestClient(app)
-        for path in ("/agui-inspector", "/agui-inspector/", "/agui-inspector/app.js", "/agui-inspector/config.json"):
+        for path in ("/agui-inspector", "/agui-inspector/", "/agui-inspector/app.js", "/agui-inspector/config.json", "/agui-inspector/llms.txt"):
             self.assertEqual(401, client.get(path, follow_redirects=False).status_code, path)
         allowed = {"authorization": "Bearer synthetic"}
         self.assertEqual(200, client.get("/agui-inspector/config.json", headers=allowed).status_code)
@@ -433,6 +451,7 @@ class EnabledTest(StaticFixture):
             "/agui-inspector/config.json",
             "/agui-inspector/app.js",
             "/agui-inspector/assets/chunk.js",
+            "/agui-inspector/llms.txt",
             "/agui-inspector/missing.js",
         )
         for path in paths:
@@ -444,6 +463,7 @@ class EnabledTest(StaticFixture):
         self.assertEqual(307, client.get("/agui-inspector?x=1", headers=allowed, follow_redirects=False).status_code)
         self.assertEqual(INDEX, client.get("/agui-inspector/", headers=allowed).text)
         self.assertEqual(APP_JS, client.get("/agui-inspector/app.js", headers=allowed).text)
+        self.assertEqual(GUIDE, client.get("/agui-inspector/llms.txt", headers=allowed).text)
         self.assertEqual("support", client.get("/agui-inspector/config.json", headers=allowed).json()["agents"][0]["id"])
         self.assertEqual(404, client.get("/agui-inspector/missing.js", headers=allowed).status_code)
 
@@ -463,7 +483,7 @@ class EnabledTest(StaticFixture):
         app = Starlette(middleware=[Middleware(BaseHTTPMiddleware, dispatch=guard)])
         mount_inspector(app, agents=AGENTS, enabled=True)
         client = TestClient(app)
-        for path in ("/agui-inspector", "/agui-inspector/", "/agui-inspector/app.js", "/agui-inspector/config.json"):
+        for path in ("/agui-inspector", "/agui-inspector/", "/agui-inspector/app.js", "/agui-inspector/config.json", "/agui-inspector/llms.txt"):
             self.assertEqual(401, client.get(path, follow_redirects=False).status_code, path)
         self.assertEqual(200, client.get("/agui-inspector/", headers={"authorization": "Bearer synthetic"}).status_code)
 

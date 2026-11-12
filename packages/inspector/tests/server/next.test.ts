@@ -134,7 +134,7 @@ test('creating an enabled route logs nothing, and the first request logs one war
     await call(handlers.GET, '/agui-inspector/assets/chunk.js', ['assets', 'chunk.js']);
     await call(handlers.GET, '/agui-inspector/', []);
     await call(handlers.HEAD, '/agui-inspector/config.json', ['config.json']);
-    assert.deepEqual(warn.mock.calls.map((c) => String(c.arguments[0])), ['agui-inspector is enabled and mounted at /agui-inspector; disable it outside development']);
+    assert.deepEqual(warn.mock.calls.map((c) => String(c.arguments[0])), ['agui-inspector is enabled and mounted at /agui-inspector; disable it outside development; guide for coding agents at /agui-inspector/llms.txt']);
   } finally {
     warn.mock.restore();
   }
@@ -161,7 +161,7 @@ test('the warning names the path of the route whatever the first request is, wit
         warn.mock.restore();
       }
     })();
-    assert.deepEqual(logged, [`agui-inspector is enabled and mounted at ${mount}; disable it outside development`], target);
+    assert.deepEqual(logged, [`agui-inspector is enabled and mounted at ${mount}; disable it outside development; guide for coding agents at ${mount}/llms.txt`], target);
   }
 });
 

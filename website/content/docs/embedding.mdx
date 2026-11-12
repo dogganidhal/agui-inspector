@@ -74,7 +74,7 @@ FastAPI uses the same call because it is a Starlette application. The package it
 The inspector shows request bodies, raw frames and your agent list to anyone who can reach the route. Tie `enabled` to something that is off in production, such as `settings.debug`.
 </Callout>
 
-When enabled, the helper logs one warning through the `agui_inspector` logger, for example `agui-inspector is enabled and mounted at /agui-inspector; disable it outside development`. If that warning appears in a production log, the guard is wrong.
+When enabled, the helper logs one warning through the `agui_inspector` logger, for example `agui-inspector is enabled and mounted at /agui-inspector; disable it outside development; guide for coding agents at /agui-inspector/llms.txt`. If that warning appears in a production log, the guard is wrong. The guide it names is a short text for coding agents, served behind your authentication like the page. See [Point a coding agent at the inspector](./agent-guide.mdx).
 
 ## Theming the embedded page
 
@@ -282,7 +282,7 @@ A call with a bad argument stops startup and names the problem, for example `eve
 
 The inspector shows request bodies, raw frames and your agent list to anyone who can reach the route. Tie `enabled` to something that is off in production.
 
-When enabled, the helper logs one warning with `console.warn`, for example `agui-inspector is enabled and mounted at /agui-inspector; disable it outside development`. Express and Hono log it when you call `mountInspector`. The warning names the path as you passed it, without an outer `Router` or `basePath` prefix.
+When enabled, the helper logs one warning with `console.warn`, for example `agui-inspector is enabled and mounted at /agui-inspector; disable it outside development; guide for coding agents at /agui-inspector/llms.txt`. Express and Hono log it when you call `mountInspector`. The warning names the path as you passed it, without an outer `Router` or `basePath` prefix.
 
 Next.js logs it once, when the route serves its first request, and names the route's path as Next.js reports it, without a `basePath`. Next.js loads a route file on its first request, and only a request tells the helper where the route lives. A Next.js development server can log it more than once, because it loads the route file again after a change.
 

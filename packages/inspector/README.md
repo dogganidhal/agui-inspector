@@ -60,3 +60,11 @@ mounts the same files in Starlette or FastAPI.
 
 See the [docs](https://dogganidhal.github.io/agui-inspector/docs/hosted/) to set up the page, and the
 [repository](https://github.com/dogganidhal/agui-inspector) for the source.
+
+## For coding agents
+
+Every way of serving the page also serves `llms.txt` next to it, a short guide for coding agents: where the page and its
+agents are, how to build a launch link, and how to drive an agent with `npx agui-inspector run` or
+`npx agui-inspector mcp`. The helpers' startup warning and the command's output name its address. The
+[docs](https://dogganidhal.github.io/agui-inspector/docs/agent-guide/) have it, with blocks to paste into your own
+`AGENTS.md` or `CLAUDE.md`.

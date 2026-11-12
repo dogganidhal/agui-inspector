@@ -85,7 +85,8 @@ export async function run(argv: readonly string[], io: Io, options: RunOptions =
     return usage("--target points at this command's own address");
   }
 
-  io.out(`agui-inspector listening on http://127.0.0.1:${listening.port}/\n${cli.targets.map(describe).join('')}`);
+  const origin = `http://127.0.0.1:${listening.port}`;
+  io.out(`agui-inspector listening on ${origin}/\n${cli.targets.map(describe).join('')}guide for coding agents: ${origin}/llms.txt\n`);
   if (!io.stop.aborted) await new Promise<void>((resolve) => io.stop.addEventListener('abort', () => resolve(), { once: true }));
   await listening.close();
   return 0;

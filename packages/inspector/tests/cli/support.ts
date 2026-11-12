@@ -1,6 +1,6 @@
 // Scripted servers and a plain client for the command line tests. Real sockets on 127.0.0.1, no mocks: what the relay does
 // to bytes and timing can only be seen on a connection.
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer, request as httpRequest, type IncomingHttpHeaders, type IncomingMessage, type RequestListener, type Server, type ServerResponse } from 'node:http';
 import { connect, type AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -139,6 +139,8 @@ export const PAGE_FILES = {
   'hosting-config.json': '{"version":0,"mode":"embedded","allowedOrigins":[]}',
   'app.js': 'export const page = "stand-in";',
   'assets/chunk.js': 'export const chunk = 1;',
+  // The real guide for coding agents (spec 019), so a test can check the command serves it unchanged.
+  'llms.txt': readFileSync(path.join(process.cwd(), 'packages', 'inspector', 'public', 'llms.txt'), 'utf8'),
 } as const;
 
 /** A temporary directory with the stand-in page, so the tests run before `npm run build`. Remove it with `remove()`. */
