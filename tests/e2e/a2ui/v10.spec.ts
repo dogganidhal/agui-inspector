@@ -55,3 +55,17 @@ test('without the alias the agent catalog id is "Catalog not found", and a 1.0 a
   await expect(page.locator('.agui-a2ui-surface').nth(1)).toHaveAttribute('data-version', 'v0.9');
   await expect(page.getByRole('heading', { name: 'Order check' })).toBeVisible();
 });
+
+test('a button bound to a path the data model lacks still sends its tap, and the surface shows a warning naming the entry', async ({ page, site }) => {
+  const card = JSON.parse(JSON.stringify(v10Card)) as Array<{ createSurface: { components: Array<Record<string, unknown>> } }>;
+  card[0]!.createSurface.components.find((component) => component['id'] === 'confirm')!['action'] = { event: { name: 'confirm_booking', context: { name: { '@path': '/name' }, phone: { '@path': '/phone' } } } };
+  await open(page, site, { strict: true });
+  await page.evaluate((map) => window.__a2ui.aliases(map), ALIASES);
+  await feed(page, card);
+  await page.locator('[data-surface="visit"]').getByRole('button', { name: 'Confirm' }).click();
+  const sent = await actions(page);
+  expect(sent).toHaveLength(1);
+  expect(sent[0]!.context).toEqual({ name: 'Ada' });
+  const warning = page.locator('.agui-a2ui-issues .agui-finding--warn');
+  await expect(warning).toContainText('Action confirm_booking from confirm was sent without phone');
+});

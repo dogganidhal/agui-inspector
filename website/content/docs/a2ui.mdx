@@ -33,6 +33,7 @@ An `ACTIVITY_SNAPSHOT` of type `a2ui-surface` carries `{ "a2ui_operations": [...
 | An entry that is not v0.8, v0.9 or 1.0 | An error naming its position, with the entry as received. The others still apply (see [versions](#versions)) |
 | An operation the renderer cannot apply | An error naming its position, with the entry as received. The others still apply |
 | `a2ui_operations` is not a list | One error showing the value received |
+| An action whose context binds an entry to a path the data model lacks | The action is sent without that entry, and a warning names the action, its component and each entry left out (see [actions](#actions)) |
 | A component type not in the catalog | An error in its place naming the type and the component id, with its definition and properties under "As received". The rest still draws |
 
 ## Versions
@@ -75,6 +76,8 @@ When a user activates a control, the surface creates an action with exactly five
 ```
 
 The renderer resolves the bindings in `context`, copies it at the click and sets `timestamp`. The inspector puts the object in `forwardedProps.a2uiAction.userAction` and starts a normal [run](./runs.mdx). It never sends the action as a tool reply. The run adds no user message, so with the `turn` [message mode](./configuration.mdx#client-profile) it carries `"messages": []`.
+
+A binding to a path the data model lacks has no value. The action is still sent, with its context written as JSON writes it: such an entry of an object is left out, at any depth, such an item of a list becomes `null`, and `null` stays `null`. The surface shows a warning such as "Action go from send was sent without phone: the context bound it to no value, and JSON has none to send." This holds for every version.
 
 A 1.0 button binds its context with `@path` and sends the same five fields:
 

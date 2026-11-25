@@ -143,3 +143,36 @@ test('a 1.0 card on an aliased agent catalog id reads with @path bindings resolv
     await served.close();
   }
 });
+
+test('a 1.0 button bound to a path the data model lacks still sends its action, without that entry, and the surface says so', async () => {
+  const served = await serveEvents(() => [
+    activity([
+      {
+        version: '1.0',
+        createSurface: {
+          surfaceId: 'gap',
+          catalogId: BASIC_V10_CATALOG_ID,
+          dataModel: { name: 'Ada' },
+          components: [
+            { id: 'root', component: 'Button', child: 'label', action: { event: { name: 'go', context: { name: { '@path': '/name' }, missing: { '@path': '/nothing' } } } } },
+            { id: 'label', component: 'Text', text: 'Go' },
+          ],
+        },
+      },
+    ]),
+  ]);
+  try {
+    const session = await openSession({ target: served.agent });
+    await session.send('gap');
+    const step = await session.a2ui.fire('gap', 'root');
+    assert.equal(step.error, undefined, 'the tap is not refused');
+    const userAction = served.inputs[1]?.forwardedProps?.a2uiAction?.userAction as { name?: string; context?: Record<string, unknown> };
+    assert.equal(userAction.name, 'go');
+    assert.deepEqual(userAction.context, { name: 'Ada' }, 'the entry with no value is left out');
+    const issues = session.surfaces()[0]?.issues ?? [];
+    assert.deepEqual(issues.map((issue) => [issue.source, issue.message]), [['action', 'Action go from root was sent without missing: the context bound it to no value, and JSON has none to send.']]);
+    session.close();
+  } finally {
+    await served.close();
+  }
+});
