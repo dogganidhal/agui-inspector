@@ -455,7 +455,7 @@ test('the Pages workflow validates the isolated demo, builds the docs and upload
     'node scripts/bundle-budget.mjs --dir .build/public-demo',
     'npm run test:unit -- tests/demo/build.test.ts',
     'npm run build --prefix website',
-    ".build/pages', { recursive: true, force: false, errorOnExist: true }",
+    "fs.cpSync('.build/public-demo', '.build/pages', { recursive: true })",
     'actions/upload-pages-artifact@',
   ].map((needle) => {
     assert.ok(build.includes(needle), `${needle} is a step`);
@@ -468,7 +468,8 @@ test('the Pages workflow validates the isolated demo, builds the docs and upload
   assert.match(build, /PAGES_ORIGIN: \$\{\{ steps\.pages\.outputs\.origin \}\}\n\s+PAGES_BASE_PATH: \$\{\{ steps\.pages\.outputs\.base_path \}\}/);
   // The docs are built for the same base path, and the merge copies the demo and the docs without overwriting a file.
   assert.match(build, /npm run build --prefix website\n\s+env:\n\s+PAGES_BASE_PATH: \$\{\{ steps\.pages\.outputs\.base_path \}\}\n/);
-  assert.ok(build.includes("for (const dir of ['.build/public-demo', 'website/out'])"), 'the merge takes the demo and the docs');
+  assert.match(build, /fs\.readdirSync\('website\/out', \{ recursive: true, withFileTypes: true \}\)/, 'the merge takes the docs files');
+  assert.match(build, /fs\.constants\.COPYFILE_EXCL/, 'the merge rejects duplicate files');
   assert.doesNotMatch(text, /dogganidhal|github\.io/, 'no literal host in the workflow');
   assert.match(build, /uses: actions\/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0\n\s+with:\n\s+path: \.build\/pages\n/);
   assert.match(text, /uses: actions\/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1\n/);
@@ -478,6 +479,30 @@ test('the Pages workflow validates the isolated demo, builds the docs and upload
   const pins = (file: string) => [...source(file).matchAll(/uses:\s*(actions\/(?:checkout|setup-node)@\S+ # \S+)/g)].map((m) => m[1]);
   assert.deepEqual(pins(PAGES), pins('.github/workflows/ci.yml').slice(0, 2));
   for (const [, ref] of text.matchAll(/^\s*(?:-\s+)?uses:\s*(\S+)/gm)) assert.match(ref!, /^[\w.-]+\/[\w./-]+@[0-9a-f]{40}$/, ref);
+});
+
+test('the Pages merge combines demo and docs without replacing a duplicate file', () => {
+  const command = source(PAGES).match(/ {10}node <<'NODE'\n((?: {10}.*\n)+) {10}NODE/)?.[1];
+  assert.ok(command, 'Pages merge command exists');
+  const script = command.replace(/^ {10}/gm, '');
+  const site = mkdtempSync(path.join(scratch, 'pages-'));
+  const demo = path.join(site, '.build/public-demo');
+  const docs = path.join(site, 'website/out');
+  mkdirSync(demo, { recursive: true });
+  mkdirSync(path.join(docs, 'docs'), { recursive: true });
+  writeFileSync(path.join(demo, 'index.html'), 'demo');
+  writeFileSync(path.join(docs, 'docs/index.html'), 'docs');
+  const merge = () => spawnSync(process.execPath, ['-e', script], { cwd: site, encoding: 'utf8' });
+  const result = merge();
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(read(path.join(site, '.build/pages'), 'index.html'), 'demo');
+  assert.equal(read(path.join(site, '.build/pages'), 'docs/index.html'), 'docs');
+
+  rmSync(path.join(site, '.build/pages'), { recursive: true });
+  writeFileSync(path.join(docs, 'index.html'), 'replacement');
+  const collision = merge();
+  assert.notEqual(collision.status, 0, 'a duplicate file must fail the artifact build');
+  assert.equal(read(path.join(site, '.build/pages'), 'index.html'), 'demo');
 });
 
 test('the Pages workflow neither enables Pages, nor ships a package, tags or releases, nor reads a secret', () => {

@@ -207,6 +207,8 @@ Inspect npm archive and Python wheel contents as well as ordinary dist for isola
 
 Pages workflow triggers only main push and optional manual run explicitly restricted to main.
 Build job has contents-read, locked no-script installation, checks and upload of only demo output.
+The combined artifact starts with the demo directory and copies docs files into it exclusively;
+an existing directory is not a file collision, but an existing file stops the build.
 Deploy job needs build, has only pages-write/id-token-write, github-pages environment/output URL,
 SHA-pinned researched deployment action and a Pages concurrency group that serializes deployments
 without cancelling an active one. PR CI never deploys/uploads a Pages deployment artifact or gains

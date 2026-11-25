@@ -57,10 +57,20 @@ jobs:
       - run: npm run build --prefix website
         env:
           PAGES_BASE_PATH: ${{ steps.pages.outputs.base_path }}
-      # One directory for the site. cpSync stops on any file both outputs contain, so the docs never replace a demo file.
-      # A block scalar, because the script's ": " would end a plain YAML value.
+      # One directory for the site. Copy docs files exclusively so they never replace a demo file.
       - run: |
-          node -e "for (const dir of ['.build/public-demo', 'website/out']) require('node:fs').cpSync(dir, '.build/pages', { recursive: true, force: false, errorOnExist: true })"
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          fs.cpSync('.build/public-demo', '.build/pages', { recursive: true });
+          for (const file of fs.readdirSync('website/out', { recursive: true, withFileTypes: true })) {
+            if (!file.isFile()) continue;
+            const relative = path.relative('website/out', path.join(file.parentPath, file.name));
+            const dest = path.join('.build/pages', relative);
+            fs.mkdirSync(path.dirname(dest), { recursive: true });
+            fs.copyFileSync(path.join(file.parentPath, file.name), dest, fs.constants.COPYFILE_EXCL);
+          }
+          NODE
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: .build/pages
