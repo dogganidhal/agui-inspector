@@ -30,6 +30,7 @@ import type {
   A2uiAction,
   AgentConfig,
   AutomaticReplies,
+  CatalogAliases,
   ClientProfileSettings,
   Encoding,
   InterruptAnswer,
@@ -97,6 +98,8 @@ export interface RuntimeSettings {
   readonly profile: ClientProfileSettings;
   /** The values the user edited, by preset variable name. */
   readonly variables: Readonly<Record<string, JsonValue>>;
+  /** The configuration's catalog aliases, for the renderer capabilities a run declares. */
+  readonly catalogAliases?: CatalogAliases;
 }
 
 export interface RuntimeOptions {
@@ -422,6 +425,7 @@ export function createRuntime(options: RuntimeOptions): Runtime {
         ...(turn.parentRunId !== undefined && { parentRunId: turn.parentRunId }),
         ...(turn.resume !== undefined && { resume: turn.resume }),
         ...(turn.a2uiAction !== undefined && { a2uiAction: turn.a2uiAction }),
+        ...(settings.catalogAliases !== undefined && { catalogAliases: settings.catalogAliases }),
       });
       if (!input.ok) return refuse(input.error);
 

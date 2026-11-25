@@ -26,6 +26,7 @@ import {
 } from '../../src/core/runtime/replies.ts';
 import { checkAgainstSchema, seedFromSchema } from '../../src/core/runtime/schema.ts';
 import { AGENT, bodyOf, eventStream, ok200, replyRoute, rig, sse, type Route } from './support.ts';
+import { rendererCapabilities } from '../../src/core/profiles/index.ts';
 
 // ---------------------------------------------------------------------------------------------
 // Prefilling and checking an answer
@@ -405,7 +406,7 @@ test('an A2UI action starts a new run with the documented envelope, after the pr
 
     assert.deepEqual(net.calls.map((call) => call.path), ['/prepare/warm', '/run', '/prepare/warm', '/run']);
     const body = bodyOf(net.on('/run')[1]) as { forwardedProps: Record<string, unknown>; messages: Array<{ role: string }>; resume?: unknown };
-    assert.deepEqual(body.forwardedProps, { tenant: 'acme', a2uiAction: { userAction: action } });
+    assert.deepEqual(body.forwardedProps, { a2uiRendererCapabilities: rendererCapabilities(), tenant: 'acme', a2uiAction: { userAction: action } });
     assert.equal(body.resume, undefined);
     assert.equal(body.messages.some((message) => message.role === 'tool'), false);
     assert.equal(body.messages.length, mode === 'full' ? 2 : 0, `${mode}: the action adds no user message`);

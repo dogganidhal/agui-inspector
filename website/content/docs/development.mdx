@@ -96,7 +96,7 @@ Run them from the repository root.
 | `npm run test:unit` | Compiles `*.test.ts(x)` with esbuild into `.build/tests` and runs them with `node --test`. Add paths (`-- packages/inspector/tests/foundation`) to run only those tests. If it finds no tests, it fails. |
 | `npm run build` | Writes `packages/inspector/dist` (`index.html`, `app.js`, `app.css`) and compiles the Express, Hono and Next.js helpers to `packages/inspector/lib`. `-- --outdir <dir>` builds the page elsewhere and skips `lib`. |
 | `npm run check:bundle` | Checks `packages/inspector/dist` against the [bundle budget](#bundle-budget). Run `npm run build` first. |
-| `npm run check:bundle:renderer` | Builds the scaffold plus the pinned A2UI v0.8 and v0.9 renderers into `.build/representative` and reports how much budget is left. |
+| `npm run check:bundle:renderer` | Builds the scaffold plus the pinned A2UI renderers (v0.8, and v0.9 and 1.0 with both basic catalogs) into `.build/representative` and reports how much budget is left. |
 | `npm run test:benchmark` | Checks the 5,000-frame fixture and schedule and reports responsiveness as pending. `-- --strict` fails while it is pending. `-- --measure` runs the browser benchmark. |
 | `npm run test:e2e` | Runs Playwright against `tests/e2e`. With no spec it fails with "No tests found", so a missing suite never counts as passing. |
 | `npm exec -- tsc -p demo/tsconfig.json` | Strict type check of the demo's page bootstrap, with the DOM library and no Node types. |

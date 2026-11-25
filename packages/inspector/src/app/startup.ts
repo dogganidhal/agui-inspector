@@ -61,6 +61,8 @@ export interface Launch {
 export interface Settings {
   profile: ClientProfileSettings;
   variables: Record<string, JsonValue>;
+  /** The configuration's catalog aliases, declared with the bundled catalogs in a run's renderer capabilities. */
+  catalogAliases?: CatalogAliases;
 }
 
 export interface Started {
@@ -149,6 +151,7 @@ export async function startPage(env: StartupEnvironment): Promise<StartResult> {
   if (loaded.ok) {
     ({ agents, theme, brand, catalogAliases, warnings } = loaded.value);
     pluginAddresses = loaded.value.plugins ?? [];
+    if (catalogAliases !== undefined) settings.catalogAliases = catalogAliases;
   } else if (hosting.value.config !== undefined || !NOT_FOUND.test(loaded.error)) problems.push(loaded.error);
 
   if (env.storage !== undefined) {

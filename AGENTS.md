@@ -4,7 +4,7 @@ Instructions for coding agents working in this repository. Humans should start w
 [CONTRIBUTING.md](CONTRIBUTING.md).
 
 agui-inspector is a developer tool for AG-UI servers. It records every request and SSE frame as received, validates them
-against the protocol, drives runs like a client (interrupts, client tools, A2UI v0.8 and v0.9 surfaces) and sends raw requests no
+against the protocol, drives runs like a client (interrupts, client tools, A2UI v0.8, v0.9 and 1.0 surfaces) and sends raw requests no
 client would. One static bundle serves every mode: a hosted page, a Python helper for Starlette and FastAPI, helpers
 for Express, Hono and Next.js, a local command (`npx agui-inspector --target <url>`), and npm static assets. A public demo runs on GitHub Pages. Both packages are on their
 registries at 0.1.0: the Python package on PyPI and the npm package on npm.
@@ -51,7 +51,7 @@ spec. Everything else does, including small bug fixes.
 | `packages/inspector/src/core` | Framework-free TypeScript: recorder, frame reader, session store, config, presets, profiles, runtime and transport, A2UI lifecycle. No React here. |
 | `packages/inspector/src/server` | Node-side code for the Express, Hono and Next.js helpers, one core and thin adapters. Compiled to `packages/inspector/lib` by `npm run build`, never in the browser bundle. No React, no framework import. |
 | `packages/inspector/src/cli` | The `agui-inspector` command: argument parsing, the listener on `127.0.0.1` and the relay to the targets, plus the `run` and `mcp` commands (`once.ts`, `mcp.ts`, `jsonrpc.ts`), loaded only when used. It reuses the core in `src/server` and the sessions in `src/headless`. Compiled to `packages/inspector/lib/cli` with the helpers, never in the browser bundle. |
-| `packages/inspector/src/headless` | Headless sessions (spec 018): the core's runtime, recorder and rules run in Node against one target, A2UI v0.9 without React, assertions, and the shared target and header rules. Exported as `agui-inspector/testing`. Only `session.ts` makes requests and writes files. Compiled to `packages/inspector/lib`, never in the browser bundle. |
+| `packages/inspector/src/headless` | Headless sessions (spec 018): the core's runtime, recorder and rules run in Node against one target, A2UI v0.9 and 1.0 without React, assertions, and the shared target and header rules. Exported as `agui-inspector/testing`. Only `session.ts` makes requests and writes files. Compiled to `packages/inspector/lib`, never in the browser bundle. |
 | `packages/inspector/src/views` | React views: connection, conversation, inspection, A2UI, settings, and the theme tokens and primitives. |
 | `packages/inspector/src/app` | Page entry, startup and the content security policy (`security.ts`). |
 | `packages/inspector/src/contracts.ts` | Shared types. Must not import React. |

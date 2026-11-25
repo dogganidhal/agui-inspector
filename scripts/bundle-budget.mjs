@@ -1,6 +1,6 @@
 // Production bundle budget: every shipped client asset counts, and the build fails above either limit.
 // Usage: npm run check:bundle [-- --dir <assets directory>]
-//        npm run check:bundle:renderer   (representative build with the pinned v0.8 and v0.9 renderers)
+//        npm run check:bundle:renderer   (representative build with the pinned v0.8, v0.9 and 1.0 renderers)
 import { mkdirSync, readFileSync, readdirSync, rmSync, statSync, copyFileSync } from 'node:fs';
 import path from 'node:path';
 import { gzipSync } from 'node:zlib';
@@ -83,7 +83,7 @@ export function formatTable(/** @type {Measurement} */ measurement, limits = LIM
 }
 
 /**
- * A build of what the final app will weigh most of: the scaffold app plus the pinned A2UI v0.8 and v0.9
+ * A build of what the final app will weigh most of: the scaffold app plus the pinned A2UI v0.8, v0.9 and 1.0
  * renderers and the v0.9 catalog, A2UI core, the AG-UI client and event schemas, and the upstream render
  * tool. Writes the same `index.html` the real build ships. It is an estimate of renderer cost, not
  * the final application.
@@ -97,14 +97,16 @@ export async function buildRepresentative(/** @type {string} */ outdir) {
     stdin: {
       contents: `
         import './src/app/index.tsx';
-        import { A2uiSurface, basicCatalog } from '@a2ui/react/v0_9';
-        import { MessageProcessor } from '@a2ui/web_core/v0_9';
+        import { A2uiSurface } from '@a2ui/react';
+        import { basicCatalog } from '@a2ui/web_core/v0_9/basic_catalog';
+        import { basicCatalog as basicCatalogV10 } from '@a2ui/web_core/catalogs/basic/v1';
+        import { MessageProcessor } from '@a2ui/web_core';
         import { A2UIProvider, A2UIRenderer } from '@a2ui/react/v0_8';
         import { A2uiMessageProcessor, A2uiMessageSchema } from '@a2ui/web_core/v0_8';
         import { HttpAgent } from '@ag-ui/client';
         import { EventSchemas, RunAgentInputSchema } from '@ag-ui/core/schemas';
         import { RENDER_A2UI_TOOL } from '@ag-ui/a2ui-middleware';
-        globalThis.__representative = { A2uiSurface, basicCatalog, MessageProcessor, A2UIProvider, A2UIRenderer, A2uiMessageProcessor, A2uiMessageSchema, HttpAgent, EventSchemas, RunAgentInputSchema, RENDER_A2UI_TOOL };
+        globalThis.__representative = { A2uiSurface, basicCatalog, basicCatalogV10, MessageProcessor, A2UIProvider, A2UIRenderer, A2uiMessageProcessor, A2uiMessageSchema, HttpAgent, EventSchemas, RunAgentInputSchema, RENDER_A2UI_TOOL };
       `,
       resolveDir: packageDir,
       sourcefile: 'app.tsx',
@@ -135,7 +137,7 @@ async function main(/** @type {string[]} */ argv) {
 
   console.log(
     representative
-      ? `bundle budget, representative build (scaffold app + pinned A2UI v0.8 and v0.9 renderers, A2UI core, AG-UI client and schemas): ${path.relative(root, dir)}`
+      ? `bundle budget, representative build (scaffold app + pinned A2UI v0.8, v0.9 and 1.0 renderers, A2UI core, AG-UI client and schemas): ${path.relative(root, dir)}`
       : `bundle budget: ${path.relative(root, dir) || '.'}`,
   );
   console.log(formatTable(measurement));

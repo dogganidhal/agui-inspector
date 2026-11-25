@@ -78,12 +78,14 @@ function benchmarkRoutes(): (pathname: string, response: ServerResponse) => bool
 /** The production host: what the app is bundled as, plus the full A2UI renderer the budget counts. */
 const hostWithRenderer = `
   import './tests/inspection/host.tsx';
-  import { A2uiSurface, basicCatalog } from '@a2ui/react/v0_9';
-  import { MessageProcessor } from '@a2ui/web_core/v0_9';
+  import { A2uiSurface } from '@a2ui/react';
+  import { basicCatalog } from '@a2ui/web_core/v0_9/basic_catalog';
+  import { basicCatalog as basicCatalogV10 } from '@a2ui/web_core/catalogs/basic/v1';
+  import { MessageProcessor } from '@a2ui/web_core';
   import { HttpAgent } from '@ag-ui/client';
   import { EventSchemas, RunAgentInputSchema } from '@ag-ui/core/schemas';
   import { RENDER_A2UI_TOOL } from '@ag-ui/a2ui-middleware';
-  globalThis.__representative = { A2uiSurface, basicCatalog, MessageProcessor, HttpAgent, EventSchemas, RunAgentInputSchema, RENDER_A2UI_TOOL };
+  globalThis.__representative = { A2uiSurface, basicCatalog, basicCatalogV10, MessageProcessor, HttpAgent, EventSchemas, RunAgentInputSchema, RENDER_A2UI_TOOL };
 `;
 
 interface Harness {

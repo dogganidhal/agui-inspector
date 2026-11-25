@@ -104,8 +104,9 @@ def mount_inspector(
     ``config.json`` as given, with ``logo_dark`` written as ``logoDark`` and unset fields left out. The page
     accepts a logo only from its own origin or as a ``data:`` image and warns about anything else.
 
-    ``catalog_aliases`` maps a former A2UI catalog id to the id of a catalog the inspector bundles
-    (``https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json`` or
+    ``catalog_aliases`` maps an agent's own or former A2UI catalog id to the id of a catalog the inspector
+    bundles (``https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json``,
+    ``https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json`` or
     ``https://a2ui.org/specification/v0_8/standard_catalog_definition.json``). It goes into
     ``config.json`` as ``catalogAliases``, as given: the page validates it and shows a warning for any
     entry it rejects, never an error.

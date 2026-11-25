@@ -112,7 +112,7 @@ The page checks the brand when it loads `config.json`. It shows a "Configuration
 
 ## Catalog aliases
 
-`catalog_aliases` maps an A2UI catalog id that your agent still uses to a catalog that the inspector bundles:
+`catalog_aliases` maps an A2UI catalog id that your agent uses, its own or a former one, to a catalog that the inspector bundles:
 
 ```python
 mount_inspector(
@@ -120,6 +120,7 @@ mount_inspector(
     agents=[Agent(id="support", url="/agents/support/stream")],
     enabled=True,
     catalog_aliases={
+        "https://example.com/catalogs/chat/v1.0/catalog.json": "https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json",
         "https://catalogs.example.com/old/basic.json": "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json",
     },
 )
@@ -127,7 +128,7 @@ mount_inspector(
 
 The helper does not check it. The page checks it when it loads `config.json` and shows a "Configuration" warning for each entry it rejects. A rejected entry never stops the page or the agents from loading. The rules are in [configuration](./configuration.mdx#catalog-aliases).
 
-`catalog_aliases` changes nothing else: same routes, same content security policy header, no extra request. A host that serves the assets itself puts the same `catalogAliases` field in its own `config.json`.
+`catalog_aliases` changes nothing else: same routes, same content security policy header, no extra request. The page declares the aliases to your agent in each run's [renderer capabilities](./a2ui.mdx#renderer-capabilities). A host that serves the assets itself puts the same `catalogAliases` field in its own `config.json`.
 
 ## Plugins in the embedded page
 

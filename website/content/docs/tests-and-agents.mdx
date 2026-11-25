@@ -56,7 +56,7 @@ Each step returns how many frames it added, the findings it added, the interrupt
 
 ### Reads
 
-`frames()`, `exchanges()`, `findings()`, `conversation()`, `state()`, `pending()` and `surfaces()` return copies of what the session holds. `conversation()` is the page's own model of the conversation: messages, tool calls, activities and subagent runs. `surfaces()` lists the A2UI v0.9 surfaces with their components and data model.
+`frames()`, `exchanges()`, `findings()`, `conversation()`, `state()`, `pending()` and `surfaces()` return copies of what the session holds. `conversation()` is the page's own model of the conversation: messages, tool calls, activities and subagent runs. `surfaces()` lists the A2UI v0.9 and 1.0 surfaces with their components and data model. A binding, `{ "path" }` in v0.9 or `{ "@path" }` in 1.0, reads from the data model.
 
 A2UI v0.8 surfaces keep their frames and findings, but `surfaces()` does not list them. Nothing renders in a headless session, so media components load nothing. An `openUrl` action is refused and shows in the surface's `issues`, as in the page.
 

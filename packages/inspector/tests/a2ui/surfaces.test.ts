@@ -8,8 +8,8 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { createElement, Fragment } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { basicCatalog } from '@a2ui/react/v0_9';
-import type { ReactComponentImplementation } from '@a2ui/react/v0_9';
+import { basicCatalog } from '@a2ui/web_core/v0_9/basic_catalog';
+import type { ReactCatalogComponent } from '@a2ui/react';
 import { ComponentContext, GenericBinder, peekValue, type SurfaceModel } from '@a2ui/web_core/v0_9';
 import type { A2uiAction, JsonValue } from '../../src/contracts.ts';
 import { createSurfaceSession } from '../../src/core/a2ui/index.ts';
@@ -31,14 +31,14 @@ const json = (value: unknown): JsonValue => JSON.parse(JSON.stringify(value));
 
 function session() {
   const actions: A2uiAction[] = [];
-  const host = createSurfaceSession<ReactComponentImplementation>({
+  const host = createSurfaceSession<ReactCatalogComponent>({
     catalog: createBundledCatalog,
     onAction: (action) => void actions.push(action),
   });
   return { host, actions };
 }
 
-const data = (surface: SurfaceModel<ReactComponentImplementation>, pointer: string): unknown => peekValue(surface.dataModel.getSignal(pointer));
+const data = (surface: SurfaceModel<ReactCatalogComponent>, pointer: string): unknown => peekValue(surface.dataModel.getSignal(pointer));
 
 test('the bundled catalog is the official basic catalog, not a fetched or aliased one', () => {
   assert.equal(BASIC_CATALOG_ID, basicCatalog.id);
@@ -271,7 +271,7 @@ test('a blocked openUrl becomes a visible issue on the session', async () => {
   const surface = host.snapshot().surfaces[0]!;
   const open = surface.componentsModel.get('open')!;
   assert.ok(open, 'the button exists');
-  const catalogFunctions = surface.defaultCatalog.functions.get('openUrl')!;
+  const catalogFunctions = surface.defaultCatalog!.functions.get('openUrl')!;
   catalogFunctions.execute({ url: `http://${THIRD_PARTY_HOST}/page` }, undefined as never);
   const issue = host.snapshot().issues.at(-1)!;
   assert.equal(issue.source, 'blocked');
@@ -373,11 +373,12 @@ test('the stylesheet takes colors, radii and fonts from the theme tokens and loa
 
 test('the A2UI page states the versions, the bundled catalogs, the aliases and the blocked resources', () => {
   const doc = readFileSync(path.join(process.cwd(), 'website', 'content', 'docs', 'a2ui.mdx'), 'utf8');
-  assert.match(doc, /v0\.8 and v0\.9 surfaces/);
+  assert.match(doc, /v0\.8, v0\.9 and 1\.0 surfaces/);
   assert.doesNotMatch(doc, /Only A2UI v0\.9 is supported/);
   assert.ok(doc.includes(BASIC_CATALOG_ID));
   assert.ok(doc.includes(STANDARD_V08_CATALOG_ID));
-  for (const name of ['Image', 'Video', 'AudioPlayer', 'openUrl', 'forwardedProps.a2uiAction.userAction', 'renderA2ui', 'injectA2uiTool', 'catalogAliases', 'beginRendering', 'surfaceUpdate', 'Catalog not found']) {
+  assert.ok(doc.includes('https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json'));
+  for (const name of ['Image', 'Video', 'AudioPlayer', 'openUrl', 'forwardedProps.a2uiAction.userAction', 'renderA2ui', 'injectA2uiTool', 'sendA2uiCapabilities', 'a2uiRendererCapabilities', 'supportedCatalogIds', '@path', 'catalogAliases', 'beginRendering', 'surfaceUpdate', 'Catalog not found']) {
     assert.ok(doc.includes(name), `${name} is documented`);
   }
 });

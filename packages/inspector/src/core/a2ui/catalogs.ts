@@ -6,7 +6,10 @@
 // with the renderer packages.
 import type { CatalogAliases } from '../../contracts.ts';
 
-export type A2uiVersion = 'v0.8' | 'v0.9';
+export type A2uiVersion = 'v0.8' | 'v0.9' | '1.0';
+
+/** The 1.0 basic catalog, as the renderer names it. */
+export const BASIC_V10 = 'https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json';
 
 /** The v0.9 basic catalog, as the renderer names it. */
 export const BASIC_V09 = 'https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json';
@@ -15,7 +18,7 @@ export const BASIC_V09 = 'https://a2ui.org/specification/v0_9/catalogs/basic/cat
 export const STANDARD_V08 = 'https://a2ui.org/specification/v0_8/standard_catalog_definition.json';
 
 /** The catalogs the inspector bundles, and the A2UI version each one draws. */
-export const KNOWN_CATALOGS: { readonly [id: string]: A2uiVersion } = { [BASIC_V09]: 'v0.9', [STANDARD_V08]: 'v0.8' };
+export const KNOWN_CATALOGS: { readonly [id: string]: A2uiVersion } = { [BASIC_V10]: '1.0', [BASIC_V09]: 'v0.9', [STANDARD_V08]: 'v0.8' };
 
 /** Built in, and not configurable: the id the A2UI middleware (0.0.11) puts on its default catalog. */
 export const BUILT_IN_ALIASES: CatalogAliases = { 'https://a2ui.org/specification/v0_9/basic_catalog.json': BASIC_V09 };

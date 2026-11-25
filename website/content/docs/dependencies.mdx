@@ -18,8 +18,8 @@ repository uses npm workspaces and Node 24 LTS (`engines.node` is `>=24`).
 | `@ag-ui/client` | 1.0.1 | `HttpAgent` keeps the derived transcript, state, interrupts and outcomes, reports sequence errors, and takes the recorder's `fetch`. | A hand-written client repeats the protocol rules. `EventSource` cannot POST a run body. |
 | `@ag-ui/proto` | 1.0.1 | Decodes the frames of a protobuf stream and gives the protobuf media type. `@ag-ui/client` depends on exactly this version and already bundles it. | A copy of the decoder would drift from the protocol. |
 | `@ag-ui/a2ui-middleware` | 0.0.11 | Only the official `RENDER_A2UI_TOOL` declaration and the A2UI action types. | Re-declaring the tool schema would diverge from the middleware. |
-| `@a2ui/react` | 0.12.0 | The A2UI React renderers for v0.9 (`@a2ui/react/v0_9`) and v0.8 (`@a2ui/react/v0_8`). | A custom renderer or a chat framework: the constitution requires the official renderer packages. |
-| `@a2ui/web_core` | 0.12.0 | `MessageProcessor` and the surface model that drive the v0.9 renderer, and the strict v0.8 message schema that checks v0.8 messages. | Hand-written message processing. |
+| `@a2ui/react` | 0.16.1 | The A2UI React renderers: `A2uiSurface` from the package root for v0.9 and 1.0, and `@a2ui/react/v0_8` for v0.8. 0.14.0 is the first release that draws 1.0 surfaces. | A custom renderer or a chat framework: the constitution requires the official renderer packages. |
+| `@a2ui/web_core` | 0.16.1 | `MessageProcessor` and the surface model that drive the v0.9 and 1.0 renderer, the v0.9 basic catalog (`@a2ui/web_core/v0_9/basic_catalog`), the 1.0 basic catalog (`@a2ui/web_core/catalogs/basic/v1`, since 0.13.0), and the strict v0.8 message schema that checks v0.8 messages. | Hand-written message processing or a hand-written 1.0 catalog. |
 | `markdown-it` | 14.3.2 | Parses Markdown for the conversation's Markdown view. The view uses `parse()` only and builds React elements from the tokens, so no HTML string exists and nothing needs a sanitizer. The A2UI packages already install it, so the lockfile gains no package. | `renderMarkdown` from `@a2ui/markdown-it`. It returns sanitized HTML as a string. Table alignment becomes an inline `style` attribute, which the page's `style-src 'self'` blocks. `![x](https://…)` becomes an `<img>` that DOMPurify keeps. Relative and protocol-relative links become anchors with no `rel` or `target`. It is asynchronous and needs a DOM, so `node --test` cannot test it. |
 | `react` | 19.3.0 | Views, and a peer of the renderer. | Plain DOM: the constitution requires React views. |
 | `react-dom` | 19.3.0 | Browser rendering, and server rendering in unit tests of the scaffold. | None: it is the React DOM target. |
@@ -79,20 +79,19 @@ have byte-identical copies of `LICENSE` and `THIRD_PARTY_NOTICES.txt`, and a tes
 
 These come from the pinned baseline. They are recorded here, not worked around by changing the baseline.
 
-### DOMPurify override
+### DOMPurify
 
-`@a2ui/react` 0.12.0 depends on `@a2ui/markdown-it` 0.2.0, which pins DOMPurify 3.4.11. That version is affected by
+`@a2ui/react` 0.12.0 depended on `@a2ui/markdown-it` 0.2.0, which pinned DOMPurify 3.4.11. That version is affected by
 [GHSA-c2j3-45gr-mqc4](https://github.com/advisories/GHSA-c2j3-45gr-mqc4) and
-[GHSA-55q2-fjhq-7xh7](https://github.com/advisories/GHSA-55q2-fjhq-7xh7). The root `package.json` sets
-`"overrides": { "dompurify": "3.4.16" }`, and the committed lockfile resolves exactly 3.4.16. Check it with
-`npm ls dompurify --all`. The override changes neither the required renderer nor the direct dependency list.
+[GHSA-55q2-fjhq-7xh7](https://github.com/advisories/GHSA-55q2-fjhq-7xh7), so the root `package.json` overrode it
+to 3.4.16. `@a2ui/react` 0.16.1 depends on `@a2ui/markdown-it` 0.2.4, which asks for `^3.4.17`. The override is
+gone, and the committed lockfile resolves DOMPurify 3.5.0. Check it with `npm ls dompurify --all`.
 
 The production bundle does not include DOMPurify or `@a2ui/markdown-it`. The conversation's Markdown view uses
 `markdown-it` directly and builds React elements, so it needs no sanitizer (see the `markdown-it` row above). The
-override protects the installed tree and any future use of the renderer's Markdown path.
+fixed version protects the installed tree and any future use of the renderer's Markdown path.
 The v0.8 renderer imports `markdown-it` too, but the inspector draws v0.8 text itself, so that renderer never turns Markdown into HTML.
-Remove it when A2UI ships a fixed pin, and review the lockfile in the same change. The lockfile was updated with
-`npm update dompurify --ignore-scripts`, so no lifecycle script ran.
+The lockfile was updated with `npm install --ignore-scripts`, so no lifecycle script ran.
 
 ### CRLF and CR event streams
 

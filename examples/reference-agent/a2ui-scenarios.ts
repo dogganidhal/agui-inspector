@@ -233,3 +233,82 @@ export const mixedSurfaces: readonly Operation[] = [
   { surfaceUpdate: { surfaceId: 'same', components: [text('root', 'Same id, v0.8')] } },
   { beginRendering: { surfaceId: 'same', root: 'root' } },
 ];
+
+// ---- A2UI 1.0 (spec 020) -----------------------------------------------------------------------------------
+
+/** The id the bundled 1.0 basic catalog answers to. */
+export const BASIC_V10_CATALOG_ID = 'https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json';
+
+/** A made-up agent catalog id. A config alias maps it to the 1.0 basic catalog; without one it is "Catalog not found". */
+export const AGENT_V10_CATALOG_ID = 'https://example.com/catalogs/chat/v1.0/catalog.json';
+
+const V10 = '1.0';
+
+/**
+ * A 1.0 card on the agent's own catalog id, built in one `createSurface` with its components and data model: a
+ * name field and a time choice bound with `@path`, a component the basic catalog lacks (`StarRating`), and a
+ * button whose action context binds both fields and carries one literal.
+ */
+export const v10Card: readonly Operation[] = [
+  {
+    version: V10,
+    createSurface: {
+      surfaceId: 'visit',
+      catalogId: AGENT_V10_CATALOG_ID,
+      dataModel: { name: 'Ada', slot: ['morning'] },
+      components: [
+        { id: 'root', component: 'Card', child: 'body' },
+        { id: 'body', component: 'Column', children: ['title', 'name', 'slot', 'rating', 'confirm'] },
+        { id: 'title', component: 'Text', text: 'Book a visit' },
+        { id: 'name', component: 'TextField', label: 'Name', value: { '@path': '/name' } },
+        {
+          id: 'slot',
+          component: 'ChoicePicker',
+          label: 'Time',
+          variant: 'mutuallyExclusive',
+          options: [
+            { label: 'Morning', value: 'morning' },
+            { label: 'Afternoon', value: 'afternoon' },
+          ],
+          value: { '@path': '/slot' },
+        },
+        { id: 'rating', component: 'StarRating', stars: 4, label: 'Rate the last visit' },
+        { id: 'confirm_label', component: 'Text', text: 'Confirm' },
+        {
+          id: 'confirm',
+          component: 'Button',
+          child: 'confirm_label',
+          variant: 'primary',
+          action: { event: { name: 'confirm_booking', context: { name: { '@path': '/name' }, slot: { '@path': '/slot' }, source: 'card' } } },
+        },
+      ],
+    },
+  },
+];
+
+/** The card again, with the received envelope shown under it. */
+export function v10Continuation(previous: readonly Operation[], action: UserAction): readonly Operation[] {
+  const received = `Received ${action.name} from ${action.sourceComponentId} on ${action.surfaceId}: ${JSON.stringify(action.context)}`;
+  return [
+    ...previous,
+    {
+      version: V10,
+      updateComponents: {
+        surfaceId: action.surfaceId,
+        components: [
+          { id: 'body', component: 'Column', children: ['title', 'name', 'slot', 'rating', 'confirm', 'echo'] },
+          { id: 'echo', component: 'Text', text: received },
+        ],
+      },
+    },
+  ];
+}
+
+/**
+ * Whether a run's forwarded properties declare a catalog for 1.0, the way an agent decides to send a card:
+ * `a2uiRendererCapabilities["1.0"].supportedCatalogIds` holds the id.
+ */
+export function declares10(forwardedProps: unknown, catalogId: string): boolean {
+  const caps = (forwardedProps as { a2uiRendererCapabilities?: { '1.0'?: { supportedCatalogIds?: unknown } } } | undefined)?.a2uiRendererCapabilities?.['1.0'];
+  return Array.isArray(caps?.supportedCatalogIds) && caps.supportedCatalogIds.includes(catalogId);
+}

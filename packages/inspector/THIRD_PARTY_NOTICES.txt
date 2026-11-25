@@ -2,9 +2,9 @@ THIRD-PARTY NOTICES
 
 agui-inspector is licensed under the MIT License (see LICENSE). It bundles and installs
 the third-party packages listed below. Each keeps its own license; the full text of every
-license follows the index. The list is every non-development package in package-lock.json
-after the dompurify override, so it also covers packages that the production bundle
-(dist/app.js) does not currently include.
+license follows the index. The list is every non-development package in package-lock.json,
+so it also covers packages that the production bundle (dist/app.js) does not currently
+include.
 
 Upstream NOTICE files: none of the listed packages ships one, including @a2ui/react,
 @a2ui/web_core and @a2ui/markdown-it (checked in the installed npm tarballs). If a future
@@ -17,9 +17,9 @@ PACKAGE INDEX
 (bundled = included in dist/app.js; installed = present in the dependency tree only)
 ==============================================================================
 
-@a2ui/markdown-it@0.2.0                  Apache-2.0                       installed
-@a2ui/react@0.12.0                       Apache-2.0                       bundled
-@a2ui/web_core@0.12.0                    Apache-2.0                       bundled
+@a2ui/markdown-it@0.2.4                  Apache-2.0                       installed
+@a2ui/react@0.16.1                       Apache-2.0                       bundled
+@a2ui/web_core@0.16.1                    Apache-2.0                       bundled
 @ag-ui/a2ui-middleware@0.0.11            MIT                              bundled
 @ag-ui/a2ui-toolkit@0.0.4                MIT                              bundled
 @ag-ui/client@1.0.1                      MIT                              bundled
@@ -30,7 +30,7 @@ PACKAGE INDEX
 @lit-labs/ssr-dom-shim@1.6.0             BSD-3-Clause                     installed
 @lit/context@1.1.6                       BSD-3-Clause                     bundled
 @lit/reactive-element@2.1.2              BSD-3-Clause                     bundled
-@preact/signals-core@1.14.4              MIT                              bundled
+@preact/signals-core@1.14.5              MIT                              bundled
 @protobuf-ts/protoc@2.11.1               Apache-2.0                       installed
 @types/trusted-types@2.0.7               MIT                              installed
 @types/uuid@10.0.0                       MIT                              installed
@@ -38,7 +38,7 @@ argparse@2.0.1                           Python-2.0                       instal
 clarinet@0.12.6                          BSD-2-Clause                     bundled
 clsx@2.1.1                               MIT                              installed
 compare-versions@6.1.1                   MIT                              bundled
-dompurify@3.4.16                         (MPL-2.0 OR Apache-2.0)          installed
+dompurify@3.5.0                          (MPL-2.0 OR Apache-2.0)          installed
 entities@4.5.0                           BSD-2-Clause                     bundled
 fast-json-patch@3.1.1                    MIT                              bundled
 linkify-it@5.0.2                         MIT                              bundled
@@ -65,9 +65,9 @@ LICENSE TEXTS
 ==============================================================================
 
 --- 1. Applies to:
-    @a2ui/markdown-it@0.2.0
-    @a2ui/react@0.12.0
-    @a2ui/web_core@0.12.0
+    @a2ui/markdown-it@0.2.4
+    @a2ui/react@0.16.1
+    @a2ui/web_core@0.16.1
     (LICENSE from the npm tarball)
 
 
@@ -638,7 +638,7 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 --- 7. Applies to:
-    @preact/signals-core@1.14.4
+    @preact/signals-core@1.14.5
     (LICENSE from the npm tarball)
 
 The MIT License (MIT)
@@ -1202,7 +1202,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 --- 14. Applies to:
-    dompurify@3.4.16
+    dompurify@3.5.0
     (LICENSE from the npm tarball)
 
 

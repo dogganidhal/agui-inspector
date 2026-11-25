@@ -1,8 +1,7 @@
 import { useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactElement, type ReactNode } from 'react';
-import { A2uiSurface } from '@a2ui/react/v0_9';
-import type { ReactComponentImplementation } from '@a2ui/react/v0_9';
+import { A2uiSurface, type ReactCatalogComponent } from '@a2ui/react';
 import type { A2uiAction, A2uiViewProps, CatalogAliases, JsonValue } from '../../contracts';
-import { A2UI_ACTIVITY_TYPE, createSurfaceSession, type SurfaceIssue, type SurfaceSession } from '../../core/a2ui/index';
+import { A2UI_ACTIVITY_TYPE, createSurfaceSession, surfaceVersion, type SurfaceIssue, type SurfaceSession } from '../../core/a2ui/index';
 import { readLifecycle, type Lifecycle } from '../../core/a2ui/lifecycle';
 import { CodeBlock, Finding, Tag } from '../theme/primitives';
 import { createBundledCatalogs } from './catalog';
@@ -103,8 +102,8 @@ function Rendered({ activityId, operations, catalogAliases, onAction }: Pick<A2u
   useLayoutEffect(() => {
     latest.current = onAction;
   });
-  const [session] = useState<SurfaceSession<ReactComponentImplementation>>(() => {
-    const created = createSurfaceSession<ReactComponentImplementation>({
+  const [session] = useState<SurfaceSession<ReactCatalogComponent>>(() => {
+    const created = createSurfaceSession<ReactCatalogComponent>({
       catalog: createBundledCatalogs,
       onAction: (action: A2uiAction) => latest.current(action),
       ...(catalogAliases !== undefined && { aliases: catalogAliases }),
@@ -115,19 +114,22 @@ function Rendered({ activityId, operations, catalogAliases, onAction }: Pick<A2u
   useLayoutEffect(() => session.apply(operations), [session, operations]);
   const { surfaces, issues, order, v08 } = useSyncExternalStore(session.subscribe, session.snapshot, session.snapshot);
 
-  /** Every surface, v0.9 and v0.8, in the order the list first names them. A rebuild remounts a v0.8 surface, so typed text goes. */
+  /** Every surface, 1.0, v0.9 and v0.8, in the order the list first names them. A rebuild remounts a v0.8 surface, so typed text goes. */
   const draw = (v08Ids: readonly string[], epoch: number): ReactNode => {
     const drawn = [
-      ...surfaces.map((surface) => ({
-        key: `v0.9:${surface.id}`,
-        element: (
-          <div key={`v0.9:${surface.id}`} className="agui-a2ui-surface" data-surface={surface.id} data-version="v0.9">
-            <FieldMessagesProvider>
-              <A2uiSurface surface={surface} />
-            </FieldMessagesProvider>
-          </div>
-        ),
-      })),
+      ...surfaces.map((surface) => {
+        const key = `${surfaceVersion(surface)}:${surface.id}`;
+        return {
+          key,
+          element: (
+            <div key={key} className="agui-a2ui-surface" data-surface={surface.id} data-version={surfaceVersion(surface)}>
+              <FieldMessagesProvider>
+                <A2uiSurface surface={surface} />
+              </FieldMessagesProvider>
+            </div>
+          ),
+        };
+      }),
       ...v08Ids.map((id) => ({
         key: `v0.8:${id}`,
         element: (
@@ -156,8 +158,8 @@ function Rendered({ activityId, operations, catalogAliases, onAction }: Pick<A2u
 }
 
 /**
- * The content of an `a2ui-surface` activity: v0.9 operations drawn by the official renderer from the
- * bundled catalog, or, with rendering off, the operations as JSON. Before there are operations it shows
+ * The content of an `a2ui-surface` activity: 1.0, v0.9 and v0.8 operations drawn by the official renderers from
+ * the bundled catalogs, or, with rendering off, the operations as JSON. Before there are operations it shows
  * the generation `lifecycle` (building, retrying, failed) when the activity declared one. It reads
  * nothing but its props and calls `onAction` only when a user acts on a surface.
  */

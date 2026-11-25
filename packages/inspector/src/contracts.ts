@@ -144,7 +144,7 @@ export interface ConfigFile {
 }
 
 /**
- * The persisted and exported client-profile settings: eight that shape the run input or how it is asked for, and
+ * The persisted and exported client-profile settings: nine that shape the run input or how it is asked for, and
  * three optional ones that say how the inspector answers a run's interrupts and client tool calls. The last three
  * never reach the run input.
  */
@@ -160,6 +160,11 @@ export interface ClientProfileSettings {
   readonly encoding?: Encoding;
   /** Overrides same-named preset properties. */
   readonly forwardedProps: JsonObject;
+  /**
+   * Sends `forwardedProps.a2uiRendererCapabilities` with the catalog ids the inspector draws, per A2UI version.
+   * Absent means true. A forwarded property of that name, from the preset or the profile, wins.
+   */
+  readonly sendA2uiCapabilities?: boolean;
   /** Answers every interrupt of a run itself. Absent: by hand. */
   readonly interruptReply?: InterruptReply;
   /**

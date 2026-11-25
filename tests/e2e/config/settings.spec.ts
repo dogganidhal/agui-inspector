@@ -11,6 +11,10 @@ import { build } from 'esbuild';
 import { expect, test as base, type Page } from '@playwright/test';
 import { bundleOptions } from '../../../scripts/build.mjs';
 import { createScenarioServer, type RecordedRequest } from '../../../examples/reference-agent/config-scenarios.ts';
+import { rendererCapabilities } from '../../../packages/inspector/src/core/profiles/index.ts';
+
+/** Every run declares the catalogs drawn by default (spec 020). */
+const CAPS = { a2uiRendererCapabilities: rendererCapabilities() };
 
 const root = path.resolve(import.meta.dirname, '..', '..', '..');
 const GROUPS = ['identity', 'transport', 'tools', 'output', 'state', 'multiAgent', 'reasoning', 'multimodal', 'execution', 'humanInTheLoop', 'custom'];
@@ -191,7 +195,7 @@ test('a run prepares in declared order and substitutes variables, keeping JSON t
   });
   expect(warm?.body).toEqual({ run: 'run-1', trace: userId.slice(4) });
 
-  expect(input.forwardedProps).toEqual({ user_id: userId, seed: { plan: 'free', tags: ['new'] }, limit: 3, trace: userId.slice(4), tenant: 'acme' });
+  expect(input.forwardedProps).toEqual({ ...CAPS, user_id: userId, seed: { plan: 'free', tags: ['new'] }, limit: 3, trace: userId.slice(4), tenant: 'acme' });
   expect(typeof input.forwardedProps.limit).toBe('number');
   expect(input.threadId).toBe('thread-1');
   expect(input).toMatchObject({ protocolVersion: '1.0', state: {}, tools: [], context: [] });
@@ -326,14 +330,14 @@ test.describe('profile switches', () => {
 
   test('forwarded properties: valid JSON applies, malformed or reserved JSON is shown and not applied', async ({ page, site }) => {
     await forwardedField(page).fill('{"tenant":"profile","extra":[1,2]}');
-    expect((await send(page, site, 'a')).forwardedProps).toEqual({ tenant: 'profile', extra: [1, 2] });
+    expect((await send(page, site, 'a')).forwardedProps).toEqual({ ...CAPS, tenant: 'profile', extra: [1, 2] });
     await forwardedField(page).fill('{"tenant":');
     await expect(page.getByRole('alert').filter({ hasText: 'Not valid JSON' })).toBeVisible();
     await forwardedField(page).fill('[1]');
     await expect(page.getByRole('alert').filter({ hasText: 'must be a JSON object' })).toBeVisible();
     await forwardedField(page).fill('{"a2uiAction":{}}');
     await expect(page.getByRole('alert').filter({ hasText: 'reserved' })).toBeVisible();
-    expect((await send(page, site, 'b')).forwardedProps, 'the last valid value stays in use').toEqual({ tenant: 'profile', extra: [1, 2] });
+    expect((await send(page, site, 'b')).forwardedProps, 'the last valid value stays in use').toEqual({ ...CAPS, tenant: 'profile', extra: [1, 2] });
   });
 });
 

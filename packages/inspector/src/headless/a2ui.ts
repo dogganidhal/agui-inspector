@@ -1,11 +1,13 @@
-// A2UI v0.9 surfaces of a headless session (feature 018). The page's surface session over @a2ui/web_core's own basic
-// catalog, with no React and no DOM. Nothing renders, so media load nothing; openUrl is refused as in the page.
+// A2UI v0.9 and 1.0 surfaces of a headless session (feature 018, spec 020). The page's surface session over
+// @a2ui/web_core's own basic catalogs, with no React and no DOM. Nothing renders, so media load nothing; openUrl is refused as in the page.
 // An action is built the way the renderer's binder builds it (research.md, section 9): a function call runs through the
 // data context, an event resolves its context against the data model and is dispatched.
-import { basicCatalog, Catalog, ComponentContext, type ComponentApi, type SurfaceModel } from '@a2ui/web_core/v0_9';
-import type { A2uiAction, InspectionSession, JsonValue } from '../contracts.ts';
+import { Catalog, ComponentContext, type ComponentApi, type SurfaceModel } from '@a2ui/web_core';
+import { basicCatalog } from '@a2ui/web_core/v0_9/basic_catalog';
+import { basicCatalog as basicCatalogV10 } from '@a2ui/web_core/catalogs/basic/v1';
+import type { A2uiAction, CatalogAliases, InspectionSession, JsonValue } from '../contracts.ts';
 import { deniedOpenUrl, type ReportBlocked } from '../core/a2ui/actions.ts';
-import { A2UI_ACTIVITY_TYPE, createSurfaceSession, type SurfaceIssue, type SurfaceSession } from '../core/a2ui/index.ts';
+import { A2UI_ACTIVITY_TYPE, createSurfaceSession, type AliasIds, type SurfaceIssue, type SurfaceSession } from '../core/a2ui/index.ts';
 import { projectConversation } from '../core/projection/index.ts';
 
 export interface ComponentView {
@@ -38,10 +40,13 @@ interface Activity {
   action?: A2uiAction;
 }
 
-function catalogs(report: ReportBlocked, aliasIds: readonly string[]): Catalog<ComponentApi>[] {
-  const components = [...basicCatalog.components.values()];
-  const functions = [...basicCatalog.functions.values()].map((fn) => (fn.name === 'openUrl' ? deniedOpenUrl(report) : fn));
-  return [basicCatalog.id, ...aliasIds].map((id) => new Catalog<ComponentApi>(id, basicCatalog.protocolVersion, components, functions, basicCatalog.themeSchema));
+function catalogs(report: ReportBlocked, aliasIds: AliasIds): Catalog<ComponentApi>[] {
+  const under = (source: typeof basicCatalog | typeof basicCatalogV10, ids: readonly string[]) => {
+    const components = [...source.components.values()];
+    const functions = [...source.functions.values()].map((fn) => (fn.name === 'openUrl' ? deniedOpenUrl(report, fn) : fn));
+    return [source.id, ...ids].map((id) => new Catalog<ComponentApi>(id, source.protocolVersion, components, functions, source.themeSchema));
+  };
+  return [...under(basicCatalog, aliasIds['v0.9']), ...under(basicCatalogV10, aliasIds['1.0'])];
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -56,18 +61,18 @@ function catalogIdOf(operations: JsonValue, surfaceId: string): string | undefin
   return undefined;
 }
 
-/** A `{ path }` binding reads from the data model; everything else stays as sent, so reading never runs a function. */
+/** A binding (`{ path }` in v0.9, `{ "@path" }` in 1.0) reads from the data model; everything else stays as sent, so reading never runs a function. */
 function propsOf(surface: SurfaceModel<ComponentApi>, id: string, properties: Record<string, unknown>): Record<string, JsonValue> {
   const context = new ComponentContext(surface, id);
   return Object.fromEntries(
     Object.entries(properties).map(([key, value]) => {
-      const binding = isRecord(value) && Object.keys(value).length === 1 && typeof value['path'] === 'string';
+      const binding = isRecord(value) && Object.keys(value).length === 1 && (typeof value['path'] === 'string' || typeof value['@path'] === 'string');
       return [key, json(binding ? context.dataContext.resolveDynamicValue(value) : value)];
     }),
   );
 }
 
-export function createHeadlessSurfaces(snapshot: () => InspectionSession): HeadlessSurfaces {
+export function createHeadlessSurfaces(snapshot: () => InspectionSession, aliases?: CatalogAliases): HeadlessSurfaces {
   const activities = new Map<string, Activity>();
 
   /** Brings every A2UI activity's surface session up to date with the recording. Unchanged lists do nothing. */
@@ -78,7 +83,7 @@ export function createHeadlessSurfaces(snapshot: () => InspectionSession): Headl
       let activity = activities.get(entry.messageId);
       if (activity === undefined) {
         const record: { action?: A2uiAction } = {};
-        const session = createSurfaceSession<ComponentApi>({ catalog: catalogs, onAction: (action) => void (record.action = action) });
+        const session = createSurfaceSession<ComponentApi>({ catalog: catalogs, onAction: (action) => void (record.action = action), ...(aliases !== undefined && { aliases }) });
         activity = Object.assign(record, { session, operations });
         activities.set(entry.messageId, activity);
       }

@@ -11,6 +11,7 @@ import { createGuardedTransport } from '../../src/core/runtime/transport.ts';
 import { runPreparations } from '../../src/core/runtime/prepare.ts';
 import { createSessionStore } from '../../src/core/store/index.ts';
 import { AGENT, bodyOf, embedded, eventStream, hosted, ok200, replyRoute, rig, scriptedNetwork, sse, type Route } from './support.ts';
+import { rendererCapabilities } from '../../src/core/profiles/index.ts';
 
 const TOKEN = 'synthetic-token-7f3a91';
 
@@ -238,7 +239,7 @@ test('an ordinary run is preceded by its resolved preparations, in order, and th
   assert.deepEqual(first.seed, { plan: 'free' }, 'a whole-value JSON variable keeps its type');
   assert.match(first.user, /^u-id\d+-\d+$/);
   assert.deepEqual(bodyOf(net.calls[1]), { run: (run as { runId: string }).runId });
-  assert.deepEqual((run as { forwardedProps: unknown }).forwardedProps, { user: first.user }, 'the uuid is one value across preparations and properties');
+  assert.deepEqual((run as { forwardedProps: unknown }).forwardedProps, { a2uiRendererCapabilities: rendererCapabilities(), user: first.user }, 'the uuid is one value across preparations and properties');
 });
 
 test('a failed preparation fails the run visibly and the agent request is never sent', async () => {

@@ -34,8 +34,5 @@
     "hono": "4.13.13",
     "typescript": "7.0.2"
   },
-  "overrides": {
-    "dompurify": "3.4.16"
-  },
   "license": "MIT"
 }

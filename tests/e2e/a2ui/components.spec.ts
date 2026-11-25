@@ -143,7 +143,10 @@ test('every component of the gallery draws with a role and a name, and nothing i
   await expect(inputs.getByText('40', { exact: true })).toBeVisible();
   await expect(inputs.getByLabel('Day', { exact: true })).toHaveValue('2026-10-03');
   await expect(inputs.getByLabel('Time', { exact: true })).toHaveValue('14:30');
-  await expect(inputs.getByLabel('Moment', { exact: true })).toHaveValue('2026-10-03T14:30');
+  // @a2ui/web_core 0.13 and later draw a date and time as a group of a date input and a time input.
+  const moment = inputs.getByRole('group', { name: 'Moment' });
+  await expect(moment.locator('input[type="date"]')).toHaveValue('2026-10-03');
+  await expect(moment.locator('input[type="time"]')).toHaveValue('14:30');
 
   expect(problems).toEqual([]);
 });
@@ -219,7 +222,12 @@ test('Modal opens from the keyboard, keeps focus inside, closes with Escape or C
 test('a Row wraps instead of overflowing a narrow pane, and nothing scrolls sideways', async ({ page, site }) => {
   await page.setViewportSize({ width: 360, height: 800 });
   await gallery(page, site);
-  const tops = await page.locator('[data-surface="layout"] [class="agui-a2ui-row"]').nth(2).evaluate((row) => [...row.children].map((child) => Math.round(child.getBoundingClientRect().top)));
+  // @a2ui/react 0.13 and later wrap each component in a host element with `display: contents`, so the boxes that
+  // wrap are the first boxed descendants of the row's children.
+  const tops = await page.locator('[data-surface="layout"] [class="agui-a2ui-row"]').nth(2).evaluate((row) => {
+    const boxed = (element: Element): Element => (getComputedStyle(element).display === 'contents' && element.firstElementChild ? boxed(element.firstElementChild) : element);
+    return [...row.children].map((child) => Math.round(boxed(child).getBoundingClientRect().top));
+  });
   expect(new Set(tops).size).toBeGreaterThan(1);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
@@ -258,7 +266,9 @@ test('inputs bind to the data model: the action context carries the initial valu
   await page.keyboard.press('End');
   await inputs.getByLabel('Day', { exact: true }).fill('2026-12-25');
   await inputs.getByLabel('Time', { exact: true }).fill('09:15');
-  await inputs.getByLabel('Moment', { exact: true }).fill('2026-12-25T09:15');
+  const moment = inputs.getByRole('group', { name: 'Moment' });
+  await moment.locator('input[type="date"]').fill('2026-12-25');
+  await moment.locator('input[type="time"]').fill('09:15');
   await expect(inputs.getByText('100', { exact: true })).toBeVisible();
   await send.click();
 
@@ -275,7 +285,8 @@ test('inputs bind to the data model: the action context carries the initial valu
     budget: 100,
     day: '2026-12-25',
     time: '09:15',
-    moment: '2026-12-25T09:15',
+    // The renderer's date and time pair writes seconds.
+    moment: '2026-12-25T09:15:00',
   });
 });
 

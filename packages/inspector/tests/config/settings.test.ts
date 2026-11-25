@@ -20,10 +20,14 @@ import {
   loadProfile,
   parseProfileSettings,
   removeTool,
+  rendererCapabilities,
   saveProfile,
   setInterruptPayload,
   setToolResult,
 } from '../../src/core/profiles/index.ts';
+
+/** What every run sends by default (spec 020): the catalogs the inspector draws, with no configured alias. */
+const CAPS = { a2uiRendererCapabilities: rendererCapabilities() };
 
 /** The error of a failed result; fails the test when the result succeeded. */
 function failure<T>(result: Result<T>): string {
@@ -342,6 +346,15 @@ test('export writes a version 0 envelope with the seven settings and no automati
   assert.deepEqual(value(importProfile(text)), settings);
 });
 
+test('sendA2uiCapabilities is optional: written only when set, restored on import, and a boolean or nothing', () => {
+  const off = profile({ sendA2uiCapabilities: false });
+  const text = exportProfile(off);
+  assert.equal((JSON.parse(text) as { profile: Record<string, unknown> }).profile['sendA2uiCapabilities'], false);
+  assert.deepEqual(value(importProfile(text)), off);
+  assert.equal('sendA2uiCapabilities' in (JSON.parse(exportProfile(profile())) as { profile: object }).profile, false);
+  assert.match(failure(parseProfileSettings({ ...defaultProfile(), sendA2uiCapabilities: 'yes' })), /sendA2uiCapabilities must be true or false/);
+});
+
 // ---------------------------------------------------------------------------------------------
 // Automatic replies (spec 004: interruptReply, interruptPayloads, toolResults)
 // ---------------------------------------------------------------------------------------------
@@ -649,7 +662,7 @@ test('an ordinary run carries ids, protocol version, state, messages, tools, con
     messages: transcript,
     tools: [tool('get_weather')],
     context: [{ description: 'locale', value: 'en-US' }],
-    forwardedProps: { tenant: 'acme', mode: 'profile', extra: 1 },
+    forwardedProps: { ...CAPS, tenant: 'acme', mode: 'profile', extra: 1 },
   });
   assert.equal(RunAgentInputSchema.safeParse(input).success, true);
   assert.equal('parentRunId' in input, false, 'no parent link unless the runtime supplies one');
@@ -676,9 +689,29 @@ test('every profile switch changes the next run input as described', () => {
   assert.deepEqual(run({ context: [{ description: 'k', value: 'v' }] }).context, [{ description: 'k', value: 'v' }]);
   assert.deepEqual(run({ injectA2uiTool: true }).tools, [RENDER_A2UI_TOOL]);
   assert.deepEqual(run({ messageMode: 'turn' }).messages, [transcript[2]]);
-  assert.deepEqual(run({ forwardedProps: { x: 1 } }).forwardedProps, { x: 1 });
+  assert.deepEqual(run({ forwardedProps: { x: 1 } }).forwardedProps, { ...CAPS, x: 1 });
   assert.deepEqual(run({ renderA2ui: false }), base, 'rendering is a display choice and leaves the input unchanged');
   assert.deepEqual(run({ renderA2ui: true }), base);
+  assert.deepEqual(run({ sendA2uiCapabilities: true }), base, 'absent means on');
+  assert.deepEqual(run({ sendA2uiCapabilities: false }).forwardedProps, {}, 'off: nothing about A2UI is declared');
+});
+
+test('the renderer capabilities list the catalog ids drawn per version, with the configured aliases, and a forwarded property of the same name wins', () => {
+  const agent = 'https://example.com/catalogs/chat/v1.0/catalog.json';
+  const caps = (extra: Partial<Parameters<typeof composeRunInput>[0]> = {}) => value(composeRunInput(baseParams(extra))).forwardedProps['a2uiRendererCapabilities'];
+  assert.deepEqual(caps(), {
+    'v0.9': { supportedCatalogIds: ['https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json', 'https://a2ui.org/specification/v0_9/basic_catalog.json'] },
+    '1.0': { supportedCatalogIds: ['https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json'] },
+  });
+  assert.deepEqual(caps({ catalogAliases: { [agent]: 'https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json' } }), {
+    'v0.9': { supportedCatalogIds: ['https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json', 'https://a2ui.org/specification/v0_9/basic_catalog.json'] },
+    '1.0': { supportedCatalogIds: ['https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json', agent] },
+  });
+  const own = { '1.0': { supportedCatalogIds: ['mine'] } };
+  assert.deepEqual(caps({ profile: profile({ forwardedProps: { a2uiRendererCapabilities: own } }) }), own, 'the profile wins');
+  const prepared = value(preparePreset(preset({ forwardedProps: { a2uiRendererCapabilities: own } }), {}, ids, fixedUuid));
+  assert.deepEqual(caps({ prepared }), own, 'the preset wins');
+  assert.deepEqual(caps({ prepared, profile: profile({ sendA2uiCapabilities: false }) }), own, 'off leaves a written property alone');
 });
 
 test('the profile message mode overrides the preset; without one the preset decides', () => {
@@ -721,7 +754,7 @@ test('an A2UI action rides in forwardedProps.a2uiAction.userAction and cannot be
   const action: A2uiAction = { name: 'choose_refund_method', surfaceId: 'refund-options', sourceComponentId: 'btn_original', context: { method: 'original_payment' }, timestamp: '2026-10-02T14:07:31.402Z' };
   const prepared = value(preparePreset(preset({ forwardedProps: { tenant: 'acme' } }), {}, ids, fixedUuid));
   const input = value(composeRunInput(baseParams({ prepared, profile: profile({ forwardedProps: { tenant: 'override' } }), a2uiAction: action })));
-  assert.deepEqual(input.forwardedProps, { tenant: 'override', a2uiAction: { userAction: action } });
+  assert.deepEqual(input.forwardedProps, { ...CAPS, tenant: 'override', a2uiAction: { userAction: action } });
   assert.deepEqual(Object.keys((input.forwardedProps as { a2uiAction: { userAction: object } }).a2uiAction.userAction).sort(), ['context', 'name', 'sourceComponentId', 'surfaceId', 'timestamp']);
   const polluted = { ...profile(), forwardedProps: { a2uiAction: { userAction: { name: 'forged' } } } } as ClientProfileSettings;
   assert.match(failure(composeRunInput(baseParams({ profile: polluted, a2uiAction: action }))), /a2uiAction.*reserved/i);

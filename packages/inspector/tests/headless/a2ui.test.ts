@@ -1,7 +1,9 @@
 // Feature 018, T008: A2UI v0.9 surfaces in a headless session, read, edited and fired as the renderer would.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { BASIC_CATALOG_ID } from '../../../../examples/reference-agent/a2ui-scenarios.ts';
+import { AGENT_V10_CATALOG_ID, BASIC_CATALOG_ID, BASIC_V10_CATALOG_ID } from '../../../../examples/reference-agent/a2ui-scenarios.ts';
+import { V10_CARD_MESSAGE } from '../../../../examples/reference-agent/scenarios.ts';
+import { defaultProfile } from '../../src/core/profiles/index.ts';
 import { openSession } from '../../src/headless/session.ts';
 import { serve, serveA2ui } from './support.ts';
 
@@ -110,6 +112,32 @@ test('a v0.8 surface keeps its frames and findings and has no surface view', asy
     await session.send('old');
     assert.ok(session.frames().length === 3);
     assert.deepEqual(session.surfaces(), []);
+    session.close();
+  } finally {
+    await served.close();
+  }
+});
+
+test('a 1.0 card on an aliased agent catalog id reads with @path bindings resolved, and fire sends its envelope', async () => {
+  const served = await serveA2ui();
+  try {
+    // Turn mode, as an agent that reads only the new turn expects: the action run then carries no message.
+    const session = await openSession({ target: served.agent, profile: { ...defaultProfile(), messageMode: 'turn' }, catalogAliases: { [AGENT_V10_CATALOG_ID]: BASIC_V10_CATALOG_ID } });
+    await session.send(V10_CARD_MESSAGE);
+    const caps = served.inputs[0]?.forwardedProps?.a2uiRendererCapabilities as Record<string, { supportedCatalogIds: string[] }>;
+    assert.deepEqual(caps['1.0']?.supportedCatalogIds, [BASIC_V10_CATALOG_ID, AGENT_V10_CATALOG_ID], 'the alias is declared');
+    const [card] = session.surfaces();
+    assert.equal(card?.surfaceId, 'visit');
+    assert.equal(card?.catalogId, AGENT_V10_CATALOG_ID);
+    assert.equal(card?.components.find((component) => component.id === 'name')?.props['value'], 'Ada', 'an @path binding reads from the data model');
+    assert.equal(card?.components.find((component) => component.id === 'rating')?.type, 'StarRating', 'a component the catalog lacks is kept');
+    session.a2ui.set('visit', '/name', 'Grace');
+    await session.a2ui.fire('visit', 'confirm');
+    const second = served.inputs[1];
+    assert.deepEqual(second?.messages, [], 'an action run sends no message');
+    const userAction = second?.forwardedProps?.a2uiAction?.userAction as { name?: string; context?: Record<string, unknown> };
+    assert.equal(userAction.name, 'confirm_booking');
+    assert.deepEqual(userAction.context, { name: 'Grace', slot: ['morning'], source: 'card' });
     session.close();
   } finally {
     await served.close();

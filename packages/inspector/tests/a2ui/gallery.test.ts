@@ -6,8 +6,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
-import { basicCatalog } from '@a2ui/react/v0_9';
-import type { ReactComponentImplementation } from '@a2ui/react/v0_9';
+import { basicCatalog } from '@a2ui/web_core/v0_9/basic_catalog';
+import type { ReactCatalogComponent } from '@a2ui/react';
 import { ComponentContext, GenericBinder, MessageProcessor } from '@a2ui/web_core/v0_9';
 import type { JsonValue } from '../../src/contracts.ts';
 import { createSurfaceSession } from '../../src/core/a2ui/index.ts';
@@ -19,7 +19,7 @@ const json = (value: unknown): JsonValue => JSON.parse(JSON.stringify(value));
 const V = 'v0.9';
 
 test('the gallery applies without a single issue and uses every one of the 18 basic components', () => {
-  const host = createSurfaceSession<ReactComponentImplementation>({ catalog: createBundledCatalog, onAction: () => undefined });
+  const host = createSurfaceSession<ReactCatalogComponent>({ catalog: createBundledCatalog, onAction: () => undefined });
   host.apply(json(galleryOperations));
   const { surfaces, issues } = host.snapshot();
   assert.deepEqual(issues, []);
@@ -43,7 +43,7 @@ test('the inspector draws some components itself and keeps every official name, 
 
 /** The props the real binder resolves for one component of a one-surface list. */
 function resolved(components: readonly Operation[], data: Record<string, unknown>, id = 'root') {
-  const processor = new MessageProcessor<ReactComponentImplementation>([basicCatalog], () => undefined);
+  const processor = new MessageProcessor<ReactCatalogComponent>([basicCatalog], () => undefined);
   const issues: string[] = [];
   try {
     processor.processMessages([

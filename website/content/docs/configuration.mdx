@@ -121,12 +121,12 @@ The brand is not part of a session export, a profile or browser storage. For Pyt
 
 ### Catalog aliases
 
-`catalogAliases` maps an A2UI catalog id that the inspector does not know to a catalog that it bundles, so the surface draws. The field is optional and applies to every agent. [A2UI surfaces](./a2ui.mdx#catalogs-and-aliases) explains the catalogs and when an alias applies.
+`catalogAliases` maps an A2UI catalog id that the inspector does not know to a catalog that it bundles, so the surface draws. The field is optional and applies to every agent. Each run also declares the aliases to the agent in its [renderer capabilities](./a2ui.mdx#renderer-capabilities). [A2UI surfaces](./a2ui.mdx#catalogs-and-aliases) explains the catalogs and when an alias applies.
 
 | Part | Rule |
 | --- | --- |
 | Key | The id an agent sends in `createSurface.catalogId` or `beginRendering.catalogId`. It must not be empty. It must not be a bundled id or the built-in alias |
-| Value | The id of a bundled catalog: `https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json` or `https://a2ui.org/specification/v0_8/standard_catalog_definition.json` |
+| Value | The id of a bundled catalog: `https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json`, `https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json` or `https://a2ui.org/specification/v0_8/standard_catalog_definition.json` |
 
 An alias problem causes a warning and never stops startup, like a theme problem. The page shows a "Configuration" warning under the top bar, on every tab, and ignores that entry. The valid aliases, the agents and the theme still work. A warning cuts an id at 120 characters.
 
@@ -172,7 +172,7 @@ Capabilities show in the eleven documented groups: `identity`, `transport`, `too
 
 ## Client profile
 
-The profile is what the inspector declares and sends: eight settings. Three more optional settings say how the inspector answers a run's interrupts and client tool calls. There are no others.
+The profile is what the inspector declares and sends: nine settings. Three more optional settings say how the inspector answers a run's interrupts and client tool calls. There are no others.
 
 | Setting | Effect on the next run input |
 | --- | --- |
@@ -181,9 +181,10 @@ The profile is what the inspector declares and sends: eight settings. Three more
 | `context` | Sent as `context`. Each entry has a `description` and a string `value`. |
 | `renderA2ui` | None. It decides whether [A2UI surfaces](./a2ui.mdx) render or stay as JSON in the views. |
 | `injectA2uiTool` | Adds the official `render_a2ui` tool from `@ag-ui/a2ui-middleware` to `tools`. It replaces a profile tool with the same name, so the name never appears twice. |
+| `sendA2uiCapabilities` | Optional, `true` when absent. Sends `forwardedProps.a2uiRendererCapabilities` with the catalog ids the inspector draws for v0.9 and 1.0, the configured aliases included. `false` sends nothing about A2UI. A forwarded property of that name from the preset or the profile wins either way. See [renderer capabilities](./a2ui.mdx#renderer-capabilities). |
 | `messageMode` | `full` or `turn`. When set, it overrides the [preset's mode](./presets.mdx#forwarded-properties-and-message-mode). When absent, the preset decides. |
 | `encoding` | None. It changes the `Accept` header of runs and raw submissions, not the body. `sse` or `protobuf`. When set, it overrides the [preset's encoding](./presets.mdx#encoding). When absent, the preset decides, and without one the encoding is `sse`. See [Protobuf streams](./protobuf.mdx). |
-| `forwardedProps` | Merged over the preset's properties. If both define a name, the profile wins. `a2uiAction` is reserved. |
+| `forwardedProps` | Merged over the preset's properties and the renderer capabilities. If two define a name, the profile wins, then the preset. `a2uiAction` is reserved. |
 | `interruptReply` | `resolve` or `cancel`. None. When set, the inspector answers every interrupt of a finished run and sends the continuation. When absent, you answer by hand. |
 | `interruptPayloads` | None. An object from an interrupt `reason` to a JSON payload, never `null`. Resolve sends the payload for the interrupt's reason, as written. Without one it sends the starting answer from the response schema. It is kept when `interruptReply` is not `resolve`. |
 | `toolResults` | None. An object from the name of a tool in `tools` to a nonempty text. Each pending call to that tool gets the text as its result, exactly as written. A name that is not in `tools` is an error. |
@@ -218,11 +219,11 @@ Export writes this envelope to a file. Browser storage keeps it under the key `a
 }
 ```
 
-`messageMode` is left out when the profile uses the preset's mode. `interruptReply`, `interruptPayloads` and `toolResults` are left out when you answer by hand, and an empty `interruptPayloads` or `toolResults` counts as left out. A profile file from 0.1.0 has none of them and still loads. A 0.1.0 inspector rejects a file that has them, because it does not know the keys. The version must be exactly 0. A missing or different version is an error. Import and load check the whole file. A bad file shows its error and does not change the current profile. If the saved profile cannot be read, the inspector reports it and keeps the defaults.
+`sendA2uiCapabilities` is left out until you change the switch. `messageMode` is left out when the profile uses the preset's mode. `interruptReply`, `interruptPayloads` and `toolResults` are left out when you answer by hand, and an empty `interruptPayloads` or `toolResults` counts as left out. A profile file from 0.1.0 has none of them and still loads. A 0.1.0 inspector rejects a file that has them, because it does not know the keys. For the same reason, inspectors up to 0.3.0 reject a file with `sendA2uiCapabilities`. The version must be exactly 0. A missing or different version is an error. Import and load check the whole file. A bad file shows its error and does not change the current profile. If the saved profile cannot be read, the inspector reports it and keeps the defaults.
 
 ## Credentials
 
-Authentication credentials stay in memory. The token and its header name belong to the connection state. No profile, configuration or export type refers to that state, and the profile has no field for either. Import rejects a field that looks like one. Export copies only the ten settings, even when it gets an object with more. Only the guarded transport receives the token.
+Authentication credentials stay in memory. The token and its header name belong to the connection state. No profile, configuration or export type refers to that state, and the profile has no field for either. Import rejects a field that looks like one. Export copies only the twelve settings, even when it gets an object with more. Only the guarded transport receives the token.
 
 Keep secrets out of `forwardedProps`, `context`, tool schemas, interrupt payloads and scripted results too. The browser saves those values, and exported profiles contain them as typed.
 
