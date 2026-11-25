@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, type CSSProperties, type ReactElement, type ReactNode } from 'react';
 import { A2UIProvider, A2UIRenderer, ComponentNode, ComponentRegistry, useA2UIActions, useA2UIComponent, useA2UIState, type A2UIComponentProps, type Types } from '@a2ui/react/v0_8';
 import type { A2uiAction, JsonValue } from '../../contracts';
-import { fromV08Action } from '../../core/a2ui/actions';
+import { fromV08Action, type BuiltAction } from '../../core/a2ui/actions';
 import type { V08Feed } from '../../core/a2ui/index';
 import { BlockedView, ButtonView, IconView, ModalView, TabsView, UnknownView, type BlockedKind } from './parts';
 import { V08_THEME } from './v08-theme';
@@ -132,9 +132,10 @@ function typesOf(message: JsonValue): string[] {
   return Array.isArray(components) ? components.flatMap((entry) => Object.keys(entry.component ?? {})) : [];
 }
 
-/** The part of the session the pump reports back to. */
+/** The part of the session the pump reports back to, and that sends an action with its notes. */
 interface Refusals {
   refused(index: number, operation: JsonValue, error: unknown): void;
+  act(built: BuiltAction): void;
 }
 
 /**
@@ -178,12 +179,10 @@ function Pump({ session, feed, children }: { session: Refusals; feed: V08Feed; c
 export function V08Host({
   session,
   feed,
-  onAction,
   children,
 }: {
   session: Refusals;
   feed: V08Feed;
-  onAction(action: A2uiAction): void;
   children(ids: readonly string[], epoch: number): ReactNode;
 }): ReactElement {
   reserveRendererStyles();
@@ -191,8 +190,8 @@ export function V08Host({
     <A2UIProvider
       theme={V08_THEME}
       onAction={(message) => {
-        const action = fromV08Action(message);
-        if (action !== undefined) onAction(action);
+        const built = fromV08Action(message);
+        if (built !== undefined) session.act(built);
       }}
     >
       <Pump session={session} feed={feed}>

@@ -53,3 +53,12 @@
   the `mount_inspector` docstring; `ROADMAP.md`.
 - [x] T041 Changeset: minor for `agui-inspector` and `agui-inspector-python`.
 - [x] T042 `npm run check:ci`.
+
+## Phase 6: Context entries with no value (FR-012, after 0.4.0)
+
+- [x] T050 `core/a2ui/actions.ts`: `jsonContext` writes a context as JSON does and lists what it left out;
+  `toA2uiAction` and `fromV08Action` return the action and that list. Tests in `actions.test.ts`.
+- [x] T051 `core/a2ui/index.ts`: the session's `act` notes an `action` issue, then sends; the v0.8 host sends through
+  it; the view shows `action` issues as warnings. Tests in `v10.test.ts`, `tests/headless/a2ui.test.ts` and
+  `tests/e2e/a2ui/v10.spec.ts`.
+- [x] T052 Docs in `a2ui.mdx`; a patch changeset for both packages.

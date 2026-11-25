@@ -13,7 +13,7 @@ import {
 } from '@a2ui/web_core';
 import { A2uiMessageSchema } from '@a2ui/web_core/v0_8';
 import type { A2uiAction, CatalogAliases, JsonValue, Unsubscribe } from '../../contracts.ts';
-import { blockedMessage, toA2uiAction, type ReportBlocked } from './actions.ts';
+import { blockedMessage, droppedMessage, toA2uiAction, type BuiltAction, type ReportBlocked } from './actions.ts';
 import { BASIC_V09, BASIC_V10, STANDARD_V08, catalogIds, resolves } from './catalogs.ts';
 import { classify, surfaceKey, type Entry } from './operations.ts';
 
@@ -21,8 +21,11 @@ import { classify, surfaceKey, type Entry } from './operations.ts';
 export const A2UI_ACTIVITY_TYPE = 'a2ui-surface';
 
 export interface SurfaceIssue {
-  /** `operation`: the list or one entry could not be applied. `surface`: the renderer reported an error. `blocked`: a surface asked for something outside the page. */
-  readonly source: 'operation' | 'surface' | 'blocked';
+  /**
+   * `operation`: the list or one entry could not be applied. `surface`: the renderer reported an error. `blocked`: a
+   * surface asked for something outside the page. `action`: an action was sent without context entries that had no value.
+   */
+  readonly source: 'operation' | 'surface' | 'blocked' | 'action';
   readonly message: string;
   /** Position in the operation list. */
   readonly index?: number;
@@ -65,6 +68,8 @@ export interface SurfaceSession<T extends ComponentApi> {
   subscribe(listener: () => void): Unsubscribe;
   /** The v0.8 renderer refused a message the session accepted. Adds an issue at that message's position. */
   refused(index: number, operation: JsonValue, error: unknown): void;
+  /** Sends a built action, after noting the context entries it was sent without. The v0.8 renderer's actions come here. */
+  act(built: BuiltAction): void;
 }
 
 export interface SurfaceSessionOptions<T extends ComponentApi> {
@@ -133,6 +138,12 @@ export function createSurfaceSession<T extends ComponentApi>(options: SurfaceSes
     { 'v0.9': catalogIds('v0.9', aliases).filter((id) => id !== BASIC_V09), '1.0': catalogIds('1.0', aliases).filter((id) => id !== BASIC_V10) },
   );
 
+  /** A tap is never refused for a binding to nothing: the entry is left out, as JSON leaves it out, and flagged. */
+  const act = ({ action, dropped }: BuiltAction) => {
+    if (dropped.length > 0) note({ source: 'action', message: droppedMessage(action, dropped), surfaceId: action.surfaceId });
+    options.onAction(action);
+  };
+
   const release = () => {
     processor?.model.dispose();
     processor?.dispose();
@@ -140,7 +151,7 @@ export function createSurfaceSession<T extends ComponentApi>(options: SurfaceSes
   };
 
   const start = (): MessageProcessor<T> => {
-    const next = new MessageProcessor<T>([catalog].flat(), (payload) => options.onAction(toA2uiAction(payload)));
+    const next = new MessageProcessor<T>([catalog].flat(), (payload) => act(toA2uiAction(payload)));
     next.onSurfaceCreated((surface) => {
       surface.onError.subscribe((error) => note({ source: 'surface', message: error.message, surfaceId: surface.id }));
     });
@@ -221,5 +232,6 @@ export function createSurfaceSession<T extends ComponentApi>(options: SurfaceSes
     refused(index, operation, error) {
       note({ source: 'operation', message: reason(error), index, operation });
     },
+    act,
   };
 }

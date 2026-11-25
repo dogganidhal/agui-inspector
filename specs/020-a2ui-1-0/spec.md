@@ -33,6 +33,17 @@ aliases) to 1.0.
   and a developer who reads surfaces as JSON still gets them from the agent (FR-006).
 - Q: Which versions go into the capabilities? → A: v0.9 and 1.0, the shape `MessageProcessor.getRendererCapabilities`
   gives. v0.8 has no such declaration (FR-005).
+
+### Session 2026-11-25, after 0.4.0
+
+- Q: A 1.0 button binds a context entry to a path the data model lacks, so it resolves to `undefined`, and the runtime
+  refuses the whole tap ("An A2UI action needs a context that is a JSON object"). What should happen? → A: Send the
+  action as JSON would write it: an object entry with no value is left out, a list item with no value becomes `null`,
+  and `null` stays `null`. The surface shows a warning that names each entry left out. The same holds for v0.9 and
+  v0.8 actions (FR-012).
+
+### Session 2026-11-25, capabilities
+
 - Q: Who wins when the preset or the profile already sets `a2uiRendererCapabilities`? → A: Theirs. The inspector's
   object goes first in the merge, so a written property replaces it, with the switch on or off (FR-006).
 
@@ -119,6 +130,9 @@ that names its type and component id, with its definition and properties under "
   clarifications).
 - **FR-011**: The reference agent MUST have a 1.0 story with made-up ids that sends its card only to a client that
   declares the agent catalog id, and the demo config MUST alias that id.
+- **FR-012**: A tap MUST NOT be refused because a context entry has no value. The envelope's context MUST be what
+  `JSON.stringify` writes: such an object entry left out at any depth, such a list item written as `null`, `null`
+  kept. The surface MUST show a warning that names the action, its component and each entry left out.
 
 ### Key Entities
 

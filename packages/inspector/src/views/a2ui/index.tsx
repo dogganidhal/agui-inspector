@@ -20,7 +20,7 @@ function Issues({ issues }: { issues: readonly SurfaceIssue[] }): ReactElement {
       {issues.map((issue, at) => (
         <div key={at}>
           <Finding
-            variant={issue.source === 'blocked' ? 'warn' : 'err'}
+            variant={issue.source === 'blocked' || issue.source === 'action' ? 'warn' : 'err'}
             kind={issue.index === undefined ? 'A2UI' : `Operation ${issue.index + 1}`}
           >
             {issue.message}
@@ -147,7 +147,7 @@ function Rendered({ activityId, operations, catalogAliases, onAction }: Pick<A2u
     <Shell activityId={activityId} status="rendered">
       {issues.length > 0 && <Issues issues={issues} />}
       {v08.messages.length > 0 ? (
-        <V08Host session={session} feed={v08} onAction={(action) => latest.current(action)}>
+        <V08Host session={session} feed={v08}>
           {draw}
         </V08Host>
       ) : (

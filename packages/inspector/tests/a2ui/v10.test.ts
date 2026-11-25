@@ -12,6 +12,7 @@ import { createSurfaceSession, surfaceVersion } from '../../src/core/a2ui/index.
 import { classify, surfaceKey, type Entry } from '../../src/core/a2ui/operations.ts';
 import { parseConfig } from '../../src/core/config/index.ts';
 import { rendererCapabilities } from '../../src/core/profiles/index.ts';
+import { checkA2uiAction } from '../../src/core/runtime/replies.ts';
 import { createBundledCatalogs } from '../../src/views/a2ui/catalog.tsx';
 import { UNKNOWN_TAG } from '../../src/views/a2ui/components.tsx';
 import { AGENT_V10_CATALOG_ID, BASIC_CATALOG_ID, BASIC_V10_CATALOG_ID, formSurface, v10Card, v10Continuation } from '../../../../examples/reference-agent/a2ui-scenarios.ts';
@@ -169,4 +170,21 @@ test('the 1.0 basic catalog the inspector bundles is the renderer package\'s', (
   assert.deepEqual([...v10.components.keys()], [...basicCatalogV10.components.keys()]);
   for (const media of ['Image', 'Video', 'AudioPlayer']) assert.notEqual(v10.components.get(media), basicCatalogV10.components.get(media), `${media} loads nothing`);
   assert.notEqual(v10.functions.get('openUrl'), basicCatalogV10.functions.get('openUrl'), 'openUrl opens nothing');
+});
+
+test('a button bound to a path the data model lacks sends its action without that entry, flagged as a warning on the surface', async () => {
+  const card = json(v10Card) as Array<{ createSurface: { components: Array<Record<string, unknown>> } }>;
+  const confirm = card[0]!.createSurface.components.find((component) => component['id'] === 'confirm')!;
+  confirm['action'] = { event: { name: 'confirm_booking', context: { name: { '@path': '/name' }, phone: { '@path': '/phone' }, nested: { '@path': '/missing/deep' } } } };
+  const { host, actions } = session(ALIASES);
+  host.apply(card as unknown as JsonValue);
+  const surface = host.snapshot().surfaces[0]!;
+  await click(surface, 'confirm');
+  assert.equal(actions.length, 1, 'the tap is sent');
+  assert.deepEqual(actions[0]!.context, { name: 'Ada' });
+  assert.equal(checkA2uiAction(actions[0]).ok, true, 'the runtime accepts the envelope');
+  const [issue] = host.snapshot().issues;
+  assert.equal(issue?.source, 'action');
+  assert.equal(issue?.surfaceId, 'visit');
+  assert.equal(issue?.message, 'Action confirm_booking from confirm was sent without phone, nested: the context bound them to no value, and JSON has none to send.');
 });
