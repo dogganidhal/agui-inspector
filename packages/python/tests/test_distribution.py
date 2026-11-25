@@ -221,7 +221,9 @@ class DistributionTest(unittest.TestCase):
         self.assertIsNone(re.search(r"\bpublish\b|pypi|npm publish|uv publish|twine|gh release|git tag|attest", text, re.I))
         # The uploaded directory is the demo merged with the docs site, never a package build.
         self.assertIn("path: .build/pages", text)
-        self.assertIn("for (const dir of ['.build/public-demo', 'website/out'])", text)
+        self.assertIn("fs.cpSync('.build/public-demo', '.build/pages', { recursive: true })", text)
+        self.assertIn("fs.readdirSync('website/out', { recursive: true, withFileTypes: true })", text)
+        self.assertIn("fs.constants.COPYFILE_EXCL", text)
 
     def test_the_release_workflow_versions_with_changesets_and_publishes_only_through_trusted_publishing(self):
         workflows = REPO / ".github" / "workflows"
