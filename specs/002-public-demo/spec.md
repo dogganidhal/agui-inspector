@@ -175,6 +175,7 @@ the demo under `/agui-inspector/`, and review workflow triggers/permissions with
 - **FR-014**: A main-only GitHub Actions workflow MUST validate and build the demo, upload its
   artifact and deploy through SHA-pinned Pages actions with minimum job permissions; PRs MUST
   validate but never deploy. Pages settings/authorization and actual deployment are separate gates.
+  Combining the demo and docs outputs MUST preserve both and reject duplicate files.
 - **FR-015**: The demo MUST visibly link existing embedding documentation and distinguish
   browser-local scripted examples from a visitor's real endpoint without changing the MVP theme.
 - **FR-016**: Failure of browser-local examples MUST leave own-server and recording-inspection
