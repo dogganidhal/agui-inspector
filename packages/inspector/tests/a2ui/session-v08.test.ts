@@ -3,7 +3,7 @@
 // received list is never altered. Drawing is in tests/e2e/a2ui/v08.spec.ts.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import type { ReactComponentImplementation } from '@a2ui/react/v0_9';
+import type { ReactCatalogComponent } from '@a2ui/react';
 import type { A2uiAction, JsonValue } from '../../src/contracts.ts';
 import { STANDARD_V08 } from '../../src/core/a2ui/catalogs.ts';
 import { createSurfaceSession } from '../../src/core/a2ui/index.ts';
@@ -14,7 +14,7 @@ const json = <T = JsonValue>(value: unknown): T => JSON.parse(JSON.stringify(val
 
 function session(aliases?: Record<string, string>) {
   const actions: A2uiAction[] = [];
-  const host = createSurfaceSession<ReactComponentImplementation>({
+  const host = createSurfaceSession<ReactCatalogComponent>({
     catalog: createBundledCatalogs,
     onAction: (action) => void actions.push(action),
     ...(aliases !== undefined && { aliases }),

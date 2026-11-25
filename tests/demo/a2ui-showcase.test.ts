@@ -9,7 +9,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { peekValue, type SurfaceModel } from '@a2ui/web_core/v0_9';
-import type { ReactComponentImplementation } from '@a2ui/react/v0_9';
+import type { ReactCatalogComponent } from '@a2ui/react';
 import { A2UIMiddleware } from '@ag-ui/a2ui-middleware';
 import { HttpAgent, type AgentSubscriber } from '@ag-ui/client';
 import { parseConfig } from '../../packages/inspector/src/core/config/index.ts';
@@ -18,7 +18,7 @@ import { createFrameReader } from '../../packages/inspector/src/core/frames/inde
 import { applyJsonPatch } from '../../packages/inspector/src/core/projection/patch.ts';
 import { createBundledCatalog, createBundledCatalogs } from '../../packages/inspector/src/views/a2ui/catalog.tsx';
 import type { Finding, JsonValue, RawFrame } from '../../packages/inspector/src/contracts.ts';
-import { BASIC_CATALOG_ID, STANDARD_V08_CATALOG_ID, continuation, formSurface, THIRD_PARTY_HOST, v08Continuation, v08Surfaces, type UserAction } from '../../examples/reference-agent/a2ui-scenarios.ts';
+import { AGENT_V10_CATALOG_ID, BASIC_CATALOG_ID, BASIC_V10_CATALOG_ID, STANDARD_V08_CATALOG_ID, continuation, formSurface, THIRD_PARTY_HOST, v08Continuation, v08Surfaces, v10Card, v10Continuation, type UserAction } from '../../examples/reference-agent/a2ui-scenarios.ts';
 import {
   ACTIONS,
   MARKUP,
@@ -32,10 +32,10 @@ import {
   tableResults,
   ticketForm,
 } from '../../examples/reference-agent/a2ui-showcase.ts';
-import { a2uiResponse, type RunInput } from '../../examples/reference-agent/scenarios.ts';
+import { V10_CARD_MESSAGE, a2uiResponse, type RunInput } from '../../examples/reference-agent/scenarios.ts';
 
 type Ops = readonly unknown[];
-type Surface = SurfaceModel<ReactComponentImplementation>;
+type Surface = SurfaceModel<ReactCatalogComponent>;
 
 const json = <T>(value: T): T => JSON.parse(JSON.stringify(value));
 const decoder = new TextDecoder();
@@ -111,19 +111,19 @@ const types = (events: Thread['runs'][number]) => events.map((event) => event.ty
 
 /** The surfaces of an operation list, drawn by the inspector's session and bundled catalog. */
 function draw(operations: Ops) {
-  const host = createSurfaceSession<ReactComponentImplementation>({ catalog: createBundledCatalogs, onAction: () => undefined });
+  const host = createSurfaceSession<ReactCatalogComponent>({ catalog: createBundledCatalogs, onAction: () => undefined });
   host.apply(json(operations) as JsonValue);
   return { host, ...host.snapshot() };
 }
 
 const data = (surface: Surface, pointer: string): unknown => peekValue(surface.dataModel.getSignal(pointer));
-const surfaceOf = (host: SurfaceSession<ReactComponentImplementation>, id: string): Surface => {
+const surfaceOf = (host: SurfaceSession<ReactCatalogComponent>, id: string): Surface => {
   const found = host.snapshot().surfaces.find((surface) => surface.id === id);
   assert.ok(found, `surface ${id}`);
   return found;
 };
 /** A list the session may keep: it stores a received data model object by reference, so what a user types changes it. */
-const withHost = (host: SurfaceSession<ReactComponentImplementation>, operations: Ops) => {
+const withHost = (host: SurfaceSession<ReactCatalogComponent>, operations: Ops) => {
   host.apply(json(operations) as JsonValue);
   return host.snapshot();
 };
@@ -329,7 +329,7 @@ test('deploy board: one surface that keeps changing while the run streams, witho
 
   // As the view meets them: the activity after the snapshot, then after each delta.
   let content = json({ a2ui_operations: deployBoard }) as unknown as JsonValue;
-  const host = createSurfaceSession<ReactComponentImplementation>({ catalog: createBundledCatalogs, onAction: () => undefined });
+  const host = createSurfaceSession<ReactCatalogComponent>({ catalog: createBundledCatalogs, onAction: () => undefined });
   host.apply(json((content as { a2ui_operations: JsonValue }).a2ui_operations));
   const surface = surfaceOf(host, 'deploy');
   surface.dataModel.set('/note', 'typed while it streams');
@@ -481,8 +481,8 @@ test('sandbox probe: every refusal is reported at its position, the rest still d
     issues.map((issue) => [issue.index! - first, issue.source, issue.message]),
     [
       [1, 'operation', 'This operation is not an object.'],
-      [2, 'operation', 'This operation has no version and no v0.8 message name. A2UI v0.9 operations declare "version": "v0.9".'],
-      [3, 'operation', 'This operation declares version v0.8. A2UI v0.9 operations declare "v0.9", and v0.8 messages have no version.'],
+      [2, 'operation', 'This operation has no version and no v0.8 message name. A2UI 1.0 operations declare "version": "1.0" and v0.9 operations "version": "v0.9".'],
+      [3, 'operation', 'This operation declares version v0.8. A2UI 1.0 operations declare "1.0", v0.9 operations "v0.9", and v0.8 messages have no version.'],
       [4, 'operation', 'Catalog not found: https://catalog.invalid/custom.json'],
       [5, 'operation', 'Surface not found for message: ghost'],
     ],
@@ -563,7 +563,7 @@ test('the demo lists the showcase as the A2UI agent\'s quick messages, in order,
   const parsed = parseConfig(readFileSync(path.join(process.cwd(), 'demo', 'config.json'), 'utf8'));
   assert.ok(parsed.ok, parsed.ok ? '' : parsed.error);
   const agent = parsed.value.agents.find((candidate) => candidate.id === 'a2ui')!;
-  assert.deepEqual(agent.preset!.quickMessages, [...Object.values(SHOWCASE), 'Show the order form']);
+  assert.deepEqual(agent.preset!.quickMessages, [...Object.values(SHOWCASE), V10_CARD_MESSAGE, 'Show the order form']);
   assert.equal(agent.preset!.messages, 'turn');
   const bodies = agent.preset!.quickMessages!.map((message) => decoder.decode(Buffer.concat(a2uiResponse({ threadId: 't', runId: 'r-1', messages: [{ role: 'user', content: message }] }).chunks)));
   assert.equal(new Set(bodies).size, bodies.length, 'every quick message has its own answer');
@@ -573,6 +573,6 @@ test('the demo lists the showcase as the A2UI agent\'s quick messages, in order,
   const capabilities = agent.capabilities as Record<string, Record<string, unknown>>;
   assert.equal(capabilities.transport?.streaming, true);
   assert.equal(capabilities.tools?.supported, false);
-  assert.deepEqual(capabilities.custom?.a2ui, { versions: ['v0.8', 'v0.9'], catalogs: ['basic', 'standard'], activityType: 'a2ui-surface', activityDeltas: true });
+  assert.deepEqual(capabilities.custom?.a2ui, { versions: ['v0.8', 'v0.9', '1.0'], catalogs: ['basic', 'standard'], activityType: 'a2ui-surface', activityDeltas: true });
   for (const group of ['state', 'humanInTheLoop', 'multiAgent', 'reasoning']) assert.equal(capabilities[group], undefined, `${group} is not declared`);
 });

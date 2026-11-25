@@ -1,20 +1,20 @@
-// A2UI surfaces over the official renderer core (FR-020, FR-030). A session is the one place that reads an
-// activity's `a2ui_operations`: it finds the version of each entry, turns v0.9 entries into surface models,
-// checks v0.8 entries and keeps them in order for the v0.8 renderer, and keeps all of it up to date as the
-// list changes. The v0.8 renderer owns its message processor, so the session cannot apply v0.8 messages
-// itself: it validates them and hands the accepted ones on in `v08`. Framework-free: the catalog, and so
-// the v0.9 components, are supplied by the view. The received list is never altered and every entry that
-// cannot be applied is reported with its position.
+// A2UI surfaces over the official renderer core (FR-020, FR-030; 1.0 in spec 020). A session is the one place
+// that reads an activity's `a2ui_operations`: it finds the version of each entry, turns v0.9 and 1.0 entries into
+// surface models with one processor, checks v0.8 entries and keeps them in order for the v0.8 renderer, and keeps
+// all of it up to date as the list changes. The v0.8 renderer owns its message processor, so the session cannot
+// apply v0.8 messages itself: it validates them and hands the accepted ones on in `v08`. Framework-free: the
+// catalogs, and so the components, are supplied by the view. The received list is never altered and every entry
+// that cannot be applied is reported with its position.
 import {
   MessageProcessor,
   type Catalog,
   type ComponentApi,
   type SurfaceModel,
-} from '@a2ui/web_core/v0_9';
+} from '@a2ui/web_core';
 import { A2uiMessageSchema } from '@a2ui/web_core/v0_8';
 import type { A2uiAction, CatalogAliases, JsonValue, Unsubscribe } from '../../contracts.ts';
 import { blockedMessage, toA2uiAction, type ReportBlocked } from './actions.ts';
-import { BASIC_V09, STANDARD_V08, catalogIds, resolves } from './catalogs.ts';
+import { BASIC_V09, BASIC_V10, STANDARD_V08, catalogIds, resolves } from './catalogs.ts';
 import { classify, surfaceKey, type Entry } from './operations.ts';
 
 /** The activity type that carries A2UI operations. Every other type stays JSON. */
@@ -39,8 +39,17 @@ export interface V08Feed {
   readonly messages: readonly { readonly index: number; readonly message: JsonValue }[];
 }
 
+/** The ids besides each bundled catalog's own that stand for it: the built-in alias and the config's. */
+export interface AliasIds {
+  readonly 'v0.9': readonly string[];
+  readonly '1.0': readonly string[];
+}
+
+/** `1.0` for a surface a 1.0 `createSurface` built, `v0.9` for every other surface of the processor. */
+export const surfaceVersion = <T extends ComponentApi>(surface: SurfaceModel<T>): 'v0.9' | '1.0' => (String(surface.protocolVersion).replace(/^v/, '') === '1.0' ? '1.0' : 'v0.9');
+
 export interface SurfaceSnapshot<T extends ComponentApi> {
-  /** The v0.9 surfaces. The v0.8 ones live in the v0.8 renderer, fed by `v08`. */
+  /** The v0.9 and 1.0 surfaces (see `surfaceVersion`). The v0.8 ones live in the v0.8 renderer, fed by `v08`. */
   readonly surfaces: readonly SurfaceModel<T>[];
   readonly issues: readonly SurfaceIssue[];
   readonly v08: V08Feed;
@@ -60,11 +69,10 @@ export interface SurfaceSession<T extends ComponentApi> {
 
 export interface SurfaceSessionOptions<T extends ComponentApi> {
   /**
-   * Builds the catalog (or the same catalog under several ids) v0.9 surfaces resolve against; `report` hears about
-   * every refused resource. `aliasIds` are the ids besides the catalog's own that stand for it: the built-in
-   * alias and the config's.
+   * Builds the catalogs v0.9 and 1.0 surfaces resolve against, each bundled catalog under its own id and under
+   * its `aliasIds`; `report` hears about every refused resource.
    */
-  catalog(report: ReportBlocked, aliasIds: readonly string[]): Catalog<T> | readonly Catalog<T>[];
+  catalog(report: ReportBlocked, aliasIds: AliasIds): Catalog<T> | readonly Catalog<T>[];
   /** Called only for an action a user triggered on a surface. */
   onAction(action: A2uiAction): void;
   /** The config's catalog aliases. */
@@ -122,7 +130,7 @@ export function createSurfaceSession<T extends ComponentApi>(options: SurfaceSes
 
   const catalog = options.catalog(
     (blocked) => note({ source: 'blocked', message: blockedMessage(blocked) }),
-    catalogIds('v0.9', aliases).filter((id) => id !== BASIC_V09),
+    { 'v0.9': catalogIds('v0.9', aliases).filter((id) => id !== BASIC_V09), '1.0': catalogIds('1.0', aliases).filter((id) => id !== BASIC_V10) },
   );
 
   const release = () => {

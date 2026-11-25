@@ -3,6 +3,10 @@
 // credential in it reaches nothing the page writes.
 import type { Page } from '@playwright/test';
 import { AGENT_REPLY, expect, expectAllowlisted, open, SYNTHETIC_TOKEN, test, type Site } from './support';
+import { rendererCapabilities } from '../../../packages/inspector/src/core/profiles/index.ts';
+
+/** Every run declares the catalogs drawn by default (spec 020). */
+const CAPS = { a2uiRendererCapabilities: rendererCapabilities() };
 
 type Origins = { agent: { origin: string } };
 
@@ -80,7 +84,7 @@ test('a launch link fills everything in, sends nothing, and the next send carrie
   const input = JSON.parse(runs[0]?.body ?? '{}');
   expect(input.messages.at(-1).content).toBe('Book a table for two');
   expect(input.context).toEqual([{ description: 'locale', value: 'fr-FR' }]);
-  expect(input.forwardedProps).toEqual({ user_id: '42', tenant: 'acme' });
+  expect(input.forwardedProps).toEqual({ ...CAPS, user_id: '42', tenant: 'acme' });
   expectAllowlisted(requested, [site.page.origin, site.agent.origin]);
 
   // A reload shows what the link saved, with an empty composer and no notice.

@@ -3,6 +3,10 @@
 // the run before anything is sent. A raw request and an open recording never reach a hook.
 import { AGENT_REPLY, expect, send, test } from '../hosted/support';
 import { embeddedWith, exportedSession, footer, JS, loaded, runMessage, warningList } from './support';
+import { rendererCapabilities } from '../../../packages/inspector/src/core/profiles/index.ts';
+
+/** Every run declares the catalogs drawn by default (spec 020). */
+const CAPS = { a2uiRendererCapabilities: rendererCapabilities() };
 
 const ADD = `let n = 0;\nexport default (api) => { api.beforeRun((run) => ({ ...run.input, forwardedProps: { ...run.input.forwardedProps, examplePlugin: { run: ++n } } })); };\n`;
 // The scripted agent echoes the thread and run ids, which the page makes up for each run: they are the only text that differs.
@@ -18,11 +22,11 @@ test('a hook that adds a property: the target receives it, the recording shows t
   await runMessage(page, 'hello');
   await runMessage(page, 'again', 2);
   const posts = withHook.page.seen.filter((entry) => entry.method === 'POST' && entry.path === '/agent');
-  expect(posts.map((entry) => (JSON.parse(entry.body) as { forwardedProps: unknown }).forwardedProps)).toEqual([{ examplePlugin: { run: 1 } }, { examplePlugin: { run: 2 } }]);
+  expect(posts.map((entry) => (JSON.parse(entry.body) as { forwardedProps: unknown }).forwardedProps)).toEqual([{ ...CAPS, examplePlugin: { run: 1 } }, { ...CAPS, examplePlugin: { run: 2 } }]);
   const exported = await exportedSession(page);
   const conversation = exported.session.exchanges.filter((exchange) => exchange.kind === 'conversation');
   expect(conversation.map((exchange) => exchange.requestBody)).toEqual(posts.map((entry) => entry.body));
-  expect(exported.session.runs.map((run) => run.input.forwardedProps)).toEqual([{ examplePlugin: { run: 1 } }, { examplePlugin: { run: 2 } }]);
+  expect(exported.session.runs.map((run) => run.input.forwardedProps)).toEqual([{ ...CAPS, examplePlugin: { run: 1 } }, { ...CAPS, examplePlugin: { run: 2 } }]);
 
   await page.goto(without.page.origin);
   await runMessage(page, 'hello');
@@ -31,7 +35,7 @@ test('a hook that adds a property: the target receives it, the recording shows t
   expect(framesOf(exported.session), 'the frames are the same with and without the hook').toEqual(framesOf(plain.session));
   expect(exported.session.derived).toEqual(plain.session.derived);
   expect(exported.session.findings).toEqual(plain.session.findings);
-  expect(plain.session.runs.map((run) => run.input.forwardedProps)).toEqual([{}, {}]);
+  expect(plain.session.runs.map((run) => run.input.forwardedProps)).toEqual([CAPS, CAPS]);
 });
 
 test('a hook that throws stops the run before anything is sent, names the plugin, and the page works once the plugin is gone', async ({ page, openSite }) => {

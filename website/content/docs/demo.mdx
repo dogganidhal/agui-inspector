@@ -94,7 +94,7 @@ The broken stream from [your first run](#break-the-stream), which also says what
 
 ## A2UI showcase
 
-Each of this agent's eight quick messages starts a separate story. The stories are built in [`a2ui-showcase.ts`](https://github.com/dogganidhal/agui-inspector/blob/main/examples/reference-agent/a2ui-showcase.ts) and use the bundled catalogs: the A2UI v0.9 basic catalog, and for one story the v0.8 standard catalog. A story keeps nothing between runs. The agent rebuilds each step from the name and resolved context of the action you clicked, so a run's Request body shows what the server received. A story that spans several runs replaces one activity in place, so the surface updates where it is. [A2UI surfaces](./a2ui.mdx) describes the renderer. To write your own story, see [writing a showcase story](./demo-internals.mdx#writing-a-showcase-story).
+Each of this agent's nine quick messages starts a separate story. The stories are built in [`a2ui-showcase.ts`](https://github.com/dogganidhal/agui-inspector/blob/main/examples/reference-agent/a2ui-showcase.ts) and use the bundled catalogs: the A2UI v0.9 basic catalog, for one story the v0.8 standard catalog, and for Book a visit (A2UI 1.0) the 1.0 basic catalog under a made-up agent catalog id that the demo's `config.json` aliases. A story keeps nothing between runs. The agent rebuilds each step from the name and resolved context of the action you clicked, so a run's Request body shows what the server received. A story that spans several runs replaces one activity in place, so the surface updates where it is. [A2UI surfaces](./a2ui.mdx) describes the renderer. To write your own story, see [writing a showcase story](./demo-internals.mdx#writing-a-showcase-story).
 
 ### Find a table for 4
 
@@ -131,6 +131,10 @@ One list asks for a picture, a video, a sound and an `openUrl`. It also has mark
 ### Review an expense report (v0.8)
 
 Two A2UI v0.8 surfaces in one activity. The form has an amount field, a category choice, a checkbox for the receipt, an urgency slider, two tabs of policy notes and a Submit expense button. The second surface has a status line and a Withdraw button. Submit expense sends the four values you entered. The answer changes the status line to "Submitted ..." and adds a line that shows what the agent received, and your input stays. Withdraw sends the status text and removes the form with a v0.8 `deleteSurface`. The messages are `surfaceUpdate`, `dataModelUpdate`, `beginRendering` and `deleteSurface`, and none of them carries a `version` key. The story names no address.
+
+### Book a visit (A2UI 1.0)
+
+An A2UI 1.0 card in one `createSurface` that carries its components and data model. It names the made-up catalog id `https://example.com/catalogs/chat/v1.0/catalog.json`, which the demo's `config.json` maps to the 1.0 basic catalog with `catalogAliases`. The agent sends the card only when the run declares that id in `forwardedProps.a2uiRendererCapabilities["1.0"]`, so turning off Send A2UI renderer capabilities in Settings gets a text reply instead. The card has a name field and a time choice bound with `@path`, a `StarRating` component that the basic catalog lacks and that shows as an error in its place, and a Confirm button. Confirm sends the two values you chose and a literal, and the card comes back with a line that shows what the agent received.
 
 ### Show the order form
 

@@ -192,10 +192,12 @@ class DistributionTest(unittest.TestCase):
         self.assertNotIn("publishConfig", package)  # it would also stop a maintainer's manual first publish
         self.assertIn("package/README.md", self.member_files("npm"))
         self.assertTrue(set(LICENSE_FILES) <= set(package["files"]))
-        self.assertEqual({"dompurify": "3.4.16"}, root["overrides"])
+        # @a2ui/markdown-it 0.2.4 asks for a fixed DOMPurify, so the override is gone (spec 020).
+        self.assertNotIn("overrides", root)
         lock = json.loads((REPO / "package-lock.json").read_text())["packages"]
         found = {key: meta["version"] for key, meta in lock.items() if key.split("node_modules/")[-1] == "dompurify"}
-        self.assertEqual({"node_modules/dompurify": "3.4.16"}, found)
+        self.assertEqual(["node_modules/dompurify"], list(found))
+        self.assertGreaterEqual(tuple(int(part) for part in found["node_modules/dompurify"].split(".")), (3, 4, 17))
 
     def test_pyproject_is_mit_with_the_license_files_and_no_upload_block(self):
         text = (REPO / "packages" / "python" / "pyproject.toml").read_text()

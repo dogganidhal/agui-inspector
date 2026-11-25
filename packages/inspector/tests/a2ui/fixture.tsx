@@ -4,7 +4,8 @@
 // continuation (not L02's runtime) answer them. Test support, never part of the shipped app.
 import { useState, type ReactElement } from 'react';
 import { createRoot } from 'react-dom/client';
-import { A2uiSurface, basicCatalog, type ReactComponentImplementation } from '@a2ui/react/v0_9';
+import { A2uiSurface, type ReactCatalogComponent } from '@a2ui/react';
+import { basicCatalog } from '@a2ui/web_core/v0_9/basic_catalog';
 import { MessageProcessor } from '@a2ui/web_core/v0_9';
 import type { A2uiAction, CatalogAliases, JsonValue } from '../../src/contracts';
 import { A2uiView, a2uiActivity } from '../../src/views/a2ui/index';
@@ -48,7 +49,7 @@ declare global {
 /** The official renderer exactly as shipped: no guard. */
 function Control({ operations }: { operations: JsonValue }): ReactElement {
   const [processor] = useState(() => {
-    const created = new MessageProcessor<ReactComponentImplementation>([basicCatalog]);
+    const created = new MessageProcessor<ReactCatalogComponent>([basicCatalog]);
     created.processMessages(operations as never);
     return created;
   });

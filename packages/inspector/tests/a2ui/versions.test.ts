@@ -8,8 +8,8 @@ import type { SurfaceIssue } from '../../src/core/a2ui/index.ts';
 import { classify, surfaceKey, type Entry } from '../../src/core/a2ui/operations.ts';
 
 const NOT_AN_OBJECT = 'This operation is not an object.';
-const NO_VERSION = 'This operation has no version and no v0.8 message name. A2UI v0.9 operations declare "version": "v0.9".';
-const declares = (value: string) => `This operation declares version ${value}. A2UI v0.9 operations declare "v0.9", and v0.8 messages have no version.`;
+const NO_VERSION = 'This operation has no version and no v0.8 message name. A2UI 1.0 operations declare "version": "1.0" and v0.9 operations "version": "v0.9".';
+const declares = (value: string) => `This operation declares version ${value}. A2UI 1.0 operations declare "1.0", v0.9 operations "v0.9", and v0.8 messages have no version.`;
 
 /** The entries (`index:version`) and the refusals (`[index, message]`) of a list. */
 const sorted = (operations: JsonValue[], offset?: number) => {

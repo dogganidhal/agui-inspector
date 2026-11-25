@@ -4,9 +4,10 @@
 // Drawing in a browser is in tests/e2e/a2ui/surfaces.spec.ts.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { basicCatalog } from '@a2ui/react/v0_9';
-import type { ReactComponentImplementation } from '@a2ui/react/v0_9';
-import { ComponentContext } from '@a2ui/web_core/v0_9';
+import { basicCatalog } from '@a2ui/web_core/v0_9/basic_catalog';
+import type { ReactCatalogComponent } from '@a2ui/react';
+import { basicCatalog as basicCatalogV10 } from '@a2ui/web_core/catalogs/basic/v1';
+import type { WebComponentImplementation } from '@a2ui/web_core/universal';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { A2uiAction, JsonValue } from '../../src/contracts.ts';
@@ -14,6 +15,8 @@ import { STANDARD_V08 } from '../../src/core/a2ui/catalogs.ts';
 import { createSurfaceSession } from '../../src/core/a2ui/index.ts';
 import { parseConfig } from '../../src/core/config/index.ts';
 import { createBundledCatalog, createBundledCatalogs } from '../../src/views/a2ui/catalog.tsx';
+import { UNKNOWN_TAG } from '../../src/views/a2ui/components.tsx';
+import { UnknownView } from '../../src/views/a2ui/parts.tsx';
 import {
   BASIC_CATALOG_ID,
   formSurface,
@@ -33,7 +36,7 @@ const withCatalog = (operations: readonly Record<string, unknown>[], catalogId: 
 
 function session(aliases?: Record<string, string>) {
   const actions: A2uiAction[] = [];
-  const host = createSurfaceSession<ReactComponentImplementation>({
+  const host = createSurfaceSession<ReactCatalogComponent>({
     catalog: createBundledCatalogs,
     onAction: (action) => void actions.push(action),
     ...(aliases !== undefined && { aliases }),
@@ -55,10 +58,10 @@ function noFetch<T>(run: () => T): T {
   }
 }
 
-test('the two ids are the renderer basic catalog and the middleware default, nothing else', () => {
+test('the v0.9 ids are the renderer basic catalog and the middleware default, then the 1.0 basic catalog, nothing else', () => {
   assert.equal(BASIC_CATALOG_ID, 'https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json');
   const catalogs = createBundledCatalogs(() => undefined);
-  assert.deepEqual(catalogs.map((catalog) => catalog.id), [basicCatalog.id, MIDDLEWARE_CATALOG_ID]);
+  assert.deepEqual(catalogs.map((catalog) => catalog.id), [basicCatalog.id, MIDDLEWARE_CATALOG_ID, basicCatalogV10.id]);
   assert.equal(createBundledCatalog(() => undefined).id, basicCatalog.id, 'the single-catalog factory is unchanged');
 });
 
@@ -84,7 +87,7 @@ for (const [label, catalogId] of [['renderer basic catalog id', BASIC_CATALOG_ID
     const { surfaces, issues } = host.snapshot();
     assert.deepEqual(issues, []);
     assert.deepEqual(surfaces.map((surface) => surface.id), ['form']);
-    assert.equal(surfaces[0]!.defaultCatalog.id, catalogId);
+    assert.equal(surfaces[0]!.defaultCatalog?.id, catalogId);
     assert.equal(JSON.stringify(operations), received, 'the received operations are never altered');
 
     await surfaces[0]!.dispatchAction({ event: { name: 'send_note', context: { note: { path: '/note' }, count: { path: '/count' } } } }, 'send');
@@ -129,7 +132,7 @@ test('an unlisted component type resolves to an error stand-in with the entry as
     assert.equal(standIn.name, 'Hologram');
     assert.equal(catalog.components.get('Hologram'), standIn, 'the same stand-in each time');
     assert.deepEqual([...catalog.components.keys()], listed, 'asking for it adds nothing to the catalog');
-    assert.equal(catalog.components.get('Text'), createBundledCatalog(() => undefined).components.get('Text'), 'a listed type is still itself');
+    assert.equal(catalog.components.get('Text'), new Map(catalog.components).get('Text'), 'a listed type is still itself');
   }
 
   const { host } = session();
@@ -139,8 +142,13 @@ test('an unlisted component type resolves to an error stand-in with the entry as
   ]));
   const surface = host.snapshot().surfaces[0]!;
   assert.deepEqual(host.snapshot().issues, [], 'the surface raises no second report; the stand-in is the message');
-  const standIn = surface.defaultCatalog.components.get('Hologram')!;
-  const markup = renderToStaticMarkup(createElement(standIn.render, { context: new ComponentContext(surface, 'root', '/'), buildChild: () => null }));
+  const standIn = surface.defaultCatalog!.components.get('Hologram')! as WebComponentImplementation;
+  assert.equal(standIn.tagName, UNKNOWN_TAG, 'the renderer draws it as the stand-in element');
+  assert.equal(typeof standIn.element, 'function');
+  assert.equal(surface.componentsModel.get('root')?.type, 'Hologram', 'the processor kept the entry');
+  // The element draws this view for the node; drawing it in a browser is in tests/e2e/a2ui.
+  const { properties } = surface.componentsModel.get('root')!;
+  const markup = renderToStaticMarkup(createElement(UnknownView, { id: 'root', type: 'Hologram', definition: json({ id: 'root', component: 'Hologram', ...properties }) }));
   assert.match(markup, /role="alert"/);
   assert.match(markup, /Unknown component type: Hologram/);
   assert.match(markup, /agui-finding--err/);
@@ -165,14 +173,14 @@ function fromConfig(catalogAliases: unknown) {
 
 test('createBundledCatalogs builds one catalog per alias id, all sharing the guarded components and functions', () => {
   const reports: Array<{ kind: string; url: string }> = [];
-  const [basic, ...aliases] = createBundledCatalogs((blocked) => void reports.push(blocked), [MIDDLEWARE_CATALOG_ID, FORMER]);
+  const [basic, ...aliases] = createBundledCatalogs((blocked) => void reports.push(blocked), { 'v0.9': [MIDDLEWARE_CATALOG_ID, FORMER], '1.0': [] }).filter((catalog) => catalog.id !== basicCatalogV10.id);
   assert.deepEqual(aliases.map((catalog) => catalog.id), [MIDDLEWARE_CATALOG_ID, FORMER]);
   for (const alias of aliases) {
     for (const [name, component] of basic!.components) assert.equal(alias.components.get(name), component, `${name} is shared`);
     alias.functions.get('openUrl')!.execute({ url: `http://${THIRD_PARTY_HOST}/page` }, undefined as never);
   }
   assert.equal(reports.length, 2, 'the guard sits on every alias');
-  assert.deepEqual(createBundledCatalogs(() => undefined, []).map((catalog) => catalog.id), [basicCatalog.id], 'no alias ids, no alias catalogs');
+  assert.deepEqual(createBundledCatalogs(() => undefined, { 'v0.9': [], '1.0': [] }).map((catalog) => catalog.id), [basicCatalog.id, basicCatalogV10.id], 'no alias ids, no alias catalogs');
 });
 
 test('a configured alias renders, round-trips an action and rewrites nothing', async () => {
@@ -183,7 +191,7 @@ test('a configured alias renders, round-trips an action and rewrites nothing', a
   const { surfaces, issues } = host.snapshot();
   assert.deepEqual(issues, []);
   assert.deepEqual(surfaces.map((surface) => surface.id), ['form']);
-  assert.equal(surfaces[0]!.defaultCatalog.id, FORMER, 'the surface answers to the id the agent sent');
+  assert.equal(surfaces[0]!.defaultCatalog?.id, FORMER, 'the surface answers to the id the agent sent');
   assert.equal(JSON.stringify(operations), received);
   await surfaces[0]!.dispatchAction({ event: { name: 'send_note', context: { note: { path: '/note' } } } }, 'send');
   assert.equal(actions.length, 1);

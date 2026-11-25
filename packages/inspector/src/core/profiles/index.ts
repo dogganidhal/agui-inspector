@@ -1,8 +1,8 @@
 // Client profiles and run input (FR-030, FR-031, FR-032, FR-036). Framework-free.
 //
-// A profile is eight settings that say what the inspector declares and sends: protocol version,
-// client tools, context, whether A2UI renders, whether the render_a2ui tool is injected, the message
-// mode, the encoding a run asks for and forwarded properties. Three optional settings say how the inspector
+// A profile is nine settings that say what the inspector declares and sends: protocol version,
+// client tools, context, whether A2UI renders, whether the render_a2ui tool is injected, whether the A2UI
+// renderer capabilities are sent, the message mode, the encoding a run asks for and forwarded properties. Three optional settings say how the inspector
 // answers a finished run's interrupts and client tool calls for the developer: the interrupt reply, a payload
 // per interrupt reason and a result per tool. They never reach the run input. Nothing else is a profile field.
 // In particular there is no place for an authentication header or token: the token lives in volatile
@@ -21,6 +21,7 @@ import { ContextSchema, RunAgentInputSchema, ToolSchema } from '@ag-ui/core/sche
 import {
   FORMAT_VERSION,
   type A2uiAction,
+  type CatalogAliases,
   type ClientProfileSettings,
   type Encoding,
   type JsonObject,
@@ -29,10 +30,11 @@ import {
 } from '../../contracts.ts';
 import { describeError, fail, isJsonObject, isJsonValue, isRecord, ok, unexpectedKey, type Result } from '../config/validation.ts';
 import { reservedPropertyProblem, selectMessages, type DispatchIds, type PreparedPreset } from '../presets/index.ts';
+import { catalogIds } from '../a2ui/catalogs.ts';
 
 export const PROFILE_STORAGE_KEY = 'agui-inspector.profile';
 
-const SETTINGS = ['protocolVersion', 'tools', 'context', 'renderA2ui', 'injectA2uiTool', 'messageMode', 'encoding', 'forwardedProps', 'interruptReply', 'interruptPayloads', 'toolResults'];
+const SETTINGS = ['protocolVersion', 'tools', 'context', 'renderA2ui', 'injectA2uiTool', 'sendA2uiCapabilities', 'messageMode', 'encoding', 'forwardedProps', 'interruptReply', 'interruptPayloads', 'toolResults'];
 
 /** The encoding a run asks for: the profile's choice, else the preset's default, else server-sent events. */
 export const encodingFor = (profile: ClientProfileSettings, presetEncoding: Encoding | undefined): Encoding => profile.encoding ?? presetEncoding ?? 'sse';
@@ -89,7 +91,7 @@ export function parseProfileSettings(value: unknown, where = 'profile'): Result<
   const extra = unexpectedKey(value, SETTINGS, where, 'a profile');
   if (extra) return fail(extra);
 
-  const { protocolVersion, tools, context, renderA2ui, injectA2uiTool, messageMode, encoding, forwardedProps, interruptReply } = value;
+  const { protocolVersion, tools, context, renderA2ui, injectA2uiTool, sendA2uiCapabilities, messageMode, encoding, forwardedProps, interruptReply } = value;
   if (typeof protocolVersion !== 'string' || protocolVersion === '') return fail(`${where}.protocolVersion must be a nonempty string`);
   if (!Array.isArray(tools)) return fail(`${where}.tools must be a list`);
   const names = new Set<string>();
@@ -106,6 +108,7 @@ export function parseProfileSettings(value: unknown, where = 'profile'): Result<
   }
   if (typeof renderA2ui !== 'boolean') return fail(`${where}.renderA2ui must be true or false`);
   if (typeof injectA2uiTool !== 'boolean') return fail(`${where}.injectA2uiTool must be true or false`);
+  if (sendA2uiCapabilities !== undefined && typeof sendA2uiCapabilities !== 'boolean') return fail(`${where}.sendA2uiCapabilities must be true or false`);
   if (messageMode !== undefined && messageMode !== 'full' && messageMode !== 'turn') return fail(`${where}.messageMode must be "full" or "turn"`);
   if (encoding !== undefined && encoding !== 'sse' && encoding !== 'protobuf') return fail(`${where}.encoding must be "sse" or "protobuf"`);
   if (!isJsonObject(forwardedProps)) return fail(`${where}.forwardedProps must be a JSON object`);
@@ -123,6 +126,7 @@ export function parseProfileSettings(value: unknown, where = 'profile'): Result<
     context: structuredClone(context) as Context[],
     renderA2ui,
     injectA2uiTool,
+    ...(sendA2uiCapabilities !== undefined && { sendA2uiCapabilities }),
     ...(messageMode !== undefined && { messageMode }),
     ...(encoding !== undefined && { encoding }),
     forwardedProps: structuredClone(forwardedProps),
@@ -134,7 +138,7 @@ export function parseProfileSettings(value: unknown, where = 'profile'): Result<
 
 /** The version-0 envelope, built from the settings alone. The automation settings are written only when set. */
 function envelope(settings: ClientProfileSettings): ProfileEnvelope {
-  const { protocolVersion, tools, context, renderA2ui, injectA2uiTool, messageMode, encoding, forwardedProps, interruptReply, interruptPayloads, toolResults } = settings;
+  const { protocolVersion, tools, context, renderA2ui, injectA2uiTool, sendA2uiCapabilities, messageMode, encoding, forwardedProps, interruptReply, interruptPayloads, toolResults } = settings;
   return {
     version: FORMAT_VERSION,
     profile: {
@@ -143,6 +147,7 @@ function envelope(settings: ClientProfileSettings): ProfileEnvelope {
       context,
       renderA2ui,
       injectA2uiTool,
+      ...(sendA2uiCapabilities !== undefined && { sendA2uiCapabilities }),
       ...(messageMode !== undefined && { messageMode }),
       ...(encoding !== undefined && { encoding }),
       forwardedProps,
@@ -255,19 +260,35 @@ export interface RunInputParams {
   readonly resume?: readonly ResumeEntry[];
   /** The surface action that starts this run. */
   readonly a2uiAction?: A2uiAction;
+  /** The configuration's catalog aliases, declared next to the bundled catalogs. */
+  readonly catalogAliases?: CatalogAliases;
 }
+
+/**
+ * `forwardedProps.a2uiRendererCapabilities`: for v0.9 and 1.0, the ids of the catalogs the inspector draws, each
+ * bundled catalog's own id first, then its built-in and configured aliases. v0.8 has no such declaration.
+ */
+export const rendererCapabilities = (aliases?: CatalogAliases): JsonObject => ({
+  'v0.9': { supportedCatalogIds: [...catalogIds('v0.9', aliases)] },
+  '1.0': { supportedCatalogIds: [...catalogIds('1.0', aliases)] },
+});
 
 /**
  * The input for one conversation run. Profile settings override the preset where they overlap: the
  * message mode, and same-named forwarded properties. Injecting the render_a2ui tool puts the official
  * declaration last and drops a same-named profile tool, so a name never appears twice. Whether A2UI
- * renders is a display choice and does not touch the input.
+ * renders is a display choice and does not touch the input. The renderer capabilities go first, so a
+ * forwarded property of the same name from the preset or the profile replaces them.
  */
 export function composeRunInput(params: RunInputParams): Result<RunAgentInput> {
   const { ids, prepared, profile, a2uiAction } = params;
   if (ids.threadId === '' || ids.runId === '') return fail('Run input needs a thread id and a run id');
 
-  const generic: JsonObject = { ...prepared.forwardedProps, ...profile.forwardedProps };
+  const generic: JsonObject = {
+    ...(profile.sendA2uiCapabilities !== false && { a2uiRendererCapabilities: rendererCapabilities(params.catalogAliases) }),
+    ...prepared.forwardedProps,
+    ...profile.forwardedProps,
+  };
   const reserved = reservedPropertyProblem(generic, 'forwardedProps');
   if (reserved) return fail(reserved);
   const forwardedProps: JsonObject = a2uiAction

@@ -479,6 +479,9 @@ function ProfilePanel({ props, agent }: { props: SettingsViewProps; agent?: Agen
           <Row title="Inject render_a2ui tool" hint="Adds the tool through @ag-ui/a2ui-middleware">
             <Switch aria-label="Inject render_a2ui tool" checked={profile.injectA2uiTool} onChange={(injectA2uiTool) => commit({ ...profile, injectA2uiTool })} />
           </Row>
+          <Row title="Send A2UI renderer capabilities" hint="Puts the catalog ids the inspector draws, per A2UI version and with the configured aliases, in forwardedProps.a2uiRendererCapabilities">
+            <Switch aria-label="Send A2UI renderer capabilities" checked={profile.sendA2uiCapabilities !== false} onChange={(sendA2uiCapabilities) => commit({ ...profile, sendA2uiCapabilities })} />
+          </Row>
           <Row title="Interrupt replies" hint="Resolve or cancel every interrupt for you, then continue the run. The next run is the one your own reply would send. After 10 automatic replies in a row the inspector waits for you.">
             <SegmentedControl
               label="Interrupt replies"

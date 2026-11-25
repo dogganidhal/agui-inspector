@@ -6,7 +6,7 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { writeFileSync } from 'node:fs';
 import path from 'node:path';
-import type { ClientProfileSettings, Exchange, Finding, InspectionSession, JsonValue, RawFrame, SessionEnvelope, TransportPolicy } from '../contracts.ts';
+import type { CatalogAliases, ClientProfileSettings, Exchange, Finding, InspectionSession, JsonValue, RawFrame, SessionEnvelope, TransportPolicy } from '../contracts.ts';
 import { importProfile, defaultProfile } from '../core/profiles/index.ts';
 import { projectConversation, type ConversationModel } from '../core/projection/index.ts';
 import type { RecorderClock } from '../core/recorder/index.ts';
@@ -25,6 +25,8 @@ export interface SessionOptions {
   readonly headers?: Readonly<Record<string, string>>;
   /** A client profile, or the path of a profile file. */
   readonly profile?: ClientProfileSettings | string;
+  /** Catalog ids that stand for a bundled catalog, as `catalogAliases` in config.json. Declared in the renderer capabilities too. */
+  readonly catalogAliases?: CatalogAliases;
   /** The limit of every step. Default 60 seconds. */
   readonly timeoutMs?: number;
   readonly clock?: RecorderClock;
@@ -174,7 +176,7 @@ export async function openSession(options: SessionOptions): Promise<Session> {
   const runtime: Runtime = createRuntime({
     store,
     policy,
-    settings: () => ({ profile, variables: {} }),
+    settings: () => ({ profile, variables: {}, ...(options.catalogAliases !== undefined && { catalogAliases: options.catalogAliases }) }),
     fetch: (input, init) => {
       const headers = new Headers(init?.headers);
       for (const [name, value] of held ?? []) headers.set(name, value);
@@ -258,7 +260,7 @@ export async function openSession(options: SessionOptions): Promise<Session> {
     };
   }
 
-  const surfaces = createHeadlessSurfaces(snapshot);
+  const surfaces = createHeadlessSurfaces(snapshot, options.catalogAliases);
 
   return {
     ...reads(snapshot, surfaces, pending),

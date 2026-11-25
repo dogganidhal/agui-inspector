@@ -217,14 +217,14 @@ test('the build holds the v0.8 renderer and still no DOMPurify, as dependencies.
   assert.doesNotMatch(script, /dompurify/i, 'the renderers do not pull DOMPurify in');
 });
 
-test('the representative build includes the pinned v0.8 and v0.9 renderers and reports headroom, not certification', () => {
+test('the representative build includes the pinned v0.8, v0.9 and 1.0 renderers and reports headroom, not certification', () => {
   const scaffold = measure(path.join(scratch, 'scaffold'));
   const result = spawnSync(process.execPath, [script, '--representative'], { cwd: root, encoding: 'utf8' });
   const out = result.stdout + result.stderr;
   assert.equal(result.status, 0, out);
   assert.match(out, /headroom/i);
   assert.match(out, /not certified/i);
-  assert.match(out, /a2ui v0\.8 and v0\.9 renderers/i);
+  assert.match(out, /a2ui v0\.8, v0\.9 and 1\.0 renderers/i);
 
   const representative = measure(path.join(root, '.build', 'representative'));
   assert.ok(representative.files.some((file) => file.path === 'index.html'));

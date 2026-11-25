@@ -11,7 +11,7 @@ import path from 'node:path';
 import { after, before, test } from 'node:test';
 import { EventType } from '@ag-ui/core';
 import { parseConfig } from '../../packages/inspector/src/core/config/index.ts';
-import { continuation, formSurface, type UserAction } from '../../examples/reference-agent/a2ui-scenarios.ts';
+import { AGENT_V10_CATALOG_ID, BASIC_V10_CATALOG_ID, continuation, formSurface, type UserAction } from '../../examples/reference-agent/a2ui-scenarios.ts';
 import { createInteractiveServer, INTERRUPT_FOREVER, INTERRUPTS, REDIRECT_PATH, SCENARIOS, type InteractiveServer } from '../../examples/reference-agent/interactive-scenarios.ts';
 import { baselineRun, eventFixtures, protocolScenarios, runError } from '../../examples/reference-agent/protocol-fixtures.ts';
 import { scenarioBytes } from '../../examples/reference-agent/recorder-fixtures.ts';
@@ -432,7 +432,9 @@ test('the example configuration is a valid version-0 file with the four example 
   ]);
   const text = demoFile('config.json');
   assert.doesNotMatch(text, /"(headers|token|authorization|auth|apiKey|cookie|allowedOrigins|allowVisitorTargets|mode)"/i);
-  assert.doesNotMatch(text, /https?:/);
+  // Catalog ids are names, never fetched: the one alias is the only text that looks like an address (spec 020).
+  assert.deepEqual(parsed.value.catalogAliases, { [AGENT_V10_CATALOG_ID]: BASIC_V10_CATALOG_ID });
+  assert.doesNotMatch(text.replace(AGENT_V10_CATALOG_ID, '').replace(BASIC_V10_CATALOG_ID, ''), /https?:/);
   for (const agent of parsed.value.agents) {
     assert.match(agent.url, /^__demo__\//, 'demo-relative, so the build can prefix the deployment base');
     assert.ok(agent.preset?.quickMessages?.length, `${agent.id} has a quick message`);

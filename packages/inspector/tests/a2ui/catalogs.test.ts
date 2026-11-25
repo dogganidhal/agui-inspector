@@ -1,24 +1,27 @@
-// The catalog id table (FR-011, FR-014, FR-015): the two bundled catalogs, the one built-in alias and a
-// config's aliases, all read the same way. The warnings for a bad config alias are in tests/config/aliases.test.ts.
+// The catalog id table (FR-011, FR-014, FR-015; spec 020): the three bundled catalogs, the one built-in alias and
+// a config's aliases, all read the same way. The warnings for a bad config alias are in tests/config/aliases.test.ts.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { basicCatalog } from '@a2ui/react/v0_9';
+import { basicCatalog } from '@a2ui/web_core/v0_9/basic_catalog';
+import { basicCatalog as basicCatalogV10 } from '@a2ui/web_core/catalogs/basic/v1';
 import { A2uiMessageSchema } from '@a2ui/web_core/v0_8';
-import { BASIC_V09, BUILT_IN_ALIASES, KNOWN_CATALOGS, STANDARD_V08, catalogIds, isBuiltIn, resolves } from '../../src/core/a2ui/catalogs.ts';
+import { BASIC_V09, BASIC_V10, BUILT_IN_ALIASES, KNOWN_CATALOGS, STANDARD_V08, catalogIds, isBuiltIn, resolves } from '../../src/core/a2ui/catalogs.ts';
 
 const MIDDLEWARE = 'https://a2ui.org/specification/v0_9/basic_catalog.json';
 
-test('the two literals are the ids the renderer packages name', () => {
+test('the three literals are the ids the renderer packages name', () => {
   assert.equal(BASIC_V09, basicCatalog.id);
+  assert.equal(BASIC_V10, basicCatalogV10.id);
+  assert.equal(basicCatalogV10.protocolVersion, '1.0');
   // The v0.8 schema describes the default for a surface that names no catalog.
   const description = A2uiMessageSchema.innerType().shape.beginRendering.unwrap().shape.catalogId.description ?? '';
   assert.ok(description.includes(`(${STANDARD_V08})`), description);
 });
 
-test('the table knows two catalogs and one built-in alias, each for one version', () => {
-  assert.deepEqual(KNOWN_CATALOGS, { [BASIC_V09]: 'v0.9', [STANDARD_V08]: 'v0.8' });
+test('the table knows three catalogs and one built-in alias, each for one version', () => {
+  assert.deepEqual(KNOWN_CATALOGS, { [BASIC_V10]: '1.0', [BASIC_V09]: 'v0.9', [STANDARD_V08]: 'v0.8' });
   assert.deepEqual(BUILT_IN_ALIASES, { [MIDDLEWARE]: BASIC_V09 });
-  for (const id of [BASIC_V09, STANDARD_V08, MIDDLEWARE]) assert.equal(isBuiltIn(id), true, id);
+  for (const id of [BASIC_V10, BASIC_V09, STANDARD_V08, MIDDLEWARE]) assert.equal(isBuiltIn(id), true, id);
   assert.equal(isBuiltIn('https://catalog.invalid/custom.json'), false);
 });
 
@@ -27,6 +30,22 @@ test('with no config the v0.9 ids are the basic id and the middleware default, a
   assert.deepEqual(catalogIds('v0.8'), [STANDARD_V08]);
   assert.equal(resolves('v0.9', MIDDLEWARE), true, 'the middleware default is a row of the table, not a rule');
   assert.equal(resolves('v0.8', MIDDLEWARE), false);
+});
+
+test('with no config 1.0 has its basic id and no alias', () => {
+  assert.deepEqual(catalogIds('1.0'), [BASIC_V10]);
+  assert.equal(resolves('1.0', BASIC_V10), true);
+  assert.equal(resolves('1.0', BASIC_V09), false, 'the v0.9 catalog does not serve 1.0 surfaces');
+  assert.equal(resolves('v0.9', BASIC_V10), false);
+});
+
+test('an agent catalog id aliased to the 1.0 basic catalog serves 1.0 surfaces only', () => {
+  const agent = 'https://example.com/catalogs/chat/v1.0/catalog.json';
+  const configured = { [agent]: BASIC_V10 };
+  assert.deepEqual(catalogIds('1.0', configured), [BASIC_V10, agent]);
+  assert.equal(resolves('1.0', agent, configured), true);
+  assert.equal(resolves('v0.9', agent, configured), false);
+  assert.deepEqual(catalogIds('v0.9', configured), [BASIC_V09, MIDDLEWARE]);
 });
 
 test('a configured alias serves the version of its target and no other', () => {

@@ -8,7 +8,7 @@
 // where an adapter chooses to, and no producer sleeps. A producer may only say, as data, that its answer
 // is meant to be watched slowly. Imports nothing from Node, React or a worker.
 // Erasable TypeScript only, so Node can run it directly.
-import { continuation, formSurface, type UserAction } from './a2ui-scenarios.ts';
+import { AGENT_V10_CATALOG_ID, continuation, declares10, formSurface, v10Card, v10Continuation, type UserAction } from './a2ui-scenarios.ts';
 import { showcaseEvents } from './a2ui-showcase.ts';
 import { baselineRun, runError, type RunIds } from './protocol-fixtures.ts';
 import type { ScenarioEnding } from './recorder-fixtures.ts';
@@ -61,7 +61,7 @@ export const INTERRUPTS = [
 export interface RunInput extends RunIds {
   readonly messages?: readonly { readonly role?: string; readonly content?: unknown; readonly toolCallId?: string }[];
   readonly resume?: readonly { readonly interruptId: string; readonly status: string; readonly payload?: unknown }[];
-  readonly forwardedProps?: { readonly a2uiAction?: { readonly userAction?: object } };
+  readonly forwardedProps?: { readonly a2uiAction?: { readonly userAction?: object }; readonly a2uiRendererCapabilities?: unknown };
 }
 
 /**
@@ -271,6 +271,23 @@ export function interactiveResponse(input: RunInput): ScenarioResponse {
 
 const A2UI_ACTIVITY = { messageId: 'a2ui-surface-1', activityType: 'a2ui-surface' } as const;
 
+/** The quick message that asks for the A2UI 1.0 card (spec 020). */
+export const V10_CARD_MESSAGE = 'Book a visit (A2UI 1.0)';
+
+/**
+ * The 1.0 card, as an agent that checks the client's renderer capabilities sends it: only to a run whose
+ * forwarded properties declare its catalog id for 1.0, and otherwise a reply that says why. Its action's run
+ * gets the card again with the envelope shown under it.
+ */
+function v10Response(input: RunInput, action: UserAction | undefined): ScenarioResponse {
+  if (action === undefined && !declares10(input.forwardedProps, AGENT_V10_CATALOG_ID)) {
+    const why = `No card: this client does not declare ${AGENT_V10_CATALOG_ID} in forwardedProps.a2uiRendererCapabilities["1.0"].supportedCatalogIds. Map it to the 1.0 basic catalog with catalogAliases.`;
+    return sse([started(input), ...say(`m-${input.runId}`, why), finished(input)]);
+  }
+  const operations = action === undefined ? v10Card : v10Continuation(v10Card, action);
+  return sse([started(input), { type: 'ACTIVITY_SNAPSHOT', messageId: 'a2ui-surface-visit', activityType: 'a2ui-surface', content: { a2ui_operations: operations }, replace: true }, finished(input)]);
+}
+
 const isUserAction = (value: unknown): value is UserAction => {
   const candidate = value as Partial<Record<keyof UserAction, unknown>> | null;
   return (
@@ -295,6 +312,7 @@ const isUserAction = (value: unknown): value is UserAction => {
 export function a2uiResponse(input: RunInput): ScenarioResponse {
   const userAction = input.forwardedProps?.a2uiAction?.userAction;
   const action = isUserAction(userAction) ? userAction : undefined;
+  if (action?.surfaceId === 'visit' || (action === undefined && lastUserText(input) === V10_CARD_MESSAGE)) return v10Response(input, action);
   const story = showcaseEvents(input.runId, lastUserText(input), action);
   if (story !== undefined) return sse([started(input), ...story, finished(input)]);
   if (action !== undefined && action.surfaceId !== 'form') {

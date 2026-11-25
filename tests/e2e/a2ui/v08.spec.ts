@@ -20,13 +20,10 @@ const text = (id: string, value: string) => ({ id, component: { Text: { text: li
 const surface = (page: Page, id: string) => page.locator(`[data-surface="${id}"]`);
 
 /**
- * With the real page's `style-src 'self'`, one policy violation is already there before any surface is drawn:
- * `@a2ui/react/v0_9` injects a `<style>` for Safari's date input (`a2ui-date-time-input-webkit-styles`) as it loads.
- * That is the v0.9 renderer's, not v0.8's. It is named by its hash, so a violation by the v0.8 renderer's
- * stylesheet, which has another hash, still fails.
+ * With the real page's `style-src 'self'`, every policy violation fails. @a2ui/react 0.12.0 injected a `<style>` for
+ * Safari's date input as it loaded; 0.13.0 and later inject nothing, so no violation is expected at all.
  */
-const V09_DATE_INPUT_STYLE = 'sha256-hl8oWaqVB/FPzxoC+o0SsbSifRCyvtG+dpTsoua83YA=';
-const unexpected = (problems: readonly string[]) => problems.filter((problem) => !problem.includes(V09_DATE_INPUT_STYLE));
+const unexpected = (problems: readonly string[]) => problems;
 const alerts = (page: Page) => page.locator('.agui-a2ui-issues');
 
 /** A one-surface v0.8 list: components, then the message that names the root. */

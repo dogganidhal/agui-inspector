@@ -4,8 +4,9 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { build } from 'esbuild';
 import { bundleOptions } from '../../../../scripts/build.mjs';
-import { A2uiSurface, basicCatalog } from '@a2ui/react/v0_9';
-import { MessageProcessor } from '@a2ui/web_core/v0_9';
+import { A2uiSurface } from '@a2ui/react';
+import { basicCatalog } from '@a2ui/web_core/v0_9/basic_catalog';
+import { MessageProcessor } from '@a2ui/web_core';
 import {
   RENDER_A2UI_TOOL,
   RENDER_A2UI_TOOL_NAME,
@@ -432,8 +433,9 @@ test('renderer and protocol packages bundle for the browser without Node built-i
     ...bundleOptions('unused'),
     stdin: {
       contents: `
-        import { A2uiSurface, basicCatalog } from '@a2ui/react/v0_9';
-        import { MessageProcessor } from '@a2ui/web_core/v0_9';
+        import { A2uiSurface } from '@a2ui/react';
+        import { basicCatalog } from '@a2ui/web_core/v0_9/basic_catalog';
+        import { MessageProcessor } from '@a2ui/web_core';
         import { HttpAgent } from '@ag-ui/client';
         import { RENDER_A2UI_TOOL } from '@ag-ui/a2ui-middleware';
         import { createRoot } from 'react-dom/client';

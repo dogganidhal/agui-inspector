@@ -1,6 +1,7 @@
 // What a surface may and may not do on its own (FR-025, FR-037): an action leaves as the five fields
 // the contract names, and nothing a surface asks for reaches outside the page.
-import { OpenUrlApi, createFunctionImplementation, type ActionPayload, type FunctionImplementation } from '@a2ui/web_core/v0_9';
+import { createFunctionImplementation, type ActionPayload, type FunctionApi, type FunctionImplementation } from '@a2ui/web_core';
+import { OpenUrlApi } from '@a2ui/web_core/v0_9';
 import type { ClientToServerMessage } from '@a2ui/web_core/types/client-event';
 import type { A2uiAction, JsonObject } from '../../contracts.ts';
 
@@ -58,9 +59,9 @@ export const blockedMessage = ({ kind, url }: BlockedResource): string =>
     ? `Blocked openUrl ${url}: the inspector never opens an address for a surface.`
     : `Blocked ${kind} ${url}: the inspector never loads a resource for a surface.`;
 
-/** Replaces the official `openUrl`, which would open a new browser tab. It only reports. */
-export function deniedOpenUrl(report: ReportBlocked): FunctionImplementation {
-  return createFunctionImplementation(OpenUrlApi, (args) => {
+/** Replaces the official `openUrl` of a catalog (`api`, v0.9's by default), which would open a new browser tab. It only reports. */
+export function deniedOpenUrl(report: ReportBlocked, api: FunctionApi = OpenUrlApi): FunctionImplementation {
+  return createFunctionImplementation(api, (args) => {
     report({ kind: 'openUrl', url: String(args.url) });
   });
 }

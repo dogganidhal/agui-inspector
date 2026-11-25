@@ -187,7 +187,7 @@ Git ignores the staged copy and the checksum file, so nothing generated is commi
 - the wheel, the sdist and the npm tarball (`npm pack`) each contain `LICENSE` and `THIRD_PARTY_NOTICES.txt`,
   identical to the root files, and the notices name every runtime package in `package-lock.json`.
 - the root manifest is private, the npm package is MIT with the `repository` field that npm provenance checks, and
-  `dompurify` is overridden to 3.4.16 and resolves to exactly that.
+  `dompurify` resolves once, to 3.4.17 or later, with no override.
 - the pull request workflow runs the Python tests on 3.10 and 3.14 and has no publishing step, and the release
   workflow keeps its safeguards.
 - an installed wheel serves every asset byte for byte with Node removed from `PATH` and socket connections forced to
@@ -200,7 +200,7 @@ A provenance statement would cover these inputs:
 | --- | --- |
 | npm dependency tree, including esbuild | `package-lock.json`, installed with `npm ci --ignore-scripts` |
 | Python dependency tree | `packages/python/uv.lock`, used with `--locked` |
-| `dompurify` version | Root `package.json` `overrides`, resolved to 3.4.16 in `package-lock.json` |
+| `dompurify` version | Resolved in `package-lock.json` from the range `@a2ui/markdown-it` asks for |
 | License and notices | `LICENSE` and `THIRD_PARTY_NOTICES.txt`, copied into both packages and compared by tests |
 | Python build backend | `uv_build==0.12.22` in `packages/python/pyproject.toml` |
 | `uv` version used by CI | Pinned in `.github/workflows/ci.yml` |

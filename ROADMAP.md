@@ -74,6 +74,12 @@ merged, so only the conformance suite waits, for the Python reference agent and 
 | Rule docs and examples | A page per rule, and examples for the major AG-UI server frameworks | #77 | [#85](https://github.com/dogganidhal/agui-inspector/issues/85) |
 | Saved setup and launch links | The agent, endpoint and variables survive a reload, and a link in the page's fragment fills in the page so the developer only presses send | | [spec 016](specs/016-remembered-setup-and-launch-links/spec.md) |
 
+## After 0.3.0
+
+| Capability | Scope | Needs | Issue |
+| --- | --- | --- | --- |
+| A2UI 1.0 surfaces | 1.0 operations drawn with the official 1.0 basic catalog, catalog aliases for an agent's own 1.0 catalog id, a flagged stand-in for components a catalog lacks, and `forwardedProps.a2uiRendererCapabilities` in every run. `@a2ui/react` and `@a2ui/web_core` move to 0.16.1. See [spec 020](specs/020-a2ui-1-0/spec.md) | Upstream 1.0 renderer (`@a2ui/web_core` 0.13.0, `@a2ui/react` 0.14.0) | Not opened yet |
+
 ## Decisions
 
 Taken on 2026-10-04, when this roadmap was revised, except where a line says otherwise.
@@ -85,8 +91,9 @@ Taken on 2026-10-04, when this roadmap was revised, except where a line says oth
 - 0.2.0 is the nine capabilities above. It ships when all of them have merged. Work that depends on them goes into the
   next minor.
 - Branding is new in this plan and comes first. The other eight follow impact over effort.
-- Only features that AG-UI and A2UI have already released are planned. WebSocket and push transports, protocol
-  capability discovery, and A2UI v1.0 rendering wait until upstream ships them.
+- Only features that AG-UI and A2UI have already released are planned. WebSocket and push transports, and protocol
+  capability discovery, wait until upstream ships them. A2UI 1.0 rendering waited too, until `@a2ui/web_core` 0.13.0
+  and `@a2ui/react` 0.14.0 shipped it; spec 020 adds it (2026-11-25).
 - The in-app inspector is not planned. It is too soon to tell how a custom element should isolate the styles that A2UI
   injects into the document. This closes G-06 for now.
 - The inspector does not move upstream for now, and the package keeps the name `agui-inspector`. This closes G-03.

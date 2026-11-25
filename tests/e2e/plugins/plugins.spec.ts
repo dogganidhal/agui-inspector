@@ -7,6 +7,10 @@ import path from 'node:path';
 import { PLUGINS } from '../../../examples/reference-agent/scenarios.ts';
 import { expect, test, root } from '../hosted/support';
 import { embeddedWith, exportedSession, footer, hostedWith, JS, PLUGIN_RUN_FRAMES, runMessage, warningList } from './support';
+import { rendererCapabilities } from '../../../packages/inspector/src/core/profiles/index.ts';
+
+/** Every run declares the catalogs drawn by default (spec 020). */
+const CAPS = { a2uiRendererCapabilities: rendererCapabilities() };
 
 const EXAMPLE = readFileSync(path.join(root, 'examples', 'plugin', 'plugin.js'), 'utf8');
 const PREPARE = { preset: { prepare: [{ method: 'POST', path: '/interactive', body: { threadId: '{{threadId}}', runId: '{{runId}}' } }] } };
@@ -30,7 +34,7 @@ for (const mode of ['hosted', 'embedded'] as const) {
     expect(requests.map((entry) => entry.headers?.['x-example-request'])).toEqual(['1', '2']);
     // The hook: the counter is in the body that was sent, and the recording shows that body.
     const run = requests[1];
-    expect((JSON.parse(run?.body ?? '{}') as { forwardedProps: unknown }).forwardedProps).toEqual({ examplePlugin: { run: 1 } });
+    expect((JSON.parse(run?.body ?? '{}') as { forwardedProps: unknown }).forwardedProps).toEqual({ ...CAPS, examplePlugin: { run: 1 } });
     // The renderers.
     await expect(page.getByTestId('example-note')).toHaveText('Note: Synthetic note');
     await expect(page.getByTestId('example-plan').locator('li')).toHaveText(['Read', 'Write', 'Review']);
@@ -47,7 +51,7 @@ for (const mode of ['hosted', 'embedded'] as const) {
     await runMessage(page, PLUGINS, 2, PLUGIN_RUN_FRAMES);
     const without = await exportedSession(page);
     const bodyOf = (session: typeof exported.session) => session.runs.map((entry) => entry.input.forwardedProps);
-    expect(bodyOf(without.session)).toEqual([{}]);
+    expect(bodyOf(without.session)).toEqual([CAPS]);
     expect(framesOf(exported.session)).toEqual(framesOf(without.session));
     expect(exported.session.derived).toEqual(without.session.derived);
     expect(exported.session.findings).toEqual(without.session.findings);

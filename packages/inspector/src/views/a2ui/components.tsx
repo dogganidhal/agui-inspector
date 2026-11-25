@@ -1,5 +1,8 @@
 import { Fragment, createContext, useContext, useEffect, useId, useState, useSyncExternalStore, type CSSProperties, type ReactElement, type ReactNode } from 'react';
-import { createBinderlessComponentImplementation, createComponentImplementation, type ReactComponentImplementation } from '@a2ui/react/v0_9';
+import { createRoot, type Root } from 'react-dom/client';
+import { createComponentImplementation, type ReactComponentImplementation } from '@a2ui/react';
+import type { ComponentNode } from '@a2ui/web_core';
+import type { WebComponentImplementation } from '@a2ui/web_core/universal';
 import {
   ButtonApi,
   ChoicePickerApi,
@@ -14,8 +17,8 @@ import { z } from 'zod';
 import type { JsonValue } from '../../contracts';
 import { ButtonView, IconView, ModalView, TabsView, UnknownView } from './parts';
 
-// The components the official renderer draws without a usable hook. @a2ui/react 0.12.0 styles them with
-// CSS-module class names that are never resolved, and Tabs, Modal, ChoicePicker and Divider carry no
+// The v0.9 components the official renderer draws without a usable hook. @a2ui/react 0.12.0 styled them with
+// CSS-module class names that were never resolved, and Tabs, Modal, ChoicePicker and Divider carried no
 // roles, labels or keyboard handling. These keep the official props and bindings (same schemas, same
 // binder) and change only the markup, so a surface written for the basic catalog applies unchanged.
 // Their look is in a2ui.css under the agui-a2ui prefix and comes from the theme tokens.
@@ -227,15 +230,62 @@ const Modal = createComponentImplementation(ModalApi, ({ props, buildChild }) =>
   <ModalView trigger={props.trigger ? buildChild(props.trigger) : null} content={props.content ? buildChild(props.content) : null} label={str(props.accessibility?.label)} aria={accessible(props.accessibility).aria} style={weighted(props.weight)} />
 ));
 
+/** The tag of every stand-in. One element class serves every unknown type, as `customElements` defines a class once. */
+export const UNKNOWN_TAG = 'agui-a2ui-unknown';
+
+// Node runs the unit tests without a DOM; the class is only ever constructed in a browser.
+const HostBase = (typeof HTMLElement === 'undefined' ? class {} : HTMLElement) as typeof HTMLElement;
+
 /**
- * What stands in for a component whose type the catalog does not list, in place of the renderer's raw red
- * line: an error that names the type, with the definition as it was received. Nothing is drawn for the
- * component, and it is not repaired or dropped from the list.
+ * Draws `UnknownView` for the node the renderer assigns to it. The renderer draws every catalog entry as a custom
+ * element and turns only the components a catalog lists into one, so a stand-in for an unlisted type is an element
+ * of its own, with its own React root in a child it owns.
  */
-export const unknownComponent = (type: string): ReactComponentImplementation =>
-  createBinderlessComponentImplementation({ name: type, schema: z.object({}).passthrough() }, ({ context }) => {
-    const { id, properties } = context.componentModel;
-    return <UnknownView id={id} type={type} definition={{ id, component: type, ...properties } satisfies Record<string, JsonValue | undefined>} />;
-  });
+class UnknownHost extends HostBase {
+  private current: ComponentNode | undefined;
+  private root: Root | undefined;
+
+  set node(node: ComponentNode | undefined) {
+    this.current = node;
+    this.paint();
+  }
+
+  get node(): ComponentNode | undefined {
+    return this.current;
+  }
+
+  connectedCallback(): void {
+    this.style.display = 'contents';
+    this.paint();
+  }
+
+  disconnectedCallback(): void {
+    queueMicrotask(() => {
+      if (this.isConnected) return;
+      this.root?.unmount();
+      this.root = undefined;
+      this.replaceChildren();
+    });
+  }
+
+  private paint(): void {
+    const model = this.current?.context?.componentModel;
+    if (!this.isConnected || model === undefined) return;
+    if (this.root === undefined) {
+      const box = this.appendChild(document.createElement('div'));
+      box.style.display = 'contents';
+      this.root = createRoot(box);
+    }
+    const { id, type, properties } = model;
+    this.root.render(<UnknownView id={id} type={type} definition={{ id, component: type, ...properties } satisfies Record<string, JsonValue | undefined>} />);
+  }
+}
+
+/**
+ * What stands in for a component whose type the catalog does not list, where the renderer would draw nothing: an
+ * error that names the type, with the definition as it was received. Nothing else is drawn for the component, and
+ * it is not repaired or dropped from the list. Any properties pass the schema, so the processor keeps the entry.
+ */
+export const unknownComponent = (type: string): WebComponentImplementation => ({ name: type, schema: z.object({}).passthrough(), tagName: UNKNOWN_TAG, element: UnknownHost });
 
 export const COMPONENTS: Readonly<Record<string, ReactComponentImplementation>> = { Row, Divider, Icon, Button, TextField, ChoicePicker, Tabs, Modal };

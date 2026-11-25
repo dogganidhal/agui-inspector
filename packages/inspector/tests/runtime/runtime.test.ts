@@ -9,6 +9,7 @@ import { RunAgentInputSchema } from '@ag-ui/core/schemas';
 import type { JsonValue } from '../../src/contracts.ts';
 import { projectConversation, type MessageEntry } from '../../src/core/projection/index.ts';
 import { AGENT, bodyOf, embedded, eventStream, hosted, ok200, openStream, replyRoute, rig, sse, type Call, type Route } from './support.ts';
+import { rendererCapabilities } from '../../src/core/profiles/index.ts';
 
 const TOKEN = 'synthetic-token-7f3a91';
 const support = { id: 'support', name: 'Support', url: AGENT, preset: { quickMessages: ['/help', 'Where is my order?'], forwardedProps: { tenant: 'acme' } } } as const;
@@ -64,6 +65,20 @@ test('the next run carries the whole transcript the client built, including the 
   assert.equal(second.threadId, (bodyOf(net.on('/run')[0]) as { threadId: string }).threadId);
 });
 
+test('the configured catalog aliases reach the renderer capabilities of a run, and the profile switch turns them off', async () => {
+  const agentCatalog = 'https://example.com/catalogs/chat/v1.0/catalog.json';
+  const aliases = { [agentCatalog]: 'https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json' };
+  const { runtime, net, settings } = rig([replyRoute()]);
+  settings.current = { ...settings.current, catalogAliases: aliases };
+  runtime.selectAgent(support);
+  await runtime.send('first');
+  const caps = (bodyOf(net.on('/run')[0]) as { forwardedProps: Record<string, unknown> }).forwardedProps['a2uiRendererCapabilities'];
+  assert.deepEqual(caps, rendererCapabilities(aliases));
+  settings.current = { ...settings.current, profile: { ...settings.current.profile, sendA2uiCapabilities: false } };
+  await runtime.send('second');
+  assert.equal('a2uiRendererCapabilities' in (bodyOf(net.on('/run')[1]) as { forwardedProps: object }).forwardedProps, false);
+});
+
 test('the run input follows the documented contract: ids, protocol version, state, tools, context and merged properties', async () => {
   const { runtime, net, settings } = rig([ok200, replyRoute()]);
   settings.current = {
@@ -86,7 +101,7 @@ test('the run input follows the documented contract: ids, protocol version, stat
   assert.deepEqual(input.state, {});
   assert.deepEqual(input.tools, settings.current.profile.tools);
   assert.deepEqual(input.context, settings.current.profile.context);
-  assert.deepEqual(input.forwardedProps, { tenant: 'override', extra: [1, 2] }, 'profile properties override the preset');
+  assert.deepEqual(input.forwardedProps, { a2uiRendererCapabilities: rendererCapabilities(), tenant: 'override', extra: [1, 2] }, 'profile properties override the preset');
   assert.equal(typeof input.runId, 'string');
   assert.equal(input.threadId, runtime.getState().threadId);
 });
